@@ -69,7 +69,8 @@ background: var(--imgdarklight) no-repeat  top center / cover;
 
 #container {
 
-   width: 360px;
+   width: 100%;
+max-width: 588px;
    padding: 0px 24px;
 
   margin: 0px auto 0px;
