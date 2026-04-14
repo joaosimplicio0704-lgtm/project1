@@ -10,7 +10,7 @@ background: var(--imgdarklight) no-repeat  top center / cover;
 
 }
 
-/*
+
 
 * {
    
@@ -22,7 +22,7 @@ background: var(--imgdarklight) no-repeat  top center / cover;
    align-items: center;
 }
 
-  */
+
    
 
 :root {
@@ -37,7 +37,7 @@ background: var(--imgdarklight) no-repeat  top center / cover;
 --botao-background-fundo: rgba(255, 255, 255, 0.26);
 --botao-border-fundo: 1px solid rgb(0, 0, 0);
 --color-text: rgb(0, 255, 242);
-
+--transition-botao: rgba(209, 206, 206, 0.699); 
 
 
 }
@@ -53,7 +53,7 @@ background: var(--imgdarklight) no-repeat  top center / cover;
 --botao-background-fundo: rgba(255, 255, 255, 0.26);
 --botao-border-fundo: 1px solid rgb(0, 0, 0);
 --color-text: rgb(0, 0, 0);
-
+--transition-botao: rgba(209, 206, 206, 0.699); 
 
 }
 
@@ -71,7 +71,7 @@ background: var(--imgdarklight) no-repeat  top center / cover;
 
    width: 100%;
 max-width: 588px;
-   padding: 0px 24px;
+  /* padding: 0px 24px;*/
 
   margin: 0px auto 0px;
 
@@ -125,16 +125,31 @@ position: absolute;
 z-index: 1;
 top: -1px;
 right: -02px;
+left: 0; 
+
+
+animation: slide-back 0.5s ;
+}
+
+#switch button:hover {
+
+outline: 8px solid var(--transition-botao); 
+transition: all 0.2s ease;
+
+}
+
+.light #switch button {
+
+animation: slide-in 0.5s forwards;
+ 
 
 
 }
 
+.light #switch button:hover {
 
-.light #switch button {
-
-right: initial;
-left: -1px;
-   
+   outline: 8px solid var(--transition-botao); 
+transition: all 0.2s ease;
 }
 
 
@@ -267,5 +282,23 @@ border-radius: 5px;
 
 
 
+@keyframes slide-in
+{
+   from {
+left: 0;
+   }
+ to {
+    left: 50%;
+   }
+
+}
 
 
+@keyframes slide-back {
+   from {
+      left: 50%;
+      }
+   to {
+      left: 0; }
+
+}
