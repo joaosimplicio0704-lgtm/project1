@@ -1,4 +1,7 @@
 node_modules/
-build/*.rbxl
 sourcemap.json
 .DS_Store
+
+# Intermediário: o modelo cru do mapa. É regenerado pelo build-map e some no
+# .rbxlx final — não precisa ocupar 6 MB no repositório.
+build/EggTycoonMap.rbxmx

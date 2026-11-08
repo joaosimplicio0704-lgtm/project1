@@ -1,3 +1,11 @@
+> ### 🥚 Quer o jogo? [**Egg Tycoon — 7 Mundos**](./egg-tycoon/README.md)
+>
+> Baixe [`egg-tycoon/build/EggTycoon.rbxlx`](./egg-tycoon/build/EggTycoon.rbxlx)
+> e abra no Roblox Studio. O mundo inteiro (7 biomas, portais e ovos) já vem
+> dentro do arquivo — é só abrir e apertar Play.
+
+---
+
 <h1 align="center"> DevLinks </h1>
 
 <p align="center">

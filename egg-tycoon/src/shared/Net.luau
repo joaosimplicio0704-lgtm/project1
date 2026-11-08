@@ -22,6 +22,7 @@ Net.ActionKind = {
 	SellPet = "sellPet",
 	ClaimQuest = "claimQuest",
 	SetZone = "setZone",
+	Travel = "travel",
 }
 
 Net.EventKind = {
@@ -29,6 +30,7 @@ Net.EventKind = {
 	Hatch = "hatch",
 	Rebirth = "rebirth",
 	Zone = "zone",
+	Travel = "travel",
 }
 
 -- Zonas interativas do mapa (click detector -> abre UI no cliente)
@@ -40,6 +42,7 @@ Net.Zones = {
 	Fusion = "fusion",
 	Trade = "trade",
 	Rebirth = "rebirth",
+	Portal = "portal",
 }
 
 return Net

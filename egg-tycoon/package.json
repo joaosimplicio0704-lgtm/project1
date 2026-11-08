@@ -5,15 +5,18 @@
   "description": "Egg Tycoon — clicker de pets para Roblox (Luau, Rojo)",
   "type": "module",
   "scripts": {
-    "build": "rojo build default.project.json -o build/EggTycoon.rbxlx",
-    "serve": "rojo serve default.project.json",
+    "build": "npm run build-map && rojo build default.project.json -o build/EggTycoon.rbxlx",
+    "build-map": "node tests/build-map.mjs",
+    "serve": "npm run build-map && rojo serve default.project.json",
     "test": "node tests/run.mjs",
     "check": "node tests/check.mjs",
+    "boot": "node tests/boot.mjs",
+    "client": "node tests/client.mjs",
+    "world": "node tests/world.mjs",
+    "mapfile": "node tests/mapfile.mjs",
     "sim": "node tests/simulate.mjs",
     "fmt": "stylua src tests",
-    "verify": "npm run check && npm run test && npm run boot && npm run client && npm run sim && npm run build",
-    "boot": "node tests/boot.mjs",
-    "client": "node tests/client.mjs"
+    "verify": "npm run check && npm run test && npm run boot && npm run client && npm run world && npm run sim && npm run build && npm run mapfile"
   },
   "devDependencies": {
     "@luau-rs/luau": "^0.739.0",

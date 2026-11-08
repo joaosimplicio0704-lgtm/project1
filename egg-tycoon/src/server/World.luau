@@ -9,6 +9,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local Net = require(ReplicatedStorage.Shared.Net)
+local Biomes = require(ReplicatedStorage.Shared.Biomes)
+local Terrain = require(ReplicatedStorage.Shared.Terrain)
 
 local World = {}
 
@@ -32,6 +34,11 @@ local PALETTE = {
 	purpleDark = Color3.fromRGB(105, 70, 175),
 	pink = Color3.fromRGB(255, 170, 210),
 	blue = Color3.fromRGB(90, 150, 240),
+	portal = Color3.fromRGB(150, 235, 255),
+	portalDark = Color3.fromRGB(70, 150, 200),
+	stone = Color3.fromRGB(205, 210, 220),
+	stoneDark = Color3.fromRGB(150, 158, 172),
+	cosmic = Color3.fromRGB(180, 150, 255),
 }
 
 World.palette = PALETTE
@@ -85,6 +92,20 @@ function World.build()
 	Lighting.EnvironmentSpecularScale = 0.3
 	Lighting.GlobalShadows = true
 	Lighting.ShadowSoftness = 0.6
+	Lighting.ExposureCompensation = 0.25
+
+	-- O céu não é opcional: sem um Sky o horizonte fica cinza e as ilhas
+	-- distantes somem. Nada de asset pago — o Sky padrão do Roblox já serve.
+	if not Lighting:FindFirstChildOfClass("Sky") then
+		local sky = Instance.new("Sky")
+		sky.SkyboxBk = "rbxasset://textures/sky/sky512_bk.tex"
+		sky.SkyboxDn = "rbxasset://textures/sky/sky512_dn.tex"
+		sky.SkyboxFt = "rbxasset://textures/sky/sky512_ft.tex"
+		sky.SkyboxLf = "rbxasset://textures/sky/sky512_lf.tex"
+		sky.SkyboxRt = "rbxasset://textures/sky/sky512_rt.tex"
+		sky.SkyboxUp = "rbxasset://textures/sky/sky512_up.tex"
+		sky.Parent = Lighting
+	end
 
 	local existing = Lighting:FindFirstChildOfClass("Atmosphere")
 	local atmosphere = existing or Instance.new("Atmosphere")
@@ -167,6 +188,7 @@ function World.build()
 	World.buildRebirthPortal()
 	World.buildTradePost()
 	World.buildHalloween()
+	World.buildBiomes()
 
 	-- SpawnLocation: sem isso o Roblox joga o jogador no vazio/default do template
 	local spawnPad = part({
@@ -397,115 +419,27 @@ end
 ---------------------------------------------------------------------------
 
 function World.buildEggStands()
-	-- plataforma de pedra clara onde ficam os ovos
-	part({
-		Size = Vector3.new(96, 2, 40),
-		Position = Vector3.new(0, 2.4, 40),
-		Color = PALETTE.sand,
-		Material = Enum.Material.Sandstone,
+	-- O hub nao guarda mais os ovos: cada ovo mora no seu bioma. No lugar
+	-- fica a arcada de portais, que e o que o jogador ve ao nascer.
+	local deck = part({
+		Name = "PortalDeck",
+		Size = Vector3.new(150, 2, 40),
+		Position = Vector3.new(0, 2.2, -44),
+		Color = PALETTE.stone,
+		Material = Enum.Material.Marble,
 	}, root)
+	deck.CanCollide = true
 
-	local eggCount = #GameConfig.Eggs
-	local spacing = 14
-	local startX = -((eggCount - 1) * spacing) / 2
-
-	for index, egg in ipairs(GameConfig.Eggs) do
-		local x = startX + (index - 1) * spacing
-		local base = Vector3.new(x, 4.6, 40)
-
-		-- pedestal
-		part({
-			Size = Vector3.new(9, 3.2, 9),
-			Position = base,
-			Color = PALETTE.white,
-			Material = Enum.Material.Marble,
-		}, root)
-
-		part({
-			Size = Vector3.new(7.4, 0.8, 7.4),
-			Position = base + Vector3.new(0, 2, 0),
-			Color = PALETTE.gold,
-			Material = Enum.Material.Neon,
-		}, root)
-
-		-- ovo (esfera escalada em Y)
-		local eggPart = ball({
-			Name = "Egg_" .. egg.id,
-			Size = Vector3.new(7, 9.6, 7),
-			Position = base + Vector3.new(0, 7.2, 0),
-			Color = egg.color,
-			Material = Enum.Material.SmoothPlastic,
-		}, root)
-		eggPart:SetAttribute("EggId", egg.id)
-
-		-- pintinhas
-		local rng = Random.new(index * 13)
-		for i = 1, 7 do
-			local theta = rng:NextNumber() * math.pi * 2
-			local phi = math.acos(2 * rng:NextNumber() - 1)
-			local radius = 3.55
-			local offset = Vector3.new(
-				math.sin(phi) * math.cos(theta) * radius,
-				math.cos(phi) * radius * 1.35,
-				math.sin(phi) * math.sin(theta) * radius
-			)
-			ball({
-				Size = Vector3.new(1.6, 1.6, 1.6),
-				Position = eggPart.Position + offset,
-				Color = egg.spot,
-				Material = Enum.Material.SmoothPlastic,
-			}, root)
-		end
-
-		local billboard = Instance.new("BillboardGui")
-		billboard.Size = UDim2.fromScale(12, 5)
-		billboard.StudsOffsetWorldSpace = Vector3.new(0, 8.5, 0)
-		billboard.AlwaysOnTop = true
-		billboard.Adornee = eggPart
-		billboard.Parent = eggPart
-
-		local name = Instance.new("TextLabel")
-		name.Size = UDim2.fromScale(1, 0.55)
-		name.BackgroundTransparency = 1
-		name.Font = Enum.Font.FredokaOne
-		name.TextScaled = true
-		name.TextColor3 = Color3.fromRGB(255, 255, 255)
-		name.TextStrokeTransparency = 0
-		name.TextStrokeColor3 = Color3.fromRGB(80, 60, 90)
-		name.Text = egg.name
-		name.Parent = billboard
-
-		local cost = Instance.new("TextLabel")
-		cost.Size = UDim2.fromScale(1, 0.4)
-		cost.Position = UDim2.fromScale(0, 0.58)
-		cost.BackgroundTransparency = 1
-		cost.Font = Enum.Font.FredokaOne
-		cost.TextScaled = true
-		cost.TextColor3 = PALETTE.gold
-		cost.TextStrokeTransparency = 0
-		cost.TextStrokeColor3 = Color3.fromRGB(80, 50, 10)
-		cost.Text = "🪙 " .. require(ReplicatedStorage.Shared.Format).number(egg.cost)
-		cost.Parent = billboard
-
-		local detector = Instance.new("ClickDetector")
-		detector.MaxActivationDistance = 22
-		detector.Parent = eggPart
-		detector.Name = "EggClick"
-
-		zoneBindings["egg_" .. egg.id] = { part = eggPart, detector = detector, eggId = egg.id }
-	end
-
-	-- letreiro "Ovos"
-	makeSign(Vector3.new(0, 22, 40), "OVOS", Color3.fromRGB(255, 255, 255), root)
-
-	-- plataforma vazia pra escalar visualmente
 	part({
-		Size = Vector3.new(96, 1, 12),
-		Position = Vector3.new(0, 3.4, 22),
-		Color = PALETTE.pathEdge,
-		Material = Enum.Material.Brick,
+		Name = "PortalDeckTrim",
+		Size = Vector3.new(152, 0.6, 42),
+		Position = Vector3.new(0, 1.4, -44),
+		Color = PALETTE.gold,
+		Material = Enum.Material.Neon,
 		CanCollide = false,
 	}, root)
+
+	makeSign(Vector3.new(0, 26, -52), "MUNDOS", Color3.fromRGB(255, 255, 255), root)
 end
 
 ---------------------------------------------------------------------------
@@ -845,6 +779,503 @@ function World.buildTradePost()
 
 	makeZone(Net.Zones.Trade, origin + Vector3.new(0, 4, 9), Vector3.new(16, 1, 12), Color3.fromRGB(255, 150, 120))
 	makeSign(origin + Vector3.new(0, 20, 0), "TROCA", Color3.fromRGB(255, 200, 180), root)
+end
+
+---------------------------------------------------------------------------
+-- BIOMAS
+---------------------------------------------------------------------------
+
+-- Toda ilha de bioma e feita dos mesmos ingredientes: base rochosa, praia,
+-- relevo em grade, decoracao, portal, pedestal do ovo e area de spawn.
+-- O que muda vem de Biomes.List (paleta, relevo, quantidades).
+
+local biomeRoot
+
+local function rgb(triple, transparency)
+	local c = Color3.fromRGB(triple[1], triple[2], triple[3])
+	return c, transparency
+end
+
+-- Portais: dois pilares + arco neon + plataforma de ativacao.
+-- `targetBiome == nil` significa "portal de volta pro hub".
+local function buildPortal(position, look, targetBiome, parent, name)
+	local model = Instance.new("Model")
+	model.Name = name or ("Portal_" .. (targetBiome and targetBiome.id or "hub"))
+	model.Parent = parent
+
+	local accent = look.accent
+
+	-- base
+	part({
+		Name = "Base",
+		Size = Vector3.new(26, 2.4, 26),
+		Position = position + Vector3.new(0, 1.2, 0),
+		Color = PALETTE.stone,
+		Material = Enum.Material.Marble,
+	}, model)
+
+	part({
+		Name = "BaseGlow",
+		Size = Vector3.new(22, 0.5, 22),
+		Position = position + Vector3.new(0, 2.6, 0),
+		Color = Color3.fromRGB(accent[1], accent[2], accent[3]),
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+	}, model)
+
+	-- pilares
+	for side = -1, 1, 2 do
+		part({
+			Name = "Pillar",
+			Size = Vector3.new(4.5, 24, 4.5),
+			Position = position + Vector3.new(side * 11, 14, 0),
+			Color = PALETTE.stone,
+			Material = Enum.Material.Marble,
+		}, model)
+
+		part({
+			Name = "PillarCap",
+			Size = Vector3.new(6.5, 1.6, 6.5),
+			Position = position + Vector3.new(side * 11, 26.4, 0),
+			Color = Color3.fromRGB(accent[1], accent[2], accent[3]),
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+		}, model)
+	end
+
+	-- arco
+	part({
+		Name = "Arch",
+		Size = Vector3.new(26.5, 4.2, 4.5),
+		Position = position + Vector3.new(0, 26.4, 0),
+		Color = PALETTE.stone,
+		Material = Enum.Material.Marble,
+	}, model)
+
+	part({
+		Name = "ArchGlow",
+		Size = Vector3.new(24, 0.8, 4.9),
+		Position = position + Vector3.new(0, 28.2, 0),
+		Color = Color3.fromRGB(accent[1], accent[2], accent[3]),
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+	}, model)
+
+	-- veu do portal (nao colide: o jogador atravessa andando)
+	local veil = part({
+		Name = "Veil",
+		Size = Vector3.new(21, 22, 0.6),
+		Position = position + Vector3.new(0, 14.4, 0),
+		Color = Color3.fromRGB(accent[1], accent[2], accent[3]),
+		Material = Enum.Material.Neon,
+		Transparency = 0.45,
+		CanCollide = false,
+	}, model)
+
+	local light = Instance.new("PointLight")
+	light.Brightness = 2.2
+	light.Range = 34
+	light.Color = Color3.fromRGB(accent[1], accent[2], accent[3])
+	light.Parent = veil
+
+	-- detector de clique para teletransporte
+	local detector = Instance.new("ClickDetector")
+	detector.Name = "PortalClick"
+	detector.MaxActivationDistance = 26
+	detector.Parent = veil
+
+	veil:SetAttribute("BiomeId", targetBiome and targetBiome.id or "meadow")
+	veil:SetAttribute("Portal", true)
+
+	local zoneName = targetBiome and ("portal_" .. targetBiome.id) or "portal_hub"
+	zoneBindings[zoneName] = {
+		part = veil,
+		detector = detector,
+		biomeId = targetBiome and targetBiome.id or nil,
+		portal = true,
+	}
+
+	-- placa com o nome do destino
+	local billboard = Instance.new("BillboardGui")
+	billboard.Size = UDim2.fromScale(22, 6)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, 32, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Parent = veil
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	label.TextStrokeTransparency = 0
+	label.TextStrokeColor3 = Color3.fromRGB(40, 30, 60)
+	label.Text = targetBiome and (targetBiome.emoji .. " " .. targetBiome.name) or "🏠 HUB"
+	label.Parent = billboard
+
+	return model
+end
+
+-- Pedestal do ovo: base, anel neon e o ovo com pintinhas + placa.
+local function buildEggPedestal(egg, position, parent)
+	local model = Instance.new("Model")
+	model.Name = "EggStand_" .. egg.id
+	model.Parent = parent
+
+	part({
+		Name = "Pedestal",
+		Size = Vector3.new(14, 3.6, 14),
+		Position = position + Vector3.new(0, 1.8, 0),
+		Color = PALETTE.white,
+		Material = Enum.Material.Marble,
+	}, model)
+
+	part({
+		Name = "PedestalRing",
+		Size = Vector3.new(11.5, 1, 11.5),
+		Position = position + Vector3.new(0, 3.9, 0),
+		Color = PALETTE.gold,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+	}, model)
+
+	local eggPart = ball({
+		Name = "Egg_" .. egg.id,
+		Size = Vector3.new(9.6, 13.2, 9.6),
+		Position = position + Vector3.new(0, 10.6, 0),
+		Color = egg.color,
+		Material = Enum.Material.SmoothPlastic,
+	}, model)
+
+	local rng = Random.new(#egg.id * 977 + 13)
+	for i = 1, 9 do
+		local theta = rng:NextNumber() * math.pi * 2
+		local phi = math.acos(2 * rng:NextNumber() - 1)
+		local radius = 4.8
+		ball({
+			Name = "Spot",
+			Size = Vector3.new(1.9, 1.9, 1.9),
+			Position = eggPart.Position + Vector3.new(
+				math.sin(phi) * math.cos(theta) * radius,
+				math.cos(phi) * radius * 1.38,
+				math.sin(phi) * math.sin(theta) * radius
+			),
+			Color = egg.spot,
+			Material = Enum.Material.SmoothPlastic,
+			CanCollide = false,
+		}, model)
+	end
+
+	-- ovo balanca de leve: o cliente anima pela atributo Spin
+	eggPart:SetAttribute("EggId", egg.id)
+	eggPart:SetAttribute("Spin", true)
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Size = UDim2.fromScale(15, 6)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, 10, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Parent = eggPart
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 0.55)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	label.TextStrokeTransparency = 0
+	label.TextStrokeColor3 = Color3.fromRGB(70, 55, 90)
+	label.Text = egg.name
+	label.Parent = billboard
+
+	local price = Instance.new("TextLabel")
+	price.Size = UDim2.fromScale(1, 0.4)
+	price.Position = UDim2.fromScale(0, 0.58)
+	price.BackgroundTransparency = 1
+	price.Font = Enum.Font.FredokaOne
+	price.TextScaled = true
+	price.TextColor3 = PALETTE.gold
+	price.TextStrokeTransparency = 0
+	price.TextStrokeColor3 = Color3.fromRGB(70, 45, 10)
+	price.Text = "🪙 " .. require(ReplicatedStorage.Shared.Format).number(egg.cost)
+	price.Parent = billboard
+
+	local detector = Instance.new("ClickDetector")
+	detector.Name = "EggClick"
+	detector.MaxActivationDistance = 26
+	detector.Parent = eggPart
+
+	zoneBindings["egg_" .. egg.id] = { part = eggPart, detector = detector, eggId = egg.id }
+	return model
+end
+
+-- Decoração por tema, apoiada na altura real do relevo.
+local function decorateBiome(biome, cells, home, center)
+	local spec = biome.decor
+	local accent = biome.colors.accent
+	local rng = Random.new(biome.seed or 11)
+
+	local function groundAt(angle, radius)
+		local lx = math.cos(angle) * radius
+		local lz = math.sin(angle) * radius
+		return lx, lz, Terrain.heightAtCell(biome, cells, lx, lz)
+	end
+
+	-- anel onde a decoração pode nascer: fora do platô do ovo, dentro da ilha
+	local placeable = biome.radius * 0.86
+	local innerRing = biome.radius * 0.30
+
+	-- árvores (ou pinheiros / abóboras, conforme o tema)
+	for i = 1, spec.trees do
+		local angle = rng:NextNumber() * math.pi * 2
+		local radius = innerRing + (placeable - innerRing) * rng:NextNumber()
+		local x, z, y = groundAt(angle, radius)
+		local scale = 0.7 + rng:NextNumber() * 0.8
+
+		if biome.id == "halloween" then
+			-- abóbora gigante
+			local pos = center + Vector3.new(x, y + 3 * scale, z)
+			local pumpkin = ball({
+				Name = "Pumpkin",
+				Size = Vector3.new(9 * scale, 7 * scale, 9 * scale),
+				Position = pos,
+				Color = Color3.fromRGB(250, 140, 40),
+				Material = Enum.Material.SmoothPlastic,
+			}, home)
+			ball({
+				Name = "PumpkinShade",
+				Size = Vector3.new(9.6 * scale, 5 * scale, 9.6 * scale),
+				Position = pos,
+				Color = Color3.fromRGB(214, 104, 26),
+				Material = Enum.Material.SmoothPlastic,
+				Transparency = 0.55,
+				CanCollide = false,
+			}, home)
+			part({
+				Name = "PumpkinStem",
+				Size = Vector3.new(1.6, 3 * scale, 1.6),
+				Position = pos + Vector3.new(0, 5 * scale, 0),
+				Color = Color3.fromRGB(90, 130, 60),
+				Material = Enum.Material.Grass,
+			}, home)
+		elseif biome.id == "ice" or biome.id == "forest" then
+			-- pinheiro: tronco + 3 cones empilhados
+			local pos = center + Vector3.new(x, y, z)
+			local trunkColor = biome.id == "ice" and Color3.fromRGB(150, 140, 150) or Color3.fromRGB(110, 80, 55)
+			local leafColor = biome.id == "ice" and Color3.fromRGB(226, 244, 255) or Color3.fromRGB(52, 140, 88)
+			part({
+				Name = "Trunk",
+				Size = Vector3.new(2.6 * scale, 9 * scale, 2.6 * scale),
+				Position = pos + Vector3.new(0, 4.5 * scale, 0),
+				Color = trunkColor,
+				Material = Enum.Material.Wood,
+			}, home)
+			for tier = 1, 3 do
+				local w = (8.5 - tier * 1.7) * scale
+				part({
+					Name = "Leaf",
+					Size = Vector3.new(w, 5.2 * scale, w),
+					Position = pos + Vector3.new(0, (7 + tier * 3.4) * scale, 0),
+					Color = leafColor,
+					Material = Enum.Material.Grass,
+				}, home)
+			end
+		else
+			tree(center + Vector3.new(x, y, z), scale, home)
+		end
+	end
+
+	-- pedras
+	for i = 1, spec.rocks do
+		local angle = rng:NextNumber() * math.pi * 2
+		local radius = innerRing + (placeable - innerRing) * rng:NextNumber()
+		local x, z, y = groundAt(angle, radius)
+		local scale = 0.8 + rng:NextNumber() * 1.4
+		ball({
+			Name = "Rock",
+			Size = Vector3.new(5 * scale, 4 * scale, 5.5 * scale),
+			Position = center + Vector3.new(x, y + 1.2 * scale, z),
+			Color = Color3.fromRGB(biome.colors.rock[1], biome.colors.rock[2], biome.colors.rock[3]),
+			Material = Enum.Material.Slate,
+		}, home)
+	end
+
+	-- flores (só bioma de grama)
+	for i = 1, spec.flowers do
+		local angle = rng:NextNumber() * math.pi * 2
+		local radius = innerRing + (placeable - innerRing) * rng:NextNumber()
+		local x, z, y = groundAt(angle, radius)
+		flower(center + Vector3.new(x, y, z), home)
+	end
+
+	-- cristais brilhantes (gelo, sombrio, cosmos, deserto)
+	for i = 1, spec.crystals do
+		local angle = rng:NextNumber() * math.pi * 2
+		local radius = innerRing + (placeable - innerRing) * rng:NextNumber()
+		local x, z, y = groundAt(angle, radius)
+		local height = 4 + rng:NextNumber() * 9
+		local crystal = part({
+			Name = "Crystal",
+			Size = Vector3.new(2.4, height, 2.4),
+			Position = center + Vector3.new(x, y + height / 2, z),
+			Color = Color3.fromRGB(accent[1], accent[2], accent[3]),
+			Material = Enum.Material.Neon,
+		}, home)
+		crystal.CFrame = CFrame.new(crystal.Position) * CFrame.Angles(0.18, rng:NextNumber() * 6.28, -0.14)
+	end
+end
+
+-- Constroi um bioma inteiro e devolve as referências que o servidor precisa.
+function World.buildBiome(biome, portalPosition, parent)
+	local home = Instance.new("Model")
+	home.Name = "Biome_" .. biome.id
+	home.Parent = parent
+
+	local center = Biomes.centerVector(biome)
+	local colors = biome.colors
+
+	-- plataforma de rocha flutuante (o "casco" da ilha)
+	part({
+		Name = "Base",
+		Size = Vector3.new(biome.radius * 2.3, 26, biome.radius * 2.3),
+		Position = center + Vector3.new(0, -26, 0),
+		Color = Color3.fromRGB(colors.rock[1], colors.rock[2], colors.rock[3]),
+		Material = Enum.Material.Slate,
+	}, home)
+
+	part({
+		Name = "BaseUnder",
+		Size = Vector3.new(biome.radius * 1.75, 30, biome.radius * 1.75),
+		Position = center + Vector3.new(0, -52, 0),
+		Color = Color3.fromRGB(colors.rock[1] - 40, colors.rock[2] - 40, colors.rock[3] - 40),
+		Material = Enum.Material.Slate,
+		CanCollide = false,
+	}, home)
+
+	-- borda de praia circular
+	part({
+		Name = "Beach",
+		Size = Vector3.new(biome.radius * 2.12, 3, biome.radius * 2.12),
+		Position = center + Vector3.new(0, -1, 0),
+		Color = Color3.fromRGB(colors.sand[1], colors.sand[2], colors.sand[3]),
+		Material = Enum.Material.Sand,
+	}, home)
+
+	-- relevo em grade
+	local cells = Terrain.generate(biome)
+	local cellModel = Instance.new("Model")
+	cellModel.Name = "Terrain"
+	cellModel.Parent = home
+
+	for _, cell in ipairs(cells) do
+		local cellPart = part({
+			Name = cell.top and "CellTop" or "CellFill",
+			Size = Vector3.new(cell.sx, cell.sy, cell.sz),
+			Position = center + Vector3.new(cell.x, cell.y, cell.z),
+			Color = Color3.fromRGB(cell.color[1], cell.color[2], cell.color[3]),
+			Material = cell.kind == "sand" and Enum.Material.Sand or Enum.Material.Grass,
+			CanCollide = true,
+		}, cellModel)
+		cellPart.TopSurface = Enum.SurfaceType.Smooth
+	end
+
+	decorateBiome(biome, cells, home, center)
+
+	-- pedestal do ovo no miolo plano. A altura vem da célula central, não de
+	-- uma constante: se o relevo mudar, o ovo acompanha e não afunda.
+	local groundY = Terrain.heightAtCell(biome, cells, 0, 0)
+	local egg = GameConfig.EggById[biome.eggId]
+	local eggSpot = Vector3.new(center.X, center.Y + groundY, center.Z)
+	if egg then
+		buildEggPedestal(egg, eggSpot, home)
+	end
+
+	-- portal de volta para o hub
+	local spawn = Biomes.spawnPoint(biome)
+	local portal = buildPortal(portalPosition, {
+		accent = colors.accent,
+	}, nil, home, "Portal_Return")
+
+	-- placa do bioma
+	makeSign(Vector3.new(center.X, center.Y + groundY + 34, center.Z), biome.name, Color3.fromRGB(255, 255, 255), home)
+
+	-- area de chegada: plataforma discreta onde o jogador aparece
+	part({
+		Name = "ArrivalPad",
+		Size = Vector3.new(30, 1, 30),
+		Position = Vector3.new(spawn.X, center.Y + groundY + 0.6, spawn.Z),
+		Color = Color3.fromRGB(colors.accent[1], colors.accent[2], colors.accent[3]),
+		Material = Enum.Material.Neon,
+		Transparency = 0.55,
+		CanCollide = false,
+	}, home)
+
+	return {
+		biome = biome,
+		model = home,
+		center = center,
+		eggSpot = eggSpot,
+		spawn = spawn,
+		portal = portal,
+	}
+end
+
+-- Portais do hub: um por bioma, no anel externo da praça, alinhados com a
+-- direção real da ilha. Assim o jogador vê para onde o portal leva.
+local biomeRefs = {}
+
+function World.buildBiomes()
+	biomeRoot = Instance.new("Folder")
+	biomeRoot.Name = "Biomes"
+	biomeRoot.Parent = root
+
+	for _, biome in ipairs(Biomes.List) do
+		local center = Biomes.centerVector(biome)
+
+		-- direção no plano entre o hub e a ilha
+		local flat = Vector3.new(center.X, 0, center.Z)
+		if flat.Magnitude < 1 then
+			flat = Vector3.new(0, 0, -1) -- cosmos fica no alto (centro do hub)
+		end
+
+		-- portal do hub
+		local portalPosition = Vector3.new(0, 0, 0)
+		if flat.Magnitude > 1 then
+			portalPosition = flat.Unit * 70
+		end
+		buildPortal(portalPosition, { accent = biome.colors.accent }, biome, root, "PortalTo_" .. biome.id)
+
+		-- Portal de volta: na encosta, virado para o hub. A altura vem do
+		-- próprio relevo — o portal fica em cima do chão, não afundado na base.
+		local direction = flat.Magnitude < 1 and Vector3.new(0, 0, 1) or flat.Unit
+		local portalRadius = biome.radius * 0.66
+		local portalX = center.X + direction.X * portalRadius
+		local portalZ = center.Z + direction.Z * portalRadius
+		local cells = Terrain.generate(biome)
+		local localX = portalX - center.X
+		local localZ = portalZ - center.Z
+		local backPosition =
+			Vector3.new(portalX, center.Y + Terrain.heightAtCell(biome, cells, localX, localZ), portalZ)
+
+		biomeRefs[biome.id] = World.buildBiome(biome, backPosition, biomeRoot)
+	end
+end
+
+function World.getBiomeRefs()
+	return biomeRefs
+end
+
+function World.biomeArrival(biomeId)
+	local ref = biomeRefs[biomeId]
+	if not ref then
+		return nil
+	end
+	return CFrame.new(ref.spawn)
+		* CFrame.Angles(0, math.atan2(ref.center.X - ref.spawn.X, ref.center.Z - ref.spawn.Z), 0)
+end
+
+function World.centerOf(biomeId)
+	local ref = biomeRefs[biomeId]
+	return ref and ref.center or nil
 end
 
 return World

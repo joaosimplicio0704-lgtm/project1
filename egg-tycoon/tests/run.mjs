@@ -9,12 +9,31 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
 
+// Vector3 com aritmética de verdade: Biomes.spawnPoint soma/subtrai vetores e
+// usa .Magnitude/.Unit. Um stub só com X/Y/Z quebra o teste de geometria.
 const SHIM = `
 Color3 = {
   fromRGB = function(r, g, b) return { r = r, g = g, b = b } end,
   new = function(r, g, b) return { r = r, g = g, b = b } end,
 }
-Vector3 = { new = function(x, y, z) return { X = x, Y = y, Z = z } end }
+local V3 = {}
+V3.__add = function(a, b) return setmetatable({ X = a.X + b.X, Y = a.Y + b.Y, Z = a.Z + b.Z }, V3) end
+V3.__sub = function(a, b) return setmetatable({ X = a.X - b.X, Y = a.Y - b.Y, Z = a.Z - b.Z }, V3) end
+V3.__mul = function(a, n) return setmetatable({ X = a.X * n, Y = a.Y * n, Z = a.Z * n }, V3) end
+V3.__index = function(v, key)
+  if key == "Magnitude" then
+    return math.sqrt(v.X * v.X + v.Y * v.Y + v.Z * v.Z)
+  elseif key == "Unit" then
+    local m = math.sqrt(v.X * v.X + v.Y * v.Y + v.Z * v.Z)
+    if m == 0 then return setmetatable({ X = 0, Y = 0, Z = 0 }, V3) end
+    return setmetatable({ X = v.X / m, Y = v.Y / m, Z = v.Z / m }, V3)
+  end
+  return nil
+end
+Vector3 = {
+  new = function(x, y, z) return setmetatable({ X = x or 0, Y = y or 0, Z = z or 0 }, V3) end,
+  zero = function() return setmetatable({ X = 0, Y = 0, Z = 0 }, V3) end,
+}
 `;
 
 const withoutRequire = (source) =>
@@ -31,6 +50,8 @@ const script = [
 	module("GameConfig", "src/shared/GameConfig.luau"),
 	module("Format", "src/shared/Format.luau"),
 	module("Pets", "src/shared/Pets.luau"),
+	module("Biomes", "src/shared/Biomes.luau"),
+	module("Format2", "src/shared/Format.luau"),
 	read("tests/spec.luau"),
 ].join("\n");
 

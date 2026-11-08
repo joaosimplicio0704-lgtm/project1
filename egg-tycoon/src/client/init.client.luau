@@ -23,6 +23,7 @@ local PetsPanel = require(script.PetsPanel)
 local ShopPanel = require(script.ShopPanel)
 local Toasts = require(script.Toasts)
 local WorldUI = require(script.WorldUI)
+local BiomesPanel = require(script.BiomesPanel)
 
 ---------------------------------------------------------------------------
 -- GUI RAIZ
@@ -45,11 +46,13 @@ Toasts.init(gui)
 EggPanel.build(gui)
 PetsPanel.build(gui)
 ShopPanel.build(gui)
+BiomesPanel.build(gui)
 
 local function closeAll()
 	EggPanel.hide()
 	PetsPanel.hide()
 	ShopPanel.hide()
+	BiomesPanel.hide()
 end
 
 local function openEggs(eggId)
@@ -176,6 +179,10 @@ WorldUI.build({
 			openEggs()
 		end
 	end,
+	-- Portal: o servidor valida o desbloqueio e devolve erro se faltar.
+	travel = function(biomeId)
+		NetClient.action(Net.ActionKind.Travel, biomeId)
+	end,
 })
 
 ---------------------------------------------------------------------------
@@ -187,6 +194,9 @@ NetClient.state.OnClientEvent:Connect(function(snapshot)
 	WorldUI.syncPets(snapshot)
 	if EggPanel and EggPanel.refresh then
 		EggPanel.refresh()
+	end
+	if BiomesPanel and BiomesPanel.refresh then
+		BiomesPanel.refresh()
 	end
 end)
 
@@ -224,7 +234,9 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	end
 	local key = input.KeyCode
 
-	if key == Enum.KeyCode.E then
+	if key == Enum.KeyCode.M then
+		BiomesPanel.toggle()
+	elseif key == Enum.KeyCode.E then
 		openEggs()
 	elseif key == Enum.KeyCode.P then
 		closeAll()

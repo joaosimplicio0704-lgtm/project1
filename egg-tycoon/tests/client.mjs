@@ -384,6 +384,9 @@ const SHARED = [
 	"Format",
 	"Net",
 	"Pets",
+	"Noise",
+	"Biomes",
+	"Terrain",
 ]
 	.map((n) => moduleCode(n, `src/shared/${n}.luau`))
 	.join("\n");
@@ -400,6 +403,7 @@ const CLIENT_MODULES = [
 	"EggPanel",
 	"ShopPanel",
 	"WorldUI",
+	"BiomesPanel",
 ]
 	.map((n) => moduleCode(n, `src/client/${n}.luau`))
 	.join("\n");
@@ -478,12 +482,25 @@ assert(#descendants > 60, "GUI praticamente vazia: " .. #descendants)
 
 -- Os 3 painéis de tela cheia precisam começar escondidos, senão o jogo abre
 -- com Ovos + Pets + Loja empilhados por cima do mapa.
-for _, name in ipairs({ "EggPanel", "PetsPanel", "ShopPanel" }) do
+for _, name in ipairs({ "EggPanel", "PetsPanel", "ShopPanel", "BiomesPanel" }) do
   local panel = gui:FindFirstChild(name)
   assert(panel, "painel ausente na GUI: " .. name)
   assert(panel.Visible == false, name .. " deveria começar invisível, Visible=" .. tostring(panel.Visible))
 end
 print("paineis escondidos ao abrir: ok")
+
+-- O painel de mundos precisa ter um cartao por bioma, com nome e cadeado.
+local biomesPanel = gui:FindFirstChild("BiomesPanel")
+local grid = biomesPanel:FindFirstChild("Card"):FindFirstChild("Grid")
+local cards = 0
+for _, child in ipairs(grid:GetChildren()) do
+  if string.sub(child.Name, 1, 6) == "Biome_" then
+    cards = cards + 1
+    assert(child:FindFirstChild("Lock"), "cartao sem Lock: " .. child.Name)
+  end
+end
+assert(cards == 7, "painel de mundos com " .. cards .. " cartoes (esperado 7)")
+print("painel de mundos: " .. cards .. " cartoes ok")
 `;
 
 const SNAPSHOT = String.raw`

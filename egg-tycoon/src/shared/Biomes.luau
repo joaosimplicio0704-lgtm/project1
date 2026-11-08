@@ -1,0 +1,234 @@
+-- Biomes
+-- Os 7 mundos do jogo. Cada um tem paleta, relevo, ovo próprio e uma regra
+-- de desbloqueio. Fica em Shared porque cliente (painel de mundos) e servidor
+-- (construção do mapa, viagem) leem a MESMA tabela — nada de duplicar dado.
+
+local Biomes = {}
+
+Biomes.HubRadius = 96
+Biomes.RingDistance = 312
+Biomes.IslandRadius = 122
+Biomes.SkyHeight = 236
+
+-- kind: "free" nunca bloqueia | "hatched" precisa ter chovido N ovos
+--       | "rebirths" precisa de N renascimentos
+Biomes.List = {
+	{
+		id = "meadow",
+		name = "Vale Verdejante",
+		emoji = "🌷",
+		eggId = "starter",
+		unlock = { kind = "free", value = 0 },
+		blurb = "Onde todo mundo começa. Grama macia e flores.",
+		theme = "meadow",
+		center = { x = 312, y = 0, z = 0 },
+		radius = 122,
+		colors = {
+			grass = { 116, 208, 96 },
+			grassDark = { 84, 172, 76 },
+			rock = { 176, 190, 205 },
+			sand = { 240, 226, 190 },
+			accent = { 255, 150, 190 },
+			water = { 96, 210, 236 },
+		},
+		height = { base = 3, amp = 9, scale = 0.055, ridged = false, detail = 4 },
+		decor = { trees = 26, rocks = 14, flowers = 44, crystals = 0 },
+	},
+	{
+		id = "forest",
+		name = "Floresta Densa",
+		emoji = "🌲",
+		eggId = "green",
+		unlock = { kind = "hatched", value = 3 },
+		blurb = "Árvores gigantes e cogumelos que brilham.",
+		theme = "forest",
+		center = { x = 156, y = 0, z = 270 },
+		radius = 122,
+		colors = {
+			grass = { 74, 168, 92 },
+			grassDark = { 48, 128, 72 },
+			rock = { 148, 162, 156 },
+			sand = { 214, 206, 168 },
+			accent = { 130, 235, 150 },
+			water = { 72, 176, 168 },
+		},
+		height = { base = 4, amp = 22, scale = 0.05, ridged = false, detail = 5 },
+		decor = { trees = 54, rocks = 16, flowers = 20, crystals = 0 },
+	},
+	{
+		id = "desert",
+		name = "Deserto Dourado",
+		emoji = "🏜️",
+		eggId = "golden",
+		unlock = { kind = "rebirths", value = 1 },
+		blurb = "Dunas, obeliscos e ruínas soterradas.",
+		theme = "desert",
+		center = { x = -155, y = 0, z = 270 },
+		radius = 122,
+		colors = {
+			grass = { 236, 208, 150 },
+			grassDark = { 214, 178, 116 },
+			rock = { 206, 170, 128 },
+			sand = { 246, 226, 176 },
+			accent = { 255, 196, 90 },
+			water = { 120, 220, 232 },
+		},
+		height = { base = 2, amp = 14, scale = 0.04, ridged = false, detail = 4 },
+		decor = { trees = 6, rocks = 12, flowers = 0, crystals = 8 },
+	},
+	{
+		id = "ice",
+		name = "Picos Congelados",
+		emoji = "❄️",
+		eggId = "ice",
+		unlock = { kind = "rebirths", value = 2 },
+		blurb = "Montanhas de gelo e pinheiros nevados.",
+		theme = "ice",
+		center = { x = -312, y = 0, z = 0 },
+		radius = 122,
+		colors = {
+			grass = { 232, 246, 255 },
+			grassDark = { 196, 226, 248 },
+			rock = { 158, 186, 210 },
+			sand = { 240, 248, 255 },
+			accent = { 140, 220, 255 },
+			water = { 156, 224, 246 },
+		},
+		height = { base = 5, amp = 46, scale = 0.045, ridged = true, detail = 6 },
+		decor = { trees = 30, rocks = 18, flowers = 0, crystals = 14 },
+	},
+	{
+		id = "shadow",
+		name = "Vale Sombrio",
+		emoji = "🌑",
+		eggId = "shadow",
+		unlock = { kind = "rebirths", value = 3 },
+		blurb = "Pedra escura, névoa roxa e obeliscos.",
+		theme = "shadow",
+		center = { x = -156, y = 0, z = -270 },
+		radius = 122,
+		colors = {
+			grass = { 96, 86, 130 },
+			grassDark = { 66, 58, 98 },
+			rock = { 76, 72, 96 },
+			sand = { 120, 110, 150 },
+			accent = { 178, 120, 245 },
+			water = { 90, 80, 140 },
+		},
+		height = { base = 3, amp = 30, scale = 0.055, ridged = true, detail = 5 },
+		decor = { trees = 18, rocks = 22, flowers = 0, crystals = 20 },
+	},
+	{
+		id = "halloween",
+		name = "Ilha Abóbora",
+		emoji = "🎃",
+		eggId = "halloween",
+		unlock = { kind = "rebirths", value = 4 },
+		blurb = "Abóboras gigantes, névoa laranja e fantasmas.",
+		theme = "halloween",
+		center = { x = 156, y = 0, z = -270 },
+		radius = 122,
+		colors = {
+			grass = { 152, 176, 96 },
+			grassDark = { 108, 132, 66 },
+			rock = { 128, 116, 106 },
+			sand = { 196, 168, 120 },
+			accent = { 255, 140, 50 },
+			water = { 110, 150, 120 },
+		},
+		height = { base = 3, amp = 20, scale = 0.05, ridged = false, detail = 4 },
+		decor = { trees = 14, rocks = 14, flowers = 0, crystals = 10 },
+	},
+	{
+		id = "cosmos",
+		name = "Nebulosa Cósmica",
+		emoji = "🌌",
+		eggId = "visits",
+		unlock = { kind = "rebirths", value = 5 },
+		blurb = "Ilha flutuante entre estrelas. O ovo dos 30M.",
+		theme = "cosmos",
+		center = { x = 0, y = 236, z = 0 },
+		radius = 74,
+		colors = {
+			grass = { 72, 64, 128 },
+			grassDark = { 50, 44, 96 },
+			rock = { 96, 92, 150 },
+			sand = { 140, 130, 210 },
+			accent = { 190, 150, 255 },
+			water = { 70, 60, 140 },
+		},
+		height = { base = 2, amp = 12, scale = 0.06, ridged = false, detail = 4 },
+		decor = { trees = 8, rocks = 10, flowers = 0, crystals = 26 },
+	},
+}
+
+Biomes.ById = {}
+for _, biome in ipairs(Biomes.List) do
+	Biomes.ById[biome.id] = biome
+end
+
+function Biomes.get(id)
+	return Biomes.ById[id] or Biomes.List[1]
+end
+
+function Biomes.unlockedMap(stats)
+	stats = stats or {}
+	local out = {}
+	for _, biome in ipairs(Biomes.List) do
+		local unlock = biome.unlock
+		if unlock.kind == "free" then
+			out[biome.id] = true
+		elseif unlock.kind == "hatched" then
+			out[biome.id] = (stats.hatched or 0) >= unlock.value
+		else
+			out[biome.id] = (stats.rebirths or 0) >= unlock.value
+		end
+	end
+	return out
+end
+
+function Biomes.forEgg(eggId)
+	for _, biome in ipairs(Biomes.List) do
+		if biome.eggId == eggId then
+			return biome
+		end
+	end
+	return nil
+end
+
+function Biomes.at(index)
+	return Biomes.List[index]
+end
+
+-- Ponto central em studs (Vector3). Usa .x/.y/.z da tabela pura.
+function Biomes.centerVector(biome)
+	return Vector3.new(biome.center.x, biome.center.y, biome.center.z)
+end
+
+-- Onde o jogador aparece ao chegar no bioma: na frente do portal de retorno,
+-- virado para o ovo.
+function Biomes.spawnPoint(biome)
+	local center = Biomes.centerVector(biome)
+	local hub = Vector3.new(0, 0, 0)
+	local flat = Vector3.new(center.X, 0, center.Z)
+	local direction = flat - Vector3.new(hub.X, 0, hub.Z)
+	if direction.Magnitude < 0.01 then
+		direction = Vector3.new(0, 0, 1)
+	end
+	direction = direction.Unit
+	return center + direction * (biome.radius * 0.42) + Vector3.new(0, 8, 0)
+end
+
+-- Texto do cadeado mostrado no painel.
+function Biomes.unlockLabel(biome)
+	local unlock = biome.unlock
+	if unlock.kind == "free" then
+		return "Livre"
+	elseif unlock.kind == "hatched" then
+		return string.format("Chocar %d ovos", unlock.value)
+	else
+		return string.format("Renascimento %d", unlock.value)
+	end
+end
+
+return Biomes

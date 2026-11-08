@@ -135,6 +135,11 @@ function Game.snapshot(session)
 		eggBought = data.eggBought,
 		rebirthCost = GameConfig.rebirthCost(GameConfig.rate(data), data.rebirths),
 		rate = GameConfig.rate(data),
+		biome = data.biome or "meadow",
+		biomes = Biomes.unlockedMap({
+			hatched = data.stats and data.stats.hatched or 0,
+			rebirths = data.rebirths or 0,
+		}),
 	}
 end
 
@@ -173,6 +178,9 @@ local function fail(session, message)
 	toast(session, message, "error")
 	return false, message
 end
+
+-- Ganchos preenchidos pelo init.server (o Game nao conhece jogador/CFrame).
+Game.arrivalFor = function() end
 
 Game.handlers = {}
 
@@ -343,6 +351,30 @@ end
 
 function Game.handlers.setZone(session, zone)
 	-- o servidor informa ao cliente qual UI abrir; usado pelo mundo
+	return true
+end
+
+-- Viagem entre biomas. O cliente manda o id; o servidor confere o desbloqueio
+-- com os dados da sessao e so entao autoriza. Nunca confiar no cliente: sem
+-- isso um jogador com 0 rebirths abriria a nebulosa cosmica clicando no portal.
+function Game.handlers.travel(session, biomeId)
+	local data = session.data
+	local biome = Biomes.ById[biomeId]
+	if not biome then
+		return false, "Mundo desconhecido"
+	end
+
+	local unlocked = Biomes.unlockedMap({
+		hatched = data.stats and data.stats.hatched or 0,
+		rebirths = data.rebirths or 0,
+	})
+
+	if not unlocked[biomeId] then
+		return false, "🔒 " .. biome.name .. " — " .. Biomes.unlockLabel(biome)
+	end
+
+	data.biome = biomeId
+	Game.arrivalFor(session, biomeId)
 	return true
 end
 

@@ -261,6 +261,85 @@ local fresh = GameConfig.defaultData()
 local seconds = GameConfig.secondsToAfford("starter", fresh)
 check("primeiro ovo acessível", seconds < 60, tostring(seconds))
 
+---------------------------------------------------------------------------
+-- BIOMAS E DESBLOQUEIO
+---------------------------------------------------------------------------
+
+check("7 biomas", #Biomes.List == 7, tostring(#Biomes.List))
+
+local missingEgg = nil
+local seenEgg = {}
+local duplicateEgg = nil
+for _, biome in ipairs(Biomes.List) do
+	if not GameConfig.EggById[biome.eggId] then
+		missingEgg = biome.id .. ":" .. biome.eggId
+	end
+	if seenEgg[biome.eggId] then
+		duplicateEgg = biome.eggId
+	end
+	seenEgg[biome.eggId] = true
+end
+check("todo bioma tem ovo valido", missingEgg == nil, tostring(missingEgg))
+check("ovos nao se repetem entre biomas", duplicateEgg == nil, tostring(duplicateEgg))
+
+local biomeFresh = Biomes.unlockedMap({ hatched = 0, rebirths = 0 })
+check("meadow e livre", biomeFresh.meadow == true)
+local allLocked = true
+for _, biome in ipairs(Biomes.List) do
+	if biome.id ~= "meadow" and biomeFresh[biome.id] then
+		allLocked = false
+	end
+end
+check("os outros comecam bloqueados", allLocked)
+
+local afterHatch = Biomes.unlockedMap({ hatched = 3, rebirths = 0 })
+check("3 ovos abrem a floresta", afterHatch.forest == true)
+check("3 ovos nao abrem o deserto", afterHatch.desert == false)
+
+local oneRebirth = Biomes.unlockedMap({ hatched = 0, rebirths = 1 })
+check("rebirth 1 abre o deserto", oneRebirth.desert == true)
+check("rebirth 1 nao abre o gelo", oneRebirth.ice == false)
+
+-- Rebirths abrem os mundos de rebirth; a floresta depende de ovos chocados.
+local full = Biomes.unlockedMap({ hatched = 99, rebirths = 5 })
+local allOpen = true
+for _, biome in ipairs(Biomes.List) do
+	if not full[biome.id] then
+		allOpen = false
+	end
+end
+check("rebirth 5 + 99 ovos abre tudo", allOpen)
+
+check("forEgg encontra o bioma do ovo", Biomes.forEgg("halloween").id == "halloween")
+
+-- geometria: ilhas longe do hub, chegada dentro da ilha e acima do chao
+local misplaced = nil
+for _, biome in ipairs(Biomes.List) do
+	local c = Biomes.centerVector(biome)
+	local flat = math.sqrt(c.X * c.X + c.Z * c.Z)
+	if biome.id == "cosmos" then
+		if c.Y < 100 then
+			misplaced = "cosmos baixo demais"
+		end
+	elseif flat < 200 then
+		misplaced = biome.id .. " perto do hub"
+	end
+
+	local spawn = Biomes.spawnPoint(biome)
+	local dx, dz = spawn.X - c.X, spawn.Z - c.Z
+	if math.sqrt(dx * dx + dz * dz) >= biome.radius then
+		misplaced = biome.id .. " chegada fora da ilha"
+	end
+	if spawn.Y <= c.Y then
+		misplaced = biome.id .. " chegada abaixo do chao"
+	end
+end
+check("geometria dos biomas coerente", misplaced == nil, tostring(misplaced))
+
+check("rotulo livre", Biomes.unlockLabel(Biomes.get("meadow")) == "Livre")
+check("rotulo de ovos", string.find(Biomes.unlockLabel(Biomes.get("forest")), "3") ~= nil)
+check("rotulo de rebirth", string.find(Biomes.unlockLabel(Biomes.get("ice")), "2") ~= nil)
+
 print(string.format("\n%d passed, %d failed", passed, failed))
 if failed > 0 then
 	error("testes falharam")

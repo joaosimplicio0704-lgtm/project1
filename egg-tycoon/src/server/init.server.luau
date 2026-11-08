@@ -15,6 +15,23 @@ local Sessions = require(script.Sessions)
 local Game = require(script.Game)
 
 World.build()
+
+-- Viagem entre biomas: o Game decide SE pode ir, o init.server faz o teleporte.
+Game.arrivalFor = function(session, biomeId)
+	local character = session.player.Character
+	if not character then
+		return
+	end
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+	local cframe = World.biomeArrival(biomeId)
+	if cframe then
+		root.CFrame = cframe
+	end
+end
+
 local remotes = Remotes.setup()
 Game.init(remotes)
 PlayerData.start()
@@ -76,6 +93,26 @@ end
 ---------------------------------------------------------------------------
 
 local A = Net.ActionKind
+
+-- ClickDetector dos portais: o jogador clica na placa e viaja.
+local zoneBindings = World.getZoneBindings()
+for name, binding in pairs(zoneBindings) do
+	if binding.portal and binding.detector then
+		local targetBiome = name == "portal_hub" and "meadow" or name:gsub("^portal_", "")
+		binding.detector.MouseClick:Connect(function(player)
+			local session = Sessions.get(player)
+			if not session then
+				return
+			end
+			local ok, err = Game.handlers.travel(session, targetBiome)
+			if ok then
+				Game.pushSnapshot(session)
+			elseif err then
+				remotes.event:FireClient(player, Net.EventKind.Toast, { text = err, kind = "error" })
+			end
+		end)
+	end
+end
 
 remotes.action.OnServerEvent:Connect(function(player, kind, payload)
 	local session = Sessions.get(player)

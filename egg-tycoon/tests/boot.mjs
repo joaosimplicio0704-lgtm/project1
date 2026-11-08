@@ -31,8 +31,21 @@ local __remoteLog = {}
 Color3 = {
   fromRGB = function(r,g,b) return {r=r,g=g,b=b} end,
 }
+local V3 = {}
+V3.__add = function(a, b) return setmetatable({ X = a.X + b.X, Y = a.Y + b.Y, Z = a.Z + b.Z }, V3) end
+V3.__sub = function(a, b) return setmetatable({ X = a.X - b.X, Y = a.Y - b.Y, Z = a.Z - b.Z }, V3) end
+V3.__mul = function(a, n) return setmetatable({ X = a.X * n, Y = a.Y * n, Z = a.Z * n }, V3) end
+V3.__index = function(v, key)
+  if key == "Magnitude" then return math.sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z) end
+  if key == "Unit" then
+    local m = math.sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
+    if m == 0 then return setmetatable({ X = 0, Y = 0, Z = 0 }, V3) end
+    return setmetatable({ X = v.X/m, Y = v.Y/m, Z = v.Z/m }, V3)
+  end
+  return nil
+end
 Vector3 = {
-  new = function(x,y,z) return {X=x,Y=y,Z=z} end,
+  new = function(x,y,z) return setmetatable({X=x or 0,Y=y or 0,Z=z or 0}, V3) end,
 }
 CFrame = { new = function() return {} end }
 Enum = { Material = {}, SurfaceType = {}, PartType = {} }
@@ -84,6 +97,7 @@ const BODY = [
 	mod("Format", "src/shared/Format.luau"),
 	mod("Net", "src/shared/Net.luau"),
 	mod("Pets", "src/shared/Pets.luau"),
+	mod("Biomes", "src/shared/Biomes.luau"),
 	`local Sessions = { byPlayer = {} }
 function Sessions.get(p) return Sessions.byPlayer[p] end
 function Sessions.all() return Sessions.byPlayer end`,
@@ -203,9 +217,47 @@ for _ = 1, 40 do Game.tick(0.25) end
 assert(s1.data.coins > before, "renda parou depois do rebirth")
 print("renda pos-rebirth: +" .. Format.number(s1.data.coins - before))
 
+-- VIAGEM ENTRE BIOMAS
+-- s2 é um jogador novo (0 rebirths): os mundos de rebirth tem que fechar.
+-- Não existe player2 real: forjamos o mínimo que o handler usa (Name).
+local fakePlayer = { Name = "Novato", UserId = 999 }
+local s2 = { player = fakePlayer, data = GameConfig.defaultData(), dirty = false, tapWindow = {}, lastSnapshot = 0 }
+s2.data = GameConfig.defaultData()
+s2.data.stats.hatched = 0
+s2.data.rebirths = 0
+s2.data.biome = "meadow"
+
+local arrived = nil
+Game.arrivalFor = function(session, biomeId) arrived = session.player.Name .. "->" .. biomeId end
+
+local okMeadow = Game.handle(s2, A.Travel, "meadow")
+print("travel meadow: " .. tostring(okMeadow))
+assert(okMeadow, "bioma livre deveria ser acessivel")
+
+local okIce, errIce = Game.handle(s2, A.Travel, "ice")
+print("travel ice (bloqueado): " .. tostring(okIce) .. " " .. tostring(errIce or ""))
+assert(not okIce, "jogador com 0 rebirths NAO pode entrar no gelo")
+assert(errIce and string.find(errIce, "Renascimento"), "erro de bloqueio sem requisito: " .. tostring(errIce))
+
+local okBad, errBad = Game.handle(s2, A.Travel, "nao_existe")
+assert(not okBad and errBad, "bioma inexistente deveria falhar")
+
+-- com rebirths, o gelo abre de verdade
+s2.data.rebirths = 2
+local okIce2 = Game.handle(s2, A.Travel, "ice")
+print("travel ice (liberado): " .. tostring(okIce2) .. " bioma atual: " .. tostring(s2.data.biome))
+assert(okIce2, "rebirth 2 deveria abrir o gelo")
+assert(s2.data.biome == "ice", "bioma atual nao mudou")
+assert(arrived ~= nil, "arrivalFor nao foi chamado — o jogador nao seria teleportado")
+
+-- o snapshot precisa carregar o bioma atual e o mapa de desbloqueio
+local snapTravel = Game.snapshot(s2)
+assert(snapTravel.biome == "ice", "snapshot com bioma errado")
+assert(snapTravel.biomes and snapTravel.biomes.meadow == true, "snapshot sem mapa de desbloqueio")
+
 -- o snapshot que vai pro cliente tem que serializar sem campo quebrado
 local snap = Game.snapshot(s1)
-local required = { "coins","gems","crystals","rebirths","pets","equipped","upgrades","gemUpgrades","selectedEgg","stats","questIndex","income","tapPower","slots","luck","rate","rebirthCost" }
+local required = { "coins","gems","crystals","rebirths","pets","equipped","upgrades","gemUpgrades","selectedEgg","stats","questIndex","income","tapPower","slots","luck","rate","rebirthCost","biome","biomes" }
 for _, key in ipairs(required) do
   assert(snap[key] ~= nil, "snapshot sem campo: " .. key)
 end

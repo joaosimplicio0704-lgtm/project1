@@ -184,6 +184,7 @@ const script = [
 	module("GameConfig", "src/shared/GameConfig.luau"),
 	module("Format", "src/shared/Format.luau"),
 	module("Pets", "src/shared/Pets.luau"),
+	module("Biomes", "src/shared/Biomes.luau"),
 	SIM,
 ].join("\n");
 
