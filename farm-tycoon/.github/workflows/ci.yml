@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "arena/**"]
+    paths: ["farm-tycoon/**"]
+  pull_request:
+    paths: ["farm-tycoon/**"]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: farm-tycoon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run sim
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FarmTycoon-rbxlx
+          path: farm-tycoon/build/FarmTycoon.rbxlx

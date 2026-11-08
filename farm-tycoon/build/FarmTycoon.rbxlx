@@ -1,0 +1,3674 @@
+<roblox version="4">
+  <Item class="ReplicatedStorage" referent="0">
+    <Properties>
+      <string name="Name">ReplicatedStorage</string>
+    </Properties>
+    <Item class="Folder" referent="1">
+      <Properties>
+        <string name="Name">Shared</string>
+      </Properties>
+      <Item class="ModuleScript" referent="2">
+        <Properties>
+          <string name="Name">Format</string>
+          <string name="Source"><![CDATA[-- Format
+-- Formatacao de numeros e tempo usada no HUD. Sem dependencia de `game`.
+
+local Format = {}
+
+local SUFFIXES = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", "Ud", "Dd" }
+
+function Format.number(value)
+	local n = tonumber(value) or 0
+	local negative = n < 0
+	n = math.abs(n)
+
+	if n < 1000 then
+		if n == math.floor(n) then
+			return (negative and "-" or "") .. tostring(math.floor(n))
+		end
+		return (negative and "-" or "") .. string.format("%.1f", n)
+	end
+
+	local index = math.floor(math.log10(n) / 3)
+	index = math.min(index, #SUFFIXES - 1)
+
+	local scaled = n / (1000 ^ index)
+	local text
+	if scaled < 10 then
+		text = string.format("%.2f", scaled)
+	elseif scaled < 100 then
+		text = string.format("%.1f", scaled)
+	else
+		text = string.format("%.0f", scaled)
+	end
+
+	-- so corta zeros depois da virgula: "1.50" -> "1.5", "100" fica "100"
+	if string.find(text, ".", 1, true) then
+		text = text:gsub("0+$", ""):gsub("%.$", "")
+	end
+
+	return (negative and "-" or "") .. text .. SUFFIXES[index + 1]
+end
+
+function Format.money(value)
+	return "$" .. Format.number(value)
+end
+
+function Format.time(seconds)
+	seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+	if seconds < 60 then
+		return seconds .. "s"
+	elseif seconds < 3600 then
+		return string.format("%dm %02ds", seconds // 60, seconds % 60)
+	elseif seconds < 86400 then
+		return string.format("%dh %02dm", seconds // 3600, (seconds % 3600) // 60)
+	end
+	return string.format("%dd %02dh", seconds // 86400, (seconds % 86400) // 3600)
+end
+
+function Format.percent(value)
+	return string.format("%d%%", math.floor(value * 100 + 0.5))
+end
+
+return Format
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="3">
+        <Properties>
+          <string name="Name">GameConfig</string>
+          <string name="Source"><![CDATA[-- GameConfig
+-- Toda a balanceagem do jogo mora aqui. Muda numero aqui, muda no jogo inteiro.
+-- Modulo puro: nenhuma referencia a `game`, roda em qualquer sandbox.
+
+local GameConfig = {}
+
+GameConfig.DataVersion = 1
+GameConfig.SaveStore = "FarmTycoon_Save_v1"
+
+GameConfig.MaxLevel = 40
+
+---------------------------------------------------------------------------
+-- CROPS
+---------------------------------------------------------------------------
+-- grow  = segundos base para amadurecer
+-- seed  = custo da semente
+-- sell  = preco de venda por unidade colhida
+-- amount = unidades por colheita
+-- xp    = xp por colheita
+-- level = nivel minimo para desbloquear
+
+GameConfig.Crops = {
+	{
+		id = "wheat",
+		name = "Trigo",
+		emoji = "🌾",
+		grow = 6,
+		seed = 5,
+		sell = 5,
+		amount = 3,
+		xp = 6,
+		level = 1,
+		color = Color3.fromRGB(232, 216, 168),
+	},
+	{
+		id = "carrot",
+		name = "Cenoura",
+		emoji = "🥕",
+		grow = 10,
+		seed = 16,
+		sell = 16,
+		amount = 3,
+		xp = 10,
+		level = 2,
+		color = Color3.fromRGB(255, 140, 66),
+	},
+	{
+		id = "tomato",
+		name = "Tomate",
+		emoji = "🍅",
+		grow = 16,
+		seed = 46,
+		sell = 46,
+		amount = 3,
+		xp = 18,
+		level = 4,
+		color = Color3.fromRGB(226, 59, 59),
+	},
+	{
+		id = "corn",
+		name = "Milho",
+		emoji = "🌽",
+		grow = 22,
+		seed = 120,
+		sell = 120,
+		amount = 3,
+		xp = 28,
+		level = 6,
+		color = Color3.fromRGB(255, 212, 0),
+	},
+	{
+		id = "strawberry",
+		name = "Morango",
+		emoji = "🍓",
+		grow = 32,
+		seed = 330,
+		sell = 330,
+		amount = 3,
+		xp = 44,
+		level = 9,
+		color = Color3.fromRGB(255, 77, 109),
+	},
+	{
+		id = "pumpkin",
+		name = "Abóbora",
+		emoji = "🎃",
+		grow = 46,
+		seed = 900,
+		sell = 900,
+		amount = 3,
+		xp = 64,
+		level = 12,
+		color = Color3.fromRGB(255, 122, 24),
+	},
+	{
+		id = "grape",
+		name = "Uva",
+		emoji = "🍇",
+		grow = 62,
+		seed = 2400,
+		sell = 2400,
+		amount = 3,
+		xp = 88,
+		level = 16,
+		color = Color3.fromRGB(139, 92, 246),
+	},
+	{
+		id = "starfruit",
+		name = "Carambola",
+		emoji = "⭐",
+		grow = 85,
+		seed = 6500,
+		sell = 6500,
+		amount = 3,
+		xp = 120,
+		level = 20,
+		color = Color3.fromRGB(255, 224, 102),
+	},
+}
+
+GameConfig.CropById = {}
+for _, crop in ipairs(GameConfig.Crops) do
+	GameConfig.CropById[crop.id] = crop
+end
+
+function GameConfig.getCrop(id)
+	return GameConfig.CropById[id]
+end
+
+-- Primeira crop liberada no nivel informado (usada para auto-select no rebirth)
+function GameConfig.bestCropForLevel(level)
+	local best = GameConfig.Crops[1]
+	for _, crop in ipairs(GameConfig.Crops) do
+		if crop.level <= level then
+			best = crop
+		end
+	end
+	return best
+end
+
+---------------------------------------------------------------------------
+-- XP / LEVEL
+---------------------------------------------------------------------------
+
+function GameConfig.xpNeeded(level)
+	if level >= GameConfig.MaxLevel then
+		return math.huge
+	end
+	return math.floor(45 * level ^ 1.18)
+end
+
+---------------------------------------------------------------------------
+-- LAYOUT DO LOTE
+---------------------------------------------------------------------------
+-- Fonte unica da geometria. World (servidor) e Render (cliente) leem daqui,
+-- entao plot e esteira nunca desalinham.
+
+GameConfig.Layout = {
+	lotSize = 64,
+	-- grade de terrenos: 4 colunas x 3 linhas, no lado esquerdo do lote
+	plotCols = 4,
+	plotSize = 9,
+	plotSpacingX = 9,
+	plotSpacingZ = 10,
+	plotOriginX = -25,
+	plotOriginZ = -13,
+	plotSurfaceY = 2.4, -- topo da terra, relativo ao centro do lote
+	-- esteira: lado direito, correndo no eixo Z ate o caixa
+	beltX = 16,
+	beltY = 2.1,
+	beltWidth = 6,
+	beltLength = 30,
+	beltZStart = -14,
+	sellPadDistance = 8, -- distancia do fim da esteira ate o centro do caixa
+}
+
+-- Posicao local do terreno i (relativa ao centro do lote).
+function GameConfig.plotLocalOffset(i)
+	local layout = GameConfig.Layout
+	local col = (i - 1) % layout.plotCols
+	local row = (i - 1) // layout.plotCols
+	return Vector3.new(
+		layout.plotOriginX + col * layout.plotSpacingX,
+		layout.plotSurfaceY,
+		layout.plotOriginZ + row * layout.plotSpacingZ
+	)
+end
+
+-- Ponto de inicio da esteira (relativo ao centro do lote).
+function GameConfig.beltLocalStart()
+	local layout = GameConfig.Layout
+	return Vector3.new(layout.beltX, layout.beltY, layout.beltZStart)
+end
+
+---------------------------------------------------------------------------
+-- PLOTS (terrenos do jogador)
+---------------------------------------------------------------------------
+
+GameConfig.Plots = {
+	Start = 4,
+	Max = 12,
+	Cost = {
+		[5] = 2500,
+		[6] = 15000,
+		[7] = 90000,
+		[8] = 400000,
+		[9] = 1500000,
+		[10] = 6000000,
+		[11] = 25000000,
+		[12] = 100000000,
+	},
+	LevelReq = {
+		[5] = 3,
+		[6] = 5,
+		[7] = 8,
+		[8] = 11,
+		[9] = 14,
+		[10] = 17,
+		[11] = 21,
+		[12] = 25,
+	},
+}
+
+function GameConfig.plotCost(current)
+	local nextPlot = current + 1
+	if nextPlot > GameConfig.Plots.Max then
+		return nil
+	end
+	return GameConfig.Plots.Cost[nextPlot], GameConfig.Plots.LevelReq[nextPlot]
+end
+
+---------------------------------------------------------------------------
+-- UPGRADES (custos em cash, resetam no rebirth)
+---------------------------------------------------------------------------
+
+GameConfig.Upgrades = {
+	conveyor = { name = "Velocidade da Esteira", baseCost = 500, growth = 1.9, maxTier = 15, step = 6, base = 20 },
+	sell = { name = "Multiplicador de Venda", baseCost = 3000, growth = 2.1, maxTier = 12, step = 0.25, base = 1 },
+	luck = { name = "Sorte", baseCost = 1500, growth = 1.8, maxTier = 15, step = 1, base = 1 },
+}
+
+-- Colheita Dupla: compra unica por tier, cada tier soma chance de item extra
+GameConfig.AutoTiers = {
+	{ cost = 25000, doubleChance = 0.18 },
+	{ cost = 250000, doubleChance = 0.18 },
+	{ cost = 2500000, doubleChance = 0.18 },
+	{ cost = 25000000, doubleChance = 0.18 },
+}
+
+-- chance acumulada de item extra na colheita para um dado tier
+function GameConfig.doubleChance(tier)
+	local t = GameConfig.AutoTiers[tier]
+	return t and t.doubleChance or 0
+end
+
+function GameConfig.autoCost(tier)
+	local t = GameConfig.AutoTiers[tier + 1]
+	return t and t.cost or nil
+end
+
+function GameConfig.upgradeCost(kind, tier)
+	local u = GameConfig.Upgrades[kind]
+	if not u or tier >= u.maxTier then
+		return nil
+	end
+	return math.floor(u.baseCost * (u.growth ^ tier))
+end
+
+function GameConfig.conveyorSpeed(tier)
+	local u = GameConfig.Upgrades.conveyor
+	return u.base + u.step * tier
+end
+
+function GameConfig.sellUpgradeMult(tier)
+	local u = GameConfig.Upgrades.sell
+	return u.base + u.step * tier
+end
+
+---------------------------------------------------------------------------
+-- CRYSTAL UPGRADES (custos em cristais, NAO resetam no rebirth)
+---------------------------------------------------------------------------
+
+GameConfig.CrystalUpgrades = {
+	growth = { name = "Crescimento", baseCost = 2, costStep = 2, step = 0.04, maxRank = 25 },
+	sell = { name = "Venda Permanente", baseCost = 3, costStep = 3, step = 0.1, maxRank = 25 },
+	luck = { name = "Sorte Permanente", baseCost = 4, costStep = 4, step = 1, maxRank = 15 },
+}
+
+function GameConfig.crystalCost(kind, rank)
+	local u = GameConfig.CrystalUpgrades[kind]
+	if not u or rank >= u.maxRank then
+		return nil
+	end
+	return u.baseCost + u.costStep * rank
+end
+
+---------------------------------------------------------------------------
+-- REBIRTH
+---------------------------------------------------------------------------
+
+GameConfig.Rebirth = {
+	Max = 10,
+	RequiredLevel = GameConfig.MaxLevel,
+	RequiredCash = 250000,
+	MultiplierPerRebirth = 0.5,
+	CrystalBase = 3,
+	CrystalStep = 1,
+}
+
+function GameConfig.rebirthMultiplier(rebirths)
+	return 1 + GameConfig.Rebirth.MultiplierPerRebirth * rebirths
+end
+
+function GameConfig.rebirthCrystals(rebirths)
+	return GameConfig.Rebirth.CrystalBase + GameConfig.Rebirth.CrystalStep * rebirths
+end
+
+---------------------------------------------------------------------------
+-- MUTATIONS
+---------------------------------------------------------------------------
+-- weight normalizado. luck aumenta o peso das raras (luckWeight > 0).
+
+GameConfig.Mutations = {
+	{ id = "normal", name = "Normal", weight = 1000, mult = 1, luckWeight = 0 },
+	{ id = "shiny", name = "Reluzente", weight = 90, mult = 2, luckWeight = 1, color = Color3.fromRGB(120, 220, 255) },
+	{ id = "golden", name = "Dourado", weight = 22, mult = 5, luckWeight = 1, color = Color3.fromRGB(255, 205, 60) },
+	{
+		id = "rainbow",
+		name = "Arco-Íris",
+		weight = 4,
+		mult = 25,
+		luckWeight = 1,
+		color = Color3.fromRGB(190, 110, 255),
+	},
+}
+
+GameConfig.MutationById = {}
+for _, mutation in ipairs(GameConfig.Mutations) do
+	GameConfig.MutationById[mutation.id] = mutation
+end
+
+function GameConfig.getMutation(id)
+	return GameConfig.MutationById[id] or GameConfig.Mutations[1]
+end
+
+-- weights/total para um dado luck. Puro, testavel fora do Roblox.
+function GameConfig.mutationWeights(luck)
+	local weights = {}
+	local total = 0
+	for i, m in ipairs(GameConfig.Mutations) do
+		local w = m.weight * (1 + m.luckWeight * (luck - 1) * 0.5)
+		weights[i] = w
+		total += w
+	end
+	return weights, total
+end
+
+function GameConfig.pickMutation(roll, luck)
+	local weights, total = GameConfig.mutationWeights(luck)
+	local acc = 0
+	for i, w in ipairs(weights) do
+		acc += w
+		if roll < acc then
+			return GameConfig.Mutations[i]
+		end
+	end
+	return GameConfig.Mutations[1], total
+end
+
+-- roll precisa de um objeto com :NextNumber() (Random.new() no server, fake nos testes)
+function GameConfig.rollMutation(luck, rng)
+	local _, total = GameConfig.mutationWeights(luck)
+	local roll = rng:NextNumber() * total
+	local mutation = GameConfig.pickMutation(roll, luck)
+	return mutation
+end
+
+---------------------------------------------------------------------------
+-- MULTIPLICADORES DERIVADOS
+---------------------------------------------------------------------------
+
+function GameConfig.luck(data)
+	local base = GameConfig.Upgrades.luck.base
+		+ GameConfig.Upgrades.luck.step * (data.upgrades and data.upgrades.luck or 0)
+	local cry = GameConfig.CrystalUpgrades.luck.step * (data.crystalUpgrades and data.crystalUpgrades.luck or 0)
+	return base + cry
+end
+
+function GameConfig.sellMultiplier(data)
+	local base = GameConfig.sellUpgradeMult(data.upgrades and data.upgrades.sell or 0)
+	local cry = 1 + GameConfig.CrystalUpgrades.sell.step * (data.crystalUpgrades and data.crystalUpgrades.sell or 0)
+	return base * cry * GameConfig.rebirthMultiplier(data.rebirths or 0)
+end
+
+function GameConfig.growthMultiplier(data)
+	local cry = 1 + GameConfig.CrystalUpgrades.growth.step * (data.crystalUpgrades and data.crystalUpgrades.growth or 0)
+	return cry
+end
+
+function GameConfig.sellValue(data, crop, mutation)
+	local value = crop.sell * crop.amount
+	value *= mutation.mult
+	value *= GameConfig.sellMultiplier(data)
+	return math.floor(value)
+end
+
+function GameConfig.growTime(data, crop)
+	return crop.grow / GameConfig.growthMultiplier(data)
+end
+
+---------------------------------------------------------------------------
+-- CODIGOS
+---------------------------------------------------------------------------
+
+GameConfig.Codes = {
+	FARMSTART = { cash = 750, label = "$750" },
+	TYCOON = { cash = 2500, crystals = 1, label = "$2.5K + 1 💎" },
+	BLOX = { cash = 1000, label = "$1K" },
+	REBIRTH = { crystals = 3, label = "3 💎", minLevel = 5 },
+}
+
+---------------------------------------------------------------------------
+-- SAVE DEFAULT
+---------------------------------------------------------------------------
+
+function GameConfig.defaultData()
+	return {
+		version = GameConfig.DataVersion,
+		cash = 60,
+		crystals = 0,
+		rebirths = 0,
+		level = 1,
+		xp = 0,
+		plots = GameConfig.Plots.Start,
+		selectedCrop = "wheat",
+		upgrades = { conveyor = 0, sell = 0, luck = 0, auto = 0 },
+		crystalUpgrades = { growth = 0, sell = 0, luck = 0 },
+		redeemedCodes = {},
+		stats = { harvests = 0, earned = 0, bestSale = 0 },
+	}
+end
+
+return GameConfig
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="4">
+        <Properties>
+          <string name="Name">Net</string>
+          <string name="Source"><![CDATA[-- Net
+-- Nomes de remotes compartilhados entre servidor e cliente.
+-- Um RemoteEvent "Action" (cliente -> servidor) e um "Event" (servidor -> cliente)
+-- com discriminador `kind`. Menos boilerplate, mesma validacao no servidor.
+
+local Net = {}
+
+Net.FolderName = "Remotes"
+Net.State = "State"
+Net.Action = "Action"
+Net.Event = "Event"
+
+-- kinds de Action (cliente manda)
+Net.ActionKind = {
+	SelectCrop = "selectCrop",
+	BuyPlot = "buyPlot",
+	BuyUpgrade = "buyUpgrade",
+	BuyAuto = "buyAuto",
+	BuyCrystal = "buyCrystal",
+	Rebirth = "rebirth",
+	Redeem = "redeem",
+	Harvest = "harvest",
+}
+
+-- kinds de Event (servidor manda)
+Net.EventKind = {
+	Toast = "toast",
+	Sale = "sale",
+	LevelUp = "levelUp",
+	Rebirth = "rebirth",
+}
+
+return Net
+]]></string>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="ServerScriptService" referent="5">
+    <Properties>
+      <string name="Name">ServerScriptService</string>
+    </Properties>
+    <Item class="Script" referent="6">
+      <Properties>
+        <string name="Name">Server</string>
+        <token name="RunContext">0</token>
+        <string name="Source"><![CDATA[-- init.server
+-- Bootstrap: mundo -> remotes -> sessoes -> loop economico.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.GameConfig)
+local Net = require(Shared.Net)
+
+local World = require(script.World)
+local Remotes = require(script.Remotes)
+local PlayerData = require(script.PlayerData)
+local Sessions = require(script.Sessions)
+local Farm = require(script.Farm)
+local Economy = require(script.Economy)
+
+World.buildEnvironment()
+local remotes = Remotes.setup()
+Economy.init(remotes)
+PlayerData.start()
+Economy.start()
+
+---------------------------------------------------------------------------
+-- SESSAO
+---------------------------------------------------------------------------
+
+local function startSession(player)
+	local data = PlayerData.load(player.UserId)
+
+	local lotIndex = World.freeLot()
+	if not lotIndex then
+		warn("[FarmTycoon] Sem lotes livres para", player.Name)
+		player:Kick("Servidor cheio. Tente outro servidor.")
+		return
+	end
+
+	local lot = World.buildLot(lotIndex, player.UserId, player.DisplayName)
+	World.refreshLot(lotIndex, data.plots, "")
+
+	local session = {
+		player = player,
+		data = data,
+		farm = Farm.new(data),
+		lotIndex = lotIndex,
+		plantTimer = 0,
+		saleBuffer = 0,
+	}
+	Sessions.byPlayer[player] = session
+
+	-- nasce perto do lote
+	local character = player.Character or player.CharacterAdded:Wait()
+	local root = character:WaitForChild("HumanoidRootPart", 10)
+	if root then
+		root.CFrame = CFrame.new(lot.origin + Vector3.new(-20, 6, 24))
+	end
+end
+
+local function endSession(player)
+	local session = Sessions.get(player)
+	if not session then
+		return
+	end
+	Sessions.byPlayer[player] = nil
+	PlayerData.release(player.UserId)
+	World.releaseLot(session.lotIndex)
+end
+
+Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function(character)
+		local session = Sessions.get(player)
+		if not session then
+			return
+		end
+		local lot = World.getLot(session.lotIndex)
+		local root = character:WaitForChild("HumanoidRootPart", 10)
+		if lot and root then
+			root.CFrame = CFrame.new(lot.origin + Vector3.new(-20, 6, 24))
+		end
+	end)
+	task.spawn(startSession, player)
+end)
+
+Players.PlayerRemoving:Connect(endSession)
+
+for _, player in ipairs(Players:GetPlayers()) do
+	task.spawn(startSession, player)
+end
+
+---------------------------------------------------------------------------
+-- ACOES DO CLIENTE
+---------------------------------------------------------------------------
+
+local handlers = {
+	[Net.ActionKind.SelectCrop] = function(player, payload)
+		Economy.selectCrop(player, payload)
+	end,
+	[Net.ActionKind.BuyPlot] = function(player)
+		Economy.buyPlot(player)
+	end,
+	[Net.ActionKind.BuyUpgrade] = function(player, payload)
+		Economy.buyUpgrade(player, payload)
+	end,
+	[Net.ActionKind.BuyCrystal] = function(player, payload)
+		Economy.buyCrystalUpgrade(player, payload)
+	end,
+	[Net.ActionKind.BuyAuto] = function(player)
+		Economy.buyUpgrade(player, "auto")
+	end,
+	[Net.ActionKind.Rebirth] = function(player)
+		Economy.rebirth(player)
+	end,
+	[Net.ActionKind.Redeem] = function(player, payload)
+		Economy.redeemCode(player, payload)
+	end,
+	[Net.ActionKind.Harvest] = function(player)
+		local session = Sessions.get(player)
+		if not session then
+			return
+		end
+		local rushed = Economy.rushBelt(session)
+		if rushed == 0 then
+			Economy.notify(player, "Esteira vazia — espera a próxima colheita", Color3.fromRGB(255, 190, 90))
+		end
+	end,
+}
+
+remotes.action.OnServerEvent:Connect(function(player, kind, payload)
+	local handler = handlers[kind]
+	if handler then
+		handler(player, payload)
+	end
+end)
+
+---------------------------------------------------------------------------
+-- REFRESH VISUAL DOS LOTES (barato, 2 Hz)
+---------------------------------------------------------------------------
+
+task.spawn(function()
+	while true do
+		task.wait(0.5)
+		for player, session in pairs(Sessions.all()) do
+			local data = session.data
+			local pending = session.farm:pendingValue()
+			World.refreshLot(
+				session.lotIndex,
+				data.plots,
+				string.format("Nv %d  •  $%s", data.level, tostring(math.floor(data.cash)))
+			)
+			local lot = World.getLot(session.lotIndex)
+			if lot then
+				-- brilho da esteira reage a valor pendente
+				local intensity = math.clamp(pending / 100000, 0, 1)
+				lot.sellPad.Color = Color3.fromRGB(30, 34, 42):Lerp(Color3.fromRGB(40, 120, 80), intensity)
+			end
+		end
+	end
+end)
+
+print(string.format("[FarmTycoon] Servidor pronto. %d crops, %d niveis.", #GameConfig.Crops, GameConfig.MaxLevel))
+]]></string>
+      </Properties>
+      <Item class="ModuleScript" referent="7">
+        <Properties>
+          <string name="Name">Economy</string>
+          <string name="Source"><![CDATA[-- Economy
+-- Loop autoritativo: fazenda avanca, itens vendem, cash/xp/level sobem.
+-- Tambem concentra as compras (upgrades, plots, rebirth, codes) para que
+-- toda validacao de custo aconteca num lugar so.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.GameConfig)
+local Net = require(Shared.Net)
+
+local Farm = require(script.Parent.Farm)
+local Sessions = require(script.Parent.Sessions)
+local PlayerData = require(script.Parent.PlayerData)
+
+local Economy = {}
+
+local TICK = 0.1
+
+local remotes
+local rng = Random.new(os.clock() * 1000)
+
+function Economy.init(remoteSet)
+	remotes = remoteSet
+end
+
+---------------------------------------------------------------------------
+-- HELPERS
+---------------------------------------------------------------------------
+
+local function toast(player, text, color)
+	remotes.event:FireClient(player, Net.EventKind.Toast, { text = text, color = color })
+end
+
+function Economy.notify(player, text, color)
+	toast(player, text, color)
+end
+
+local function grantXp(session, amount)
+	local data = session.data
+	if data.level >= GameConfig.MaxLevel then
+		return
+	end
+
+	data.xp += amount
+	while data.level < GameConfig.MaxLevel do
+		local need = GameConfig.xpNeeded(data.level)
+		if data.xp < need then
+			break
+		end
+		data.xp -= need
+		data.level += 1
+		remotes.event:FireClient(session.player, Net.EventKind.LevelUp, { level = data.level })
+	end
+	if data.level >= GameConfig.MaxLevel then
+		data.xp = 0
+	end
+end
+
+function Economy.autoplant(session)
+	local data = session.data
+	local farm = session.farm
+	local crop = GameConfig.getCrop(data.selectedCrop) or GameConfig.bestCropForLevel(data.level)
+	if crop.level > data.level then
+		crop = GameConfig.bestCropForLevel(data.level)
+		data.selectedCrop = crop.id
+	end
+
+	for i = 1, data.plots do
+		if not farm.plots[i] then
+			-- bailout: sem cash, sem nada plantado e sem item na esteira -> trigo de graca
+			local broke = data.cash < crop.seed
+			local empty = next(farm.items) == nil
+			if broke then
+				local anyPlanted = false
+				for p = 1, data.plots do
+					if farm.plots[p] then
+						anyPlanted = true
+						break
+					end
+				end
+				if not anyPlanted and empty then
+					crop = GameConfig.getCrop("wheat")
+					farm:plant(i, crop.id, GameConfig.rollMutation(GameConfig.luck(data), rng).id)
+					continue
+				end
+				return
+			end
+			data.cash -= crop.seed
+			local mutation = GameConfig.rollMutation(GameConfig.luck(data), rng)
+			farm:plant(i, crop.id, mutation.id)
+		end
+	end
+end
+
+-- Manda tudo que esta na esteira direto pro caixa (tecla F / botao).
+-- Reaproveita o mesmo caminho de venda do step, entao cash/xp/eventos batem.
+function Economy.rushBelt(session)
+	local farm = session.farm
+	local total = 0
+	local xp = 0
+	local count = 0
+	for id, item in pairs(farm.items) do
+		farm.items[id] = nil
+		total += item.value
+		count += 1
+		local crop = GameConfig.getCrop(item.cropId)
+		xp += crop and crop.xp or 0
+	end
+	if count == 0 then
+		return 0
+	end
+	Economy.creditSale(session, total, xp, count)
+	return count
+end
+
+-- Aplica uma venda: cash, xp, stats, evento pro cliente.
+function Economy.creditSale(session, total, xp, count)
+	local data = session.data
+	data.cash += total
+	data.stats.earned += total
+	data.stats.harvests += (count or 1)
+	if total > data.stats.bestSale then
+		data.stats.bestSale = total
+	end
+	remotes.event:FireClient(session.player, Net.EventKind.Sale, { amount = total })
+	session.saleBuffer += total
+	grantXp(session, xp)
+	PlayerData.markDirty(session.player.UserId)
+end
+
+---------------------------------------------------------------------------
+-- STEP
+---------------------------------------------------------------------------
+
+local function stepSession(session, dt)
+	local data = session.data
+	local farm = session.farm
+
+	local sold = farm:step(dt)
+
+	if sold then
+		local total = 0
+		local xp = 0
+		for _, item in ipairs(sold) do
+			total += item.value
+			local crop = GameConfig.getCrop(item.cropId)
+			xp += crop and crop.xp or 0
+		end
+		Economy.creditSale(session, total, xp, #sold)
+	end
+end
+
+---------------------------------------------------------------------------
+-- COMPRAS
+---------------------------------------------------------------------------
+
+function Economy.buyUpgrade(player, kind)
+	local session = Sessions.get(player)
+	if not session then
+		return false, "sessao invalida"
+	end
+	local data = session.data
+
+	if kind == "auto" then
+		local cost = GameConfig.autoCost(data.upgrades.auto)
+		if not cost then
+			return false, "maximo"
+		end
+		if data.cash < cost then
+			return false, "sem dinheiro"
+		end
+		data.cash -= cost
+		data.upgrades.auto += 1
+		toast(player, "Colheita Dupla nivel " .. data.upgrades.auto, nil)
+		PlayerData.markDirty(player.UserId)
+		return true
+	end
+
+	local tier = data.upgrades[kind]
+	if tier == nil then
+		return false, "upgrade invalido"
+	end
+	local cost = GameConfig.upgradeCost(kind, tier)
+	if not cost then
+		return false, "maximo"
+	end
+	if data.cash < cost then
+		return false, "sem dinheiro"
+	end
+	data.cash -= cost
+	data.upgrades[kind] = tier + 1
+	PlayerData.markDirty(player.UserId)
+	return true
+end
+
+function Economy.buyCrystalUpgrade(player, kind)
+	local session = Sessions.get(player)
+	if not session then
+		return false, "sessao invalida"
+	end
+	local data = session.data
+	local rank = data.crystalUpgrades[kind]
+	if rank == nil then
+		return false, "upgrade invalido"
+	end
+	local cost = GameConfig.crystalCost(kind, rank)
+	if not cost then
+		return false, "maximo"
+	end
+	if data.crystals < cost then
+		return false, "sem cristais"
+	end
+	data.crystals -= cost
+	data.crystalUpgrades[kind] = rank + 1
+	PlayerData.markDirty(player.UserId)
+	return true
+end
+
+function Economy.buyPlot(player)
+	local session = Sessions.get(player)
+	if not session then
+		return false, "sessao invalida"
+	end
+	local data = session.data
+	local cost, levelReq = GameConfig.plotCost(data.plots)
+	if not cost then
+		return false, "maximo"
+	end
+	if data.level < levelReq then
+		return false, "requer nivel " .. levelReq
+	end
+	if data.cash < cost then
+		return false, "sem dinheiro"
+	end
+	data.cash -= cost
+	data.plots += 1
+	PlayerData.markDirty(player.UserId)
+	return true
+end
+
+function Economy.selectCrop(player, cropId)
+	local session = Sessions.get(player)
+	if not session then
+		return false
+	end
+	local crop = GameConfig.getCrop(cropId)
+	if not crop then
+		return false
+	end
+	if crop.level > session.data.level then
+		return false
+	end
+	session.data.selectedCrop = cropId
+	PlayerData.markDirty(player.UserId)
+	return true
+end
+
+function Economy.rebirth(player)
+	local session = Sessions.get(player)
+	if not session then
+		return false, "sessao invalida"
+	end
+	local data = session.data
+
+	if data.rebirths >= GameConfig.Rebirth.Max then
+		return false, "rebirth maximo"
+	end
+	if data.level < GameConfig.Rebirth.RequiredLevel then
+		return false, "requer nivel " .. GameConfig.Rebirth.RequiredLevel
+	end
+	if data.cash < GameConfig.Rebirth.RequiredCash then
+		return false, "requer " .. GameConfig.Rebirth.RequiredCash
+	end
+
+	local crystals = GameConfig.rebirthCrystals(data.rebirths)
+	local fresh = GameConfig.defaultData()
+	fresh.rebirths = data.rebirths + 1
+	fresh.cash = 60
+	fresh.crystals = data.crystals + crystals
+	fresh.crystalUpgrades = data.crystalUpgrades
+	fresh.redeemedCodes = data.redeemedCodes
+	fresh.stats = data.stats
+	fresh.level = 1
+	fresh.xp = 0
+	fresh.plots = GameConfig.Plots.Start
+	fresh.selectedCrop = "wheat"
+
+	for key, value in pairs(fresh) do
+		data[key] = value
+	end
+
+	session.farm = Farm.new(data)
+	PlayerData.markDirty(player.UserId)
+
+	remotes.event:FireClient(player, Net.EventKind.Rebirth, { rebirths = data.rebirths, crystals = crystals })
+	return true
+end
+
+function Economy.redeemCode(player, rawCode)
+	local session = Sessions.get(player)
+	if not session then
+		return false, "sessao invalida"
+	end
+	local data = session.data
+	if type(rawCode) ~= "string" then
+		return false
+	end
+
+	local code = string.upper(string.gsub(rawCode, "^%s*(.-)%s*$", "%1"))
+	local entry = GameConfig.Codes[code]
+	if not entry then
+		return false, "codigo invalido"
+	end
+	if data.redeemedCodes[code] then
+		return false, "ja resgatado"
+	end
+	if entry.minLevel and data.level < entry.minLevel then
+		return false, "requer nivel " .. entry.minLevel
+	end
+
+	data.redeemedCodes[code] = true
+	if entry.cash then
+		data.cash += entry.cash
+	end
+	if entry.crystals then
+		data.crystals += entry.crystals
+	end
+	PlayerData.markDirty(player.UserId)
+	toast(player, "Resgatado: " .. entry.label, Color3.fromRGB(120, 255, 190))
+	return true
+end
+
+---------------------------------------------------------------------------
+-- SNAPSHOT
+---------------------------------------------------------------------------
+
+local function snapshot(session)
+	local data = session.data
+	local crop = GameConfig.getCrop(data.selectedCrop) or GameConfig.bestCropForLevel(data.level)
+
+	return {
+		cash = data.cash,
+		crystals = data.crystals,
+		rebirths = data.rebirths,
+		level = data.level,
+		xp = data.xp,
+		xpNeed = data.level >= GameConfig.MaxLevel and -1 or GameConfig.xpNeeded(data.level),
+		plots = data.plots,
+		selectedCrop = crop.id,
+		upgrades = data.upgrades,
+		crystalUpgrades = data.crystalUpgrades,
+		luck = GameConfig.luck(data),
+		sellMult = GameConfig.sellMultiplier(data),
+		growMult = GameConfig.growthMultiplier(data),
+		conveyorSpeed = GameConfig.conveyorSpeed(data.upgrades.conveyor),
+		stats = data.stats,
+		lotIndex = session.lotIndex,
+		sale = session.saleBuffer,
+		farm = session.farm:dump(),
+	}
+end
+
+---------------------------------------------------------------------------
+-- LOOP
+---------------------------------------------------------------------------
+
+-- Um passo do jogo para todas as sessoes. Separado do while pra ser testavel.
+function Economy.tick(dt)
+	for player, session in pairs(Sessions.all()) do
+		if player.Parent == Players then
+			stepSession(session, dt)
+
+			-- replanta sozinho o que foi colhido
+			session.plantTimer += dt
+			if session.plantTimer >= 0.5 then
+				session.plantTimer = 0
+				Economy.autoplant(session)
+			end
+
+			remotes.state:FireClient(player, snapshot(session))
+			session.saleBuffer = 0
+		end
+	end
+end
+
+function Economy.start()
+	task.spawn(function()
+		local last = os.clock()
+		while true do
+			task.wait(TICK)
+			local now = os.clock()
+			local dt = math.min(now - last, 1)
+			last = now
+			Economy.tick(dt)
+		end
+	end)
+end
+
+return Economy
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="8">
+        <Properties>
+          <string name="Name">Farm</string>
+          <string name="Source"><![CDATA[-- Farm
+-- Estado da fazenda de UM jogador e a simulacao da esteira.
+--
+-- Loop: cada plot plantado gera uma unidade quando amadurece. A unidade anda
+-- pela esteira (posicao 0..1), chega no ponto de venda e vira caixa. Toda a
+-- fisica e cinematica e roda no servidor a 10 Hz dentro de Economy.step.
+--
+-- Nenhuma renderizacao aqui. O cliente le o snapshot e desenha.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+
+local Farm = {}
+Farm.__index = Farm
+
+local CONVEYOR_LENGTH = 18 -- studs, comprimento visual da esteira
+
+function Farm.new(data, rng)
+	local self = setmetatable({}, Farm)
+	self.data = data
+	self.rng = rng or Random.new()
+	self.plots = {} -- [i] = { cropId, mutationId, value, ready, progress } | false
+	self.items = {} -- [id] = { id, cropId, mutationId, value, pos }
+	self.nextItemId = 1
+	for i = 1, GameConfig.Plots.Max do
+		self.plots[i] = false
+	end
+	return self
+end
+
+---------------------------------------------------------------------------
+-- PLOTS
+---------------------------------------------------------------------------
+
+function Farm:plant(index, cropId, mutationId)
+	local crop = GameConfig.getCrop(cropId)
+	if not crop then
+		return false
+	end
+	self.plots[index] = {
+		cropId = cropId,
+		mutationId = mutationId or "normal",
+		value = GameConfig.sellValue(self.data, crop, GameConfig.getMutation(mutationId or "normal")),
+		ready = false,
+		progress = 0,
+		growTime = GameConfig.growTime(self.data, crop),
+	}
+	return true
+end
+
+function Farm:harvest(index)
+	local slot = self.plots[index]
+	if not slot or not slot.ready then
+		return nil
+	end
+
+	local item = {
+		id = self.nextItemId,
+		cropId = slot.cropId,
+		mutationId = slot.mutationId,
+		value = slot.value,
+		pos = 0,
+	}
+	self.nextItemId += 1
+	self.items[item.id] = item
+	self.plots[index] = false
+
+	return item
+end
+
+---------------------------------------------------------------------------
+-- ESTEIRA
+---------------------------------------------------------------------------
+
+function Farm:speed()
+	return GameConfig.conveyorSpeed(self.data.upgrades.conveyor)
+end
+
+-- Retorna a lista de itens vendidos neste step (quem chama aplica cash/xp).
+-- Cultura madura vai SOZINHA pra esteira: e o coracao do loop de tycoon.
+function Farm:step(dt)
+	local speed = self:speed()
+	local traveled = (speed / CONVEYOR_LENGTH) * dt
+	local sold
+
+	for id, item in pairs(self.items) do
+		item.pos += traveled
+		if item.pos >= 1 then
+			self.items[id] = nil
+			sold = sold or {}
+			sold[#sold + 1] = item
+		end
+	end
+
+	local doubleChance = GameConfig.doubleChance(self.data.upgrades.auto or 0)
+	for i = 1, self.data.plots do
+		local slot = self.plots[i]
+		if slot and not slot.ready then
+			slot.progress += dt / slot.growTime
+			if slot.progress >= 1 then
+				slot.progress = 1
+				slot.ready = true
+				-- Colheita Dupla: chance de sair um item extra na mesma colheita
+				local extra = doubleChance > 0 and self.rng:NextNumber() < doubleChance
+				local mutationId, value = slot.mutationId, slot.value
+				self:harvest(i)
+				if extra then
+					local bonus = {
+						id = self.nextItemId,
+						cropId = slot.cropId,
+						mutationId = mutationId,
+						value = value,
+						pos = 0,
+					}
+					self.nextItemId += 1
+					self.items[bonus.id] = bonus
+				end
+			end
+		end
+	end
+
+	return sold
+end
+
+function Farm:pendingValue()
+	local total = 0
+	for _, item in pairs(self.items) do
+		total += item.value
+	end
+	return total
+end
+
+function Farm:dump()
+	local plots = {}
+	for i = 1, GameConfig.Plots.Max do
+		local slot = self.plots[i]
+		if slot then
+			plots[i] = {
+				cropId = slot.cropId,
+				mutationId = slot.mutationId,
+				progress = slot.progress,
+				ready = slot.ready,
+				value = slot.value,
+			}
+		end
+	end
+
+	local items = {}
+	for _, item in pairs(self.items) do
+		items[#items + 1] = {
+			id = item.id,
+			cropId = item.cropId,
+			mutationId = item.mutationId,
+			value = item.value,
+			pos = item.pos,
+		}
+	end
+	table.sort(items, function(a, b)
+		return a.pos > b.pos
+	end)
+
+	return {
+		plots = plots,
+		items = items,
+		activePlots = self.data.plots,
+		speed = self:speed(),
+		pending = self:pendingValue(),
+	}
+end
+
+return Farm
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="9">
+        <Properties>
+          <string name="Name">PlayerData</string>
+          <string name="Source"><![CDATA[-- PlayerData
+-- Persistencia com DataStoreService + fallback em memoria (Studio sem API).
+-- Toda escrita passa por aqui, com retry e BindToClose.
+
+local DataStoreService = game:GetService("DataStoreService")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GameConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GameConfig"))
+
+local PlayerData = {}
+
+local store
+do
+	local ok, result = pcall(function()
+		return DataStoreService:GetDataStore(GameConfig.SaveStore)
+	end)
+	if ok then
+		store = result
+	else
+		warn("[PlayerData] DataStore indisponivel, salvando apenas em memoria:", result)
+	end
+end
+
+local cache = {} -- [userId] = data
+local dirty = {} -- [userId] = true
+
+local function reconcile(defaults, saved)
+	for key, value in pairs(defaults) do
+		if type(value) == "table" then
+			if type(saved[key]) ~= "table" then
+				saved[key] = {}
+			end
+			reconcile(value, saved[key])
+		elseif saved[key] == nil or type(saved[key]) ~= type(value) then
+			saved[key] = value
+		end
+	end
+	return saved
+end
+
+local function key(userId)
+	return "u_" .. tostring(userId)
+end
+
+local function read(userId)
+	if not store then
+		return nil
+	end
+	local ok, result = pcall(function()
+		return store:GetAsync(key(userId))
+	end)
+	if ok then
+		return result
+	end
+	warn("[PlayerData] GetAsync falhou:", result)
+	return nil
+end
+
+local function write(userId, data)
+	if not store then
+		return true
+	end
+	for attempt = 1, 4 do
+		local ok, err = pcall(function()
+			store:SetAsync(key(userId), data)
+		end)
+		if ok then
+			return true
+		end
+		warn(string.format("[PlayerData] SetAsync tentativa %d falhou: %s", attempt, tostring(err)))
+		task.wait(1 + attempt)
+	end
+	return false
+end
+
+function PlayerData.load(userId)
+	if cache[userId] then
+		return cache[userId]
+	end
+
+	local saved = read(userId)
+	local data = reconcile(GameConfig.defaultData(), type(saved) == "table" and saved or {})
+	cache[userId] = data
+	return data
+end
+
+function PlayerData.get(userId)
+	return cache[userId]
+end
+
+function PlayerData.markDirty(userId)
+	dirty[userId] = true
+end
+
+function PlayerData.save(userId)
+	local data = cache[userId]
+	if not data then
+		return
+	end
+	if write(userId, data) then
+		dirty[userId] = nil
+	end
+end
+
+function PlayerData.release(userId)
+	PlayerData.save(userId)
+	cache[userId] = nil
+	dirty[userId] = nil
+end
+
+function PlayerData.start()
+	task.spawn(function()
+		while true do
+			task.wait(90)
+			for userId in pairs(dirty) do
+				PlayerData.save(userId)
+			end
+		end
+	end)
+
+	game:BindToClose(function()
+		if RunService:IsStudio() then
+			return
+		end
+		for userId in pairs(cache) do
+			PlayerData.save(userId)
+		end
+	end)
+end
+
+return PlayerData
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="10">
+        <Properties>
+          <string name="Name">Remotes</string>
+          <string name="Source"><![CDATA[-- Remotes
+-- Cria/lê os RemoteEvents. Servidor cria, cliente espera.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Net = require(Shared.Net)
+
+local Remotes = {}
+
+local function ensure(className, name, parent)
+	local instance = parent:FindFirstChild(name)
+	if not instance then
+		instance = Instance.new(className)
+		instance.Name = name
+		instance.Parent = parent
+	end
+	return instance
+end
+
+function Remotes.setup()
+	local folder = ReplicatedStorage:FindFirstChild(Net.FolderName)
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = Net.FolderName
+		folder.Parent = ReplicatedStorage
+	end
+	return {
+		folder = folder,
+		state = ensure("RemoteEvent", Net.State, folder),
+		action = ensure("RemoteEvent", Net.Action, folder),
+		event = ensure("RemoteEvent", Net.Event, folder),
+	}
+end
+
+return Remotes
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="11">
+        <Properties>
+          <string name="Name">Sessions</string>
+          <string name="Source"><![CDATA[-- Sessions
+-- Uma sessao por jogador. Fonte unica de verdade no servidor.
+
+local Sessions = {}
+
+Sessions.byPlayer = {} -- [Player] = { data, farm, base }
+
+function Sessions.get(player)
+	return Sessions.byPlayer[player]
+end
+
+function Sessions.data(player)
+	local session = Sessions.byPlayer[player]
+	return session and session.data
+end
+
+function Sessions.farm(player)
+	local session = Sessions.byPlayer[player]
+	return session and session.farm
+end
+
+function Sessions.all()
+	return Sessions.byPlayer
+end
+
+return Sessions
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="12">
+        <Properties>
+          <string name="Name">World</string>
+          <string name="Source"><![CDATA[-- World
+-- Constroi o mapa inteiro em codigo: sem .rbxm, sem asset externo.
+-- Cada jogador ganha um lote (base) alocado na grade, estilo tycoon.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.GameConfig)
+
+local World = {}
+
+local LAYOUT = GameConfig.Layout
+local LOT_SIZE = LAYOUT.lotSize
+local LOTS_PER_ROW = 4
+local MAX_LOTS = 24
+local FOLDER_NAME = "FarmTycoon"
+
+local lotOwners = {} -- [lotIndex] = userId
+local lots = {} -- [lotIndex] = { model, origin, plots, conveyor, sign }
+
+local function part(props)
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = true
+	p.Material = Enum.Material.SmoothPlastic
+	for k, v in pairs(props) do
+		p[k] = v
+	end
+	return p
+end
+
+---------------------------------------------------------------------------
+-- AMBIENTE
+---------------------------------------------------------------------------
+
+function World.buildEnvironment()
+	Lighting.Ambient = Color3.fromRGB(95, 105, 120)
+	Lighting.OutdoorAmbient = Color3.fromRGB(140, 155, 175)
+	Lighting.Brightness = 2.6
+	Lighting.ClockTime = 14.5
+	Lighting.GeographicLatitude = -15
+	Lighting.EnvironmentDiffuseScale = 0.4
+	Lighting.EnvironmentSpecularScale = 0.3
+	Lighting.GlobalShadows = true
+
+	local existing = Lighting:FindFirstChildOfClass("Atmosphere")
+	if not existing then
+		local atmosphere = Instance.new("Atmosphere")
+		atmosphere.Density = 0.32
+		atmosphere.Haze = 1.2
+		atmosphere.Glare = 0.15
+		atmosphere.Color = Color3.fromRGB(199, 214, 230)
+		atmosphere.Decay = Color3.fromRGB(116, 130, 152)
+		atmosphere.Parent = Lighting
+	end
+
+	local bloom = Lighting:FindFirstChildOfClass("BloomEffect")
+	if not bloom then
+		local b = Instance.new("BloomEffect")
+		b.Intensity = 0.45
+		b.Size = 26
+		b.Threshold = 1.1
+		b.Parent = Lighting
+	end
+
+	local folder = Workspace:FindFirstChild(FOLDER_NAME)
+	if folder then
+		folder:Destroy()
+	end
+	folder = Instance.new("Folder")
+	folder.Name = FOLDER_NAME
+	folder.Parent = Workspace
+
+	local ground = part({
+		Name = "Ground",
+		Size = Vector3.new(1400, 4, 900),
+		Position = Vector3.new(0, -2.5, 0),
+		Color = Color3.fromRGB(96, 148, 82),
+		Material = Enum.Material.Grass,
+	})
+	ground.Parent = folder
+
+	-- borda elevada pra ninguem cair do mapa
+	local rim = part({
+		Name = "Rim",
+		Size = Vector3.new(1400, 14, 900),
+		Position = Vector3.new(0, -11, 0),
+		Color = Color3.fromRGB(74, 118, 66),
+		Material = Enum.Material.Grass,
+	})
+	rim.Parent = folder
+
+	local spawnLocation = Instance.new("SpawnLocation")
+	spawnLocation.Name = "Spawn"
+	spawnLocation.Size = Vector3.new(18, 1, 18)
+	spawnLocation.Position = Vector3.new(0, 0.5, 400)
+	spawnLocation.Anchored = true
+	spawnLocation.BrickColor = BrickColor.new("Bright green")
+	spawnLocation.Material = Enum.Material.Neon
+	spawnLocation.TopSurface = Enum.SurfaceType.Smooth
+	spawnLocation.Duration = 0
+	spawnLocation.Parent = folder
+
+	World.folder = folder
+
+	-- decoracao barata: arvores espalhadas nas bordas (nao no meio dos lotes)
+	local rng = Random.new(7)
+	for i = 1, 46 do
+		local x = (rng:NextNumber() - 0.5) * 1300
+		local z = (rng:NextNumber() - 0.5) * 840
+		if math.abs(x) < 420 and z > -420 and z < 340 then
+			continue
+		end
+		local trunk = part({
+			Size = Vector3.new(2.2, 12, 2.2),
+			Position = Vector3.new(x, 6, z),
+			Color = Color3.fromRGB(94, 66, 46),
+			Material = Enum.Material.Wood,
+		})
+		trunk.Parent = folder
+		local leaves = part({
+			Size = Vector3.new(11, 11, 11),
+			Position = Vector3.new(x, 14.5, z),
+			Color = Color3.fromRGB(52, 122, 66),
+			Material = Enum.Material.Grass,
+			Shape = Enum.PartType.Ball,
+		})
+		leaves.Parent = folder
+	end
+end
+
+---------------------------------------------------------------------------
+-- LOTE
+---------------------------------------------------------------------------
+
+local function lotOrigin(index)
+	local col = (index - 1) % LOTS_PER_ROW
+	local row = (index - 1) // LOTS_PER_ROW
+	return Vector3.new((col - (LOTS_PER_ROW - 1) / 2) * (LOT_SIZE + 20), 0, -170 + row * (LOT_SIZE + 26))
+end
+
+-- O GameConfig entrega a SUPERFICIE do terreno; a terra tem 0.8 de espessura,
+-- entao o centro fica 0.4 abaixo. Render usa a mesma superficie, sem divergir.
+local SOIL_HEIGHT = 0.8
+
+function World.buildLot(index, userId, displayName)
+	local origin = lotOrigin(index)
+	local model = Instance.new("Model")
+	model.Name = "Lot_" .. index
+
+	local platform = part({
+		Name = "Platform",
+		Size = Vector3.new(LOT_SIZE, 2, LOT_SIZE),
+		Position = origin + Vector3.new(0, 0.5, 0),
+		Color = Color3.fromRGB(126, 138, 152),
+		Material = Enum.Material.Concrete,
+	})
+	platform.Parent = model
+
+	-- divisoria de grama por cima do concreto
+	local grass = part({
+		Name = "Lawn",
+		Size = Vector3.new(LOT_SIZE - 4, 0.4, LOT_SIZE - 4),
+		Position = origin + Vector3.new(0, 1.6, 0),
+		Color = Color3.fromRGB(104, 162, 92),
+		Material = Enum.Material.Grass,
+	})
+	grass.Parent = model
+
+	-- PLOTS: 12 terrenos, 4x3
+	local plotParts = {}
+	for i = 1, GameConfig.Plots.Max do
+		local surface = GameConfig.plotLocalOffset(i)
+		local soil = part({
+			Name = "Plot_" .. i,
+			Size = Vector3.new(LAYOUT.plotSize, SOIL_HEIGHT, LAYOUT.plotSize),
+			Position = origin + surface - Vector3.new(0, SOIL_HEIGHT / 2, 0),
+			Color = Color3.fromRGB(104, 74, 50),
+			Material = Enum.Material.Ground,
+			TopSurface = Enum.SurfaceType.Smooth,
+		})
+		soil:SetAttribute("PlotIndex", i)
+		soil.Parent = model
+
+		-- poste de marcador para o plot bloqueado
+		local marker = part({
+			Name = "Lock_" .. i,
+			Size = Vector3.new(1, 7, 1),
+			Position = origin + surface + Vector3.new(0, 5 - SOIL_HEIGHT / 2, 0),
+			Color = Color3.fromRGB(58, 66, 78),
+			Material = Enum.Material.Metal,
+		})
+		marker.Transparency = 0.55
+		marker.CanCollide = false
+		marker.Parent = model
+
+		plotParts[i] = { soil = soil, marker = marker, origin = origin + surface }
+	end
+
+	-- ESTEIRA: lado direito do lote, correndo em Z ate o caixa
+	local beltStart = origin + GameConfig.beltLocalStart()
+	local beltLength = LAYOUT.beltLength
+	local belt = part({
+		Name = "Conveyor",
+		Size = Vector3.new(LAYOUT.beltWidth, 0.8, beltLength),
+		Position = beltStart + Vector3.new(0, 0, beltLength / 2),
+		Color = Color3.fromRGB(44, 48, 58),
+		Material = Enum.Material.DiamondPlate,
+	})
+	belt:SetAttribute("BeltStart", beltStart)
+	belt:SetAttribute("BeltLength", beltLength)
+	belt.Parent = model
+
+	-- laterais da esteira
+	for _, side in ipairs({ -(LAYOUT.beltWidth / 2 + 0.2), LAYOUT.beltWidth / 2 + 0.2 }) do
+		local rail = part({
+			Name = "Rail",
+			Size = Vector3.new(0.5, 1.6, beltLength),
+			Position = beltStart + Vector3.new(side, 0.5, beltLength / 2),
+			Color = Color3.fromRGB(86, 94, 108),
+			Material = Enum.Material.Metal,
+		})
+		rail.CanCollide = false
+		rail.Parent = model
+	end
+
+	-- CAIXA / ponto de venda
+	local sellPad = part({
+		Name = "SellPad",
+		Size = Vector3.new(14, 3, 14),
+		Position = beltStart + Vector3.new(0, 0.4, beltLength + LAYOUT.sellPadDistance),
+		Color = Color3.fromRGB(30, 34, 42),
+		Material = Enum.Material.Metal,
+	})
+	sellPad.Parent = model
+
+	local neonRing = part({
+		Name = "SellRing",
+		Size = Vector3.new(13, 0.3, 13),
+		Position = beltStart + Vector3.new(0, 2.05, beltLength + LAYOUT.sellPadDistance),
+		Color = Color3.fromRGB(90, 255, 170),
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+	})
+	neonRing.Parent = model
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Size = UDim2.fromScale(14, 5)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, 7, 0)
+	billboard.AlwaysOnTop = false
+	billboard.Adornee = neonRing
+	billboard.Parent = neonRing
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBlack
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(235, 255, 245)
+	label.TextStrokeTransparency = 0.4
+	label.Text = displayName .. "'s FARM"
+	label.Parent = billboard
+
+	-- placa de status
+	local statusPart = part({
+		Name = "Status",
+		Size = Vector3.new(1, 6, 10),
+		Position = origin + Vector3.new(-26, 5, 22),
+		Color = Color3.fromRGB(30, 34, 42),
+		Material = Enum.Material.Metal,
+	})
+	statusPart.CanCollide = true
+	statusPart.Parent = model
+
+	local statusGui = Instance.new("SurfaceGui")
+	statusGui.Face = Enum.NormalId.Right
+	statusGui.CanvasSize = Vector2.new(400, 240)
+	statusGui.Parent = statusPart
+
+	local statusLabel = Instance.new("TextLabel")
+	statusLabel.Size = UDim2.fromScale(1, 1)
+	statusLabel.BackgroundTransparency = 1
+	statusLabel.Font = Enum.Font.GothamBold
+	statusLabel.TextScaled = true
+	statusLabel.TextColor3 = Color3.fromRGB(120, 255, 190)
+	statusLabel.Text = "AGUARDANDO"
+	statusLabel.Parent = statusGui
+
+	model.Parent = World.folder
+
+	lots[index] = {
+		model = model,
+		origin = origin,
+		plots = plotParts,
+		beltStart = beltStart,
+		beltLength = beltLength,
+		sellPad = sellPad,
+		statusLabel = statusLabel,
+		owner = userId,
+	}
+	lotOwners[index] = userId
+
+	return lots[index]
+end
+
+function World.getLot(index)
+	return lots[index]
+end
+
+function World.lotFor(userId)
+	for index, owner in pairs(lotOwners) do
+		if owner == userId then
+			return lots[index], index
+		end
+	end
+	return nil
+end
+
+function World.freeLot()
+	for index = 1, MAX_LOTS do
+		if not lotOwners[index] then
+			return index
+		end
+	end
+	return nil
+end
+
+function World.releaseLot(index)
+	if lots[index] then
+		lots[index].model:Destroy()
+		lots[index] = nil
+	end
+	lotOwners[index] = nil
+end
+
+---------------------------------------------------------------------------
+-- VISUAL POR SNAPSHOT
+---------------------------------------------------------------------------
+
+-- O servidor empurra um snapshot leve; o cliente desenha. Aqui so atualizamos
+-- o que e barato e autoritativo: marcador de plot bloqueado.
+function World.refreshLot(index, plotCount, statusText)
+	local lot = lots[index]
+	if not lot then
+		return
+	end
+
+	for i = 1, GameConfig.Plots.Max do
+		local plot = lot.plots[i]
+		if plot then
+			local unlocked = i <= plotCount
+			plot.marker.Transparency = unlocked and 1 or 0.55
+			plot.marker.CanCollide = false
+			plot.soil.Color = unlocked and Color3.fromRGB(104, 74, 50) or Color3.fromRGB(58, 62, 70)
+		end
+	end
+
+	if statusText then
+		lot.statusLabel.Text = statusText
+	end
+end
+
+return World
+]]></string>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="StarterPlayer" referent="13">
+    <Properties>
+      <string name="Name">StarterPlayer</string>
+    </Properties>
+    <Item class="StarterPlayerScripts" referent="14">
+      <Properties>
+        <string name="Name">StarterPlayerScripts</string>
+      </Properties>
+      <Item class="LocalScript" referent="15">
+        <Properties>
+          <string name="Name">Client</string>
+          <string name="Source"><![CDATA[-- init.client
+-- Cria a UI, liga a rede e roda o loop de render a 60 FPS.
+-- Zero logica de jogo aqui: tudo vem do snapshot do servidor.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local Theme = require(script.Theme)
+local State = require(script.State)
+local NetClient = require(script.NetClient)
+local Render = require(script.Render)
+local Hud = require(script.Hud)
+local Panels = require(script.Panels)
+local Toasts = require(script.Toasts)
+local Effects = require(script.Effects)
+
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Net = require(Shared.Net)
+local GameConfig = require(Shared.GameConfig)
+
+---------------------------------------------------------------------------
+-- GUI
+---------------------------------------------------------------------------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "FarmTycoonGui"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = playerGui
+
+Render.init()
+Toasts.init(gui)
+Hud.build(gui)
+Panels.build(gui)
+Effects.init(gui)
+
+---------------------------------------------------------------------------
+-- REDE
+---------------------------------------------------------------------------
+
+NetClient.state.OnClientEvent:Connect(function(snapshot)
+	State.set(snapshot)
+end)
+
+NetClient.on(function(kind, payload)
+	if kind == Net.EventKind.Toast then
+		Toasts.push(payload.text, payload.color)
+	elseif kind == Net.EventKind.LevelUp then
+		Toasts.push("⬆️  Nível " .. payload.level .. "!", Theme.cyan)
+		Effects.levelUp()
+	elseif kind == Net.EventKind.Rebirth then
+		Toasts.push("♻️  Rebirth " .. payload.rebirths .. "!  +" .. payload.crystals .. " 💎", Theme.gold)
+		Effects.rebirth()
+	elseif kind == Net.EventKind.Sale then
+		Effects.sale(payload.amount)
+	end
+end)
+
+---------------------------------------------------------------------------
+-- LOOP
+---------------------------------------------------------------------------
+
+local last = os.clock()
+RunService.RenderStepped:Connect(function()
+	local now = os.clock()
+	local dt = math.min(now - last, 0.2)
+	last = now
+	local snapshot = State.snapshot
+	if snapshot then
+		Render.step(snapshot, dt)
+	end
+end)
+
+---------------------------------------------------------------------------
+-- ATAJOS
+---------------------------------------------------------------------------
+
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+
+-- F = colher tudo (cliente pede, servidor valida)
+ContextActionService:BindAction("FarmHarvest", function(_, state)
+	if state == Enum.UserInputState.Begin then
+		NetClient.action(Net.ActionKind.Harvest)
+	end
+	return Enum.ContextActionResult.Pass
+end, false, Enum.KeyCode.F)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then
+		return
+	end
+	if input.KeyCode == Enum.KeyCode.M then
+		Panels.toggle()
+	end
+end)
+
+-- dica inicial
+task.delay(1.5, function()
+	Toasts.push("F = colher tudo   ·   M = abrir/fechar menu   ·   arraste o painel", Theme.dim)
+end)
+
+print("[FarmTycoon] Cliente pronto ·", #GameConfig.Crops, "crops ·", player.Name)
+]]></string>
+        </Properties>
+        <Item class="ModuleScript" referent="16">
+          <Properties>
+            <string name="Name">Effects</string>
+            <string name="Source"><![CDATA[-- Effects
+-- Feedback visual: texto flutuante de venda, flash no level up, shake no rebirth.
+
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Format = require(Shared.Format)
+
+local Theme = require(script.Parent.Theme)
+
+local Effects = {}
+
+local gui
+local saleBuffer = 0
+local flushAt = 0
+
+function Effects.init(parentGui)
+	gui = parentGui
+end
+
+local function makeLabel(text, color, size)
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Font = Theme.fontBlack
+	label.Text = text
+	label.TextColor3 = color
+	label.TextSize = size
+	label.Size = UDim2.fromOffset(280, 34)
+	label.TextStrokeTransparency = 0.5
+	label.Parent = gui
+	return label
+end
+
+function Effects.sale(amount)
+	saleBuffer += amount
+	local now = os.clock()
+	if now < flushAt then
+		return
+	end
+	flushAt = now + 0.55
+
+	local total = saleBuffer
+	saleBuffer = 0
+
+	local label = makeLabel("+ " .. Format.money(total), Theme.green, 22)
+	label.Position = UDim2.new(0.5, -140 + math.random(-40, 40), 0.62, 0)
+	label.TextTransparency = 0.1
+	label.Rotation = math.random(-4, 4)
+
+	TweenService:Create(label, TweenInfo.new(1.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Position = label.Position - UDim2.fromOffset(0, 70),
+		TextTransparency = 1,
+	}):Play()
+
+	task.delay(1.2, function()
+		label:Destroy()
+	end)
+end
+
+function Effects.levelUp()
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundColor3 = Theme.cyan
+	frame.BackgroundTransparency = 0.8
+	frame.BorderSizePixel = 0
+	frame.ZIndex = 50
+	frame.Parent = gui
+
+	TweenService:Create(frame, TweenInfo.new(0.45), { BackgroundTransparency = 1 }):Play()
+	task.delay(0.5, function()
+		frame:Destroy()
+	end)
+
+	local label = makeLabel("⬆️  LEVEL UP", Theme.cyan, 30)
+	label.Size = UDim2.fromOffset(400, 60)
+	label.Position = UDim2.new(0.5, -200, 0.4, 0)
+	label.ZIndex = 51
+
+	TweenService:Create(label, TweenInfo.new(0.9, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = label.Position - UDim2.fromOffset(0, 60),
+		TextTransparency = 1,
+	}):Play()
+	task.delay(1, function()
+		label:Destroy()
+	end)
+end
+
+function Effects.rebirth()
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundColor3 = Theme.gold
+	frame.BackgroundTransparency = 0.6
+	frame.BorderSizePixel = 0
+	frame.ZIndex = 60
+	frame.Parent = gui
+
+	TweenService:Create(frame, TweenInfo.new(0.9), { BackgroundTransparency = 1 }):Play()
+	task.delay(1, function()
+		frame:Destroy()
+	end)
+
+	local label = makeLabel("♻️  REBIRTH!", Theme.gold, 44)
+	label.Size = UDim2.fromOffset(600, 80)
+	label.Position = UDim2.new(0.5, -300, 0.38, 0)
+	label.ZIndex = 61
+	label.Rotation = -6
+
+	TweenService:Create(label, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Position = label.Position - UDim2.fromOffset(0, 90),
+		TextTransparency = 1,
+		Rotation = 6,
+	}):Play()
+
+	task.delay(1.5, function()
+		label:Destroy()
+	end)
+end
+
+return Effects
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="17">
+          <Properties>
+            <string name="Name">Hud</string>
+            <string name="Source"><![CDATA[-- Hud
+-- Barra superior sempre visivel: cash, cristais, nivel/xp, rebirth.
+-- Atualiza por snapshot, sem recriar instancias.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Format = require(Shared.Format)
+local GameConfig = require(Shared.GameConfig)
+
+local Theme = require(script.Parent.Theme)
+local State = require(script.Parent.State)
+
+local Hud = {}
+
+local refs = {}
+
+function Hud.build(gui)
+	local bar = Theme.frame(gui, {
+		name = "Hud",
+		size = UDim2.fromOffset(520, 64),
+		position = UDim2.new(0.5, 0, 0, 12),
+		anchor = Vector2.new(0.5, 0),
+		color = Theme.bg,
+		transparency = 0.08,
+		radius = 14,
+	})
+	bar.Name = "TopBar"
+	Theme.gradient(bar, Color3.fromRGB(30, 36, 50), Color3.fromRGB(16, 19, 26))
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 2)
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.Parent = bar
+	Theme.padding(bar, 6)
+
+	local function stat(order, icon, color)
+		local box = Theme.frame(bar, {
+			size = UDim2.fromOffset(120, 46),
+			color = Theme.panelAlt,
+			transparency = 0.25,
+			radius = 10,
+			stroke = false,
+		})
+		box.LayoutOrder = order
+
+		local iconLabel = Theme.label(box, {
+			text = icon,
+			size = UDim2.fromOffset(28, 46),
+			position = UDim2.fromOffset(8, 0),
+			textSize = 20,
+		})
+		iconLabel.Name = "Icon"
+
+		local value = Theme.label(box, {
+			text = "0",
+			size = UDim2.new(1, -42, 0.5, 0),
+			position = UDim2.fromOffset(38, 6),
+			color = color,
+			font = Theme.fontBlack,
+			textSize = 18,
+		})
+		value.Name = "Value"
+
+		local sub = Theme.label(box, {
+			text = "",
+			size = UDim2.new(1, -42, 0, 14),
+			position = UDim2.fromOffset(38, 26),
+			color = Theme.dim,
+			font = Theme.fontBody,
+			textSize = 11,
+		})
+		sub.Name = "Sub"
+		return value, sub
+	end
+
+	refs.cash, refs.cashSub = stat(1, "💵", Theme.green)
+	refs.crystals, refs.crystalsSub = stat(2, "💎", Theme.purple)
+
+	-- nivel com barra
+	local levelBox = Theme.frame(bar, {
+		size = UDim2.fromOffset(238, 46),
+		color = Theme.panelAlt,
+		transparency = 0.25,
+		radius = 10,
+		stroke = false,
+	})
+	levelBox.LayoutOrder = 3
+
+	refs.level = Theme.label(levelBox, {
+		text = "Nível 1",
+		size = UDim2.new(1, -16, 0, 16),
+		position = UDim2.fromOffset(10, 5),
+		font = Theme.fontBlack,
+		textSize = 13,
+	})
+	refs.xpText = Theme.label(levelBox, {
+		text = "0 / 0 XP",
+		size = UDim2.new(1, -16, 0, 12),
+		position = UDim2.fromOffset(10, 20),
+		color = Theme.dim,
+		font = Theme.fontBody,
+		textSize = 10,
+		xAlign = Enum.TextXAlignment.Right,
+	})
+
+	refs.xpBar, refs.xpFill = Theme.bar(levelBox, {
+		size = UDim2.new(1, -20, 0, 7),
+		position = UDim2.fromOffset(10, 34),
+		color = Theme.cyan,
+	})
+
+	refs.pending = Theme.label(gui, {
+		text = "",
+		size = UDim2.fromOffset(300, 18),
+		position = UDim2.new(0.5, 0, 0, 84),
+		anchor = Vector2.new(0.5, 0),
+		color = Theme.dim,
+		font = Theme.fontBody,
+		textSize = 12,
+		xAlign = Enum.TextXAlignment.Center,
+	})
+
+	refs.rebirth = Theme.label(gui, {
+		text = "",
+		size = UDim2.fromOffset(300, 20),
+		position = UDim2.new(0.5, 0, 0, 102),
+		anchor = Vector2.new(0.5, 0),
+		color = Theme.gold,
+		font = Theme.fontBlack,
+		textSize = 13,
+		xAlign = Enum.TextXAlignment.Center,
+	})
+
+	local lastPending = -1
+
+	local function setText(label, text)
+		if label.Text ~= text then
+			label.Text = text
+		end
+	end
+
+	State.subscribe(function(snapshot)
+		setText(refs.cash, Format.money(snapshot.cash))
+		setText(refs.cashSub, "x" .. string.format("%.1f", snapshot.sellMult) .. " venda")
+		setText(refs.crystals, Format.number(snapshot.crystals))
+		setText(refs.crystalsSub, "sorte " .. string.format("%.1f", snapshot.luck))
+		setText(refs.level, "Nível " .. snapshot.level)
+		local pending = math.floor((snapshot.farm.pending or 0) * 10) / 10
+		if pending ~= lastPending then
+			lastPending = pending
+			refs.pending.Text = "⏳ " .. Format.money(pending)
+		end
+
+		local need = snapshot.xpNeed
+		if need < 0 then
+			setText(refs.xpText, "MAX")
+			refs.xpFill.Size = UDim2.fromScale(1, 1)
+		else
+			setText(refs.xpText, Format.number(snapshot.xp) .. " / " .. Format.number(need) .. " XP")
+			refs.xpFill.Size = UDim2.fromScale(math.clamp(snapshot.xp / need, 0, 1), 1)
+		end
+
+		if snapshot.rebirths > 0 then
+			setText(
+				refs.rebirth,
+				"REBIRTH "
+					.. snapshot.rebirths
+					.. "  ·  x"
+					.. string.format("%.1f", GameConfig.rebirthMultiplier(snapshot.rebirths))
+					.. " em tudo"
+			)
+		else
+			setText(refs.rebirth, "")
+		end
+	end)
+
+	-- nome do jogador no canto
+	local playerName = Theme.label(gui, {
+		text = Players.LocalPlayer.DisplayName,
+		size = UDim2.fromOffset(260, 18),
+		position = UDim2.new(0, 16, 1, -26),
+		color = Theme.dim,
+		font = Theme.fontBody,
+		textSize = 12,
+	})
+	playerName.Name = "PlayerName"
+
+	return refs
+end
+
+return Hud
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="18">
+          <Properties>
+            <string name="Name">NetClient</string>
+            <string name="Source"><![CDATA[-- NetClient
+-- Camada de rede do cliente: espera os remotes e expoe action()/on().
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Net = require(Shared.Net)
+
+local NetClient = {}
+
+local folder = ReplicatedStorage:WaitForChild(Net.FolderName)
+local state = folder:WaitForChild(Net.State)
+local action = folder:WaitForChild(Net.Action)
+local event = folder:WaitForChild(Net.Event)
+
+NetClient.state = state
+NetClient.event = event
+
+function NetClient.action(kind, payload)
+	action:FireServer(kind, payload)
+end
+
+function NetClient.on(callback)
+	return event.OnClientEvent:Connect(callback)
+end
+
+return NetClient
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="19">
+          <Properties>
+            <string name="Name">Panels</string>
+            <string name="Source"><![CDATA[-- Panels
+-- Menu tabulado a direita: Sementes, Melhorias, Rebirth, Codigos.
+-- Toda linha e um botao que dispara uma Action; nenhum estado de jogo aqui.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.GameConfig)
+local Format = require(Shared.Format)
+local Net = require(Shared.Net)
+
+local Theme = require(script.Parent.Theme)
+local State = require(script.Parent.State)
+local NetClient = require(script.Parent.NetClient)
+
+local Panels = {}
+
+local TABS = {
+	{ id = "seeds", label = "🌱 Sementes" },
+	{ id = "upgrades", label = "⚡ Melhorias" },
+	{ id = "rebirth", label = "♻️ Rebirth" },
+	{ id = "codes", label = "🎁 Códigos" },
+}
+
+local refs = {}
+local currentTab = "seeds"
+local rowBuilders = {}
+local open = true
+
+local function clear(container)
+	for _, child in ipairs(container:GetChildren()) do
+		if child:IsA("GuiObject") and child.Name ~= "Layout" then
+			child:Destroy()
+		end
+	end
+end
+
+---------------------------------------------------------------------------
+-- LINHAS
+---------------------------------------------------------------------------
+
+local function row(parent, order, height)
+	local r = Theme.frame(parent, {
+		size = UDim2.new(1, 0, 0, height or 56),
+		color = Theme.panelAlt,
+		transparency = 0.15,
+		radius = 10,
+		stroke = false,
+	})
+	r.LayoutOrder = order
+	r.Name = "Row" .. order
+	return r
+end
+
+---------------------------------------------------------------------------
+-- TAB: SEMENTES
+---------------------------------------------------------------------------
+
+rowBuilders.seeds = function(parent, snapshot)
+	local order = 0
+	for _, crop in ipairs(GameConfig.Crops) do
+		order += 1
+		local unlocked = snapshot.level >= crop.level
+		local selected = snapshot.selectedCrop == crop.id
+
+		local r = row(parent, order, 54)
+		r.BackgroundColor3 = selected and Color3.fromRGB(38, 66, 52) or Theme.panelAlt
+		if not unlocked then
+			r.BackgroundTransparency = 0.45
+		end
+
+		local button = Instance.new("TextButton")
+		button.Size = UDim2.fromScale(1, 1)
+		button.BackgroundTransparency = 1
+		button.Text = ""
+		button.Parent = r
+
+		Theme.label(r, {
+			text = crop.emoji .. "  " .. crop.name,
+			size = UDim2.new(1, -120, 0, 20),
+			position = UDim2.fromOffset(12, 8),
+			font = Theme.fontBlack,
+			textSize = 14,
+			color = unlocked and Theme.text or Theme.dim,
+		})
+
+		Theme.label(r, {
+			text = string.format("%s  →  %s", Format.money(crop.seed), Format.money(crop.sell * crop.amount)),
+			size = UDim2.new(1, -120, 0, 16),
+			position = UDim2.fromOffset(12, 28),
+			font = Theme.fontBody,
+			textSize = 11,
+			color = Theme.dim,
+		})
+
+		Theme.label(r, {
+			text = Format.time(crop.grow),
+			size = UDim2.fromOffset(48, 16),
+			position = UDim2.new(1, -60, 0, 8),
+			font = Theme.fontBody,
+			textSize = 11,
+			color = Theme.cyan,
+			xAlign = Enum.TextXAlignment.Right,
+		})
+
+		local statusText
+		if not unlocked then
+			statusText = "Nv " .. crop.level
+		elseif selected then
+			statusText = "ATIVO"
+		else
+			statusText = "usar"
+		end
+
+		Theme.label(r, {
+			text = statusText,
+			size = UDim2.fromOffset(60, 16),
+			position = UDim2.new(1, -60, 0, 26),
+			font = Theme.fontBlack,
+			textSize = 11,
+			color = selected and Theme.green or Theme.dim,
+			xAlign = Enum.TextXAlignment.Right,
+		})
+
+		if unlocked then
+			button.MouseButton1Click:Connect(function()
+				NetClient.action(Net.ActionKind.SelectCrop, crop.id)
+			end)
+		end
+	end
+end
+
+---------------------------------------------------------------------------
+-- TAB: MELHORIAS
+---------------------------------------------------------------------------
+
+local UPGRADE_META = {
+	conveyor = { icon = "🛤️", desc = "Itens chegam mais rápido na esteira" },
+	sell = { icon = "💰", desc = "Multiplica o valor vendido" },
+	luck = { icon = "🍀", desc = "Mais chance de mutações raras" },
+}
+
+rowBuilders.upgrades = function(parent, snapshot)
+	local order = 0
+
+	-- plot
+	order += 1
+	do
+		local cost, levelReq = GameConfig.plotCost(snapshot.plots)
+		local r = row(parent, order, 58)
+		Theme.label(r, {
+			text = "🧱  Terreno extra  (" .. snapshot.plots .. "/" .. GameConfig.Plots.Max .. ")",
+			size = UDim2.new(1, -140, 0, 20),
+			position = UDim2.fromOffset(12, 8),
+			font = Theme.fontBlack,
+			textSize = 14,
+		})
+		Theme.label(r, {
+			text = "Planta uma cultura a mais",
+			size = UDim2.new(1, -140, 0, 16),
+			position = UDim2.fromOffset(12, 30),
+			font = Theme.fontBody,
+			textSize = 11,
+			color = Theme.dim,
+		})
+		if cost then
+			local btn = Theme.button(r, {
+				text = "COMPRAR\n" .. Format.money(cost),
+				size = UDim2.fromOffset(118, 42),
+				position = UDim2.new(1, -128, 0.5, 0),
+				anchor = Vector2.new(0, 0.5),
+				color = Theme.greenDark,
+				textSize = 12,
+			})
+			btn.MouseButton1Click:Connect(function()
+				NetClient.action(Net.ActionKind.BuyPlot)
+			end)
+		else
+			Theme.label(r, {
+				text = "MÁXIMO",
+				size = UDim2.fromOffset(118, 42),
+				position = UDim2.new(1, -128, 0.5, 0),
+				anchor = Vector2.new(0, 0.5),
+				color = Theme.dim,
+				font = Theme.fontBlack,
+				xAlign = Enum.TextXAlignment.Center,
+			})
+		end
+	end
+
+	for _, kind in ipairs({ "conveyor", "sell", "luck" }) do
+		order += 1
+		local meta = UPGRADE_META[kind]
+		local tier = snapshot.upgrades[kind] or 0
+		local cost = GameConfig.upgradeCost(kind, tier)
+		local r = row(parent, order, 58)
+
+		Theme.label(r, {
+			text = meta.icon .. "  " .. GameConfig.Upgrades[kind].name,
+			size = UDim2.new(1, -140, 0, 20),
+			position = UDim2.fromOffset(12, 8),
+			font = Theme.fontBlack,
+			textSize = 14,
+		})
+		Theme.label(r, {
+			text = meta.desc .. "  ·  Nv " .. tier .. "/" .. GameConfig.Upgrades[kind].maxTier,
+			size = UDim2.new(1, -140, 0, 16),
+			position = UDim2.fromOffset(12, 30),
+			font = Theme.fontBody,
+			textSize = 11,
+			color = Theme.dim,
+		})
+
+		if cost then
+			local btn = Theme.button(r, {
+				text = "MELHORAR\n" .. Format.money(cost),
+				size = UDim2.fromOffset(118, 42),
+				position = UDim2.new(1, -128, 0.5, 0),
+				anchor = Vector2.new(0, 0.5),
+				color = Theme.panel,
+				textColor = Theme.gold,
+				textSize = 12,
+			})
+			btn.MouseButton1Click:Connect(function()
+				NetClient.action(Net.ActionKind.BuyUpgrade, kind)
+			end)
+		else
+			Theme.label(r, {
+				text = "MÁXIMO",
+				size = UDim2.fromOffset(118, 42),
+				position = UDim2.new(1, -128, 0.5, 0),
+				anchor = Vector2.new(0, 0.5),
+				color = Theme.dim,
+				font = Theme.fontBlack,
+				xAlign = Enum.TextXAlignment.Center,
+			})
+		end
+	end
+
+	-- auto-colheita
+	order += 1
+	do
+		local tier = snapshot.upgrades.auto or 0
+		local cost = GameConfig.autoCost(tier)
+		local r = row(parent, order, 58)
+		Theme.label(r, {
+			text = "✨  Colheita Dupla  ·  Nv " .. tier .. "/" .. #GameConfig.AutoTiers,
+			size = UDim2.new(1, -140, 0, 20),
+			position = UDim2.fromOffset(12, 8),
+			font = Theme.fontBlack,
+			textSize = 14,
+		})
+		Theme.label(r, {
+			text = tier > 0 and string.format("Colhe sozinho a cada %.1fs", GameConfig.autoInterval(tier))
+				or "Colhe tudo automaticamente",
+			size = UDim2.new(1, -140, 0, 16),
+			position = UDim2.fromOffset(12, 30),
+			font = Theme.fontBody,
+			textSize = 11,
+			color = Theme.dim,
+		})
+		if cost then
+			local btn = Theme.button(r, {
+				text = "COMPRAR\n" .. Format.money(cost),
+				size = UDim2.fromOffset(118, 42),
+				position = UDim2.new(1, -128, 0.5, 0),
+				anchor = Vector2.new(0, 0.5),
+				color = Theme.panel,
+				textColor = Theme.cyan,
+				textSize = 12,
+			})
+			btn.MouseButton1Click:Connect(function()
+				NetClient.action(Net.ActionKind.BuyAuto)
+			end)
+		else
+			Theme.label(r, {
+				text = "MÁXIMO",
+				size = UDim2.fromOffset(118, 42),
+				position = UDim2.new(1, -128, 0.5, 0),
+				anchor = Vector2.new(0, 0.5),
+				color = Theme.dim,
+				font = Theme.fontBlack,
+				xAlign = Enum.TextXAlignment.Center,
+			})
+		end
+	end
+
+	-- crystal upgrades
+	order += 1
+	local divider = Theme.label(parent, {
+		text = "💎  MELHORIAS PERMANENTES  (não resetam no rebirth)",
+		size = UDim2.new(1, 0, 0, 22),
+		color = Theme.purple,
+		font = Theme.fontBlack,
+		textSize = 11,
+	})
+	divider.LayoutOrder = order
+
+	for _, kind in ipairs({ "growth", "sell", "luck" }) do
+		order += 1
+		local upgrade = GameConfig.CrystalUpgrades[kind]
+		local rank = snapshot.crystalUpgrades[kind] or 0
+		local cost = GameConfig.crystalCost(kind, rank)
+		local r = row(parent, order, 54)
+		r.BackgroundColor3 = Color3.fromRGB(40, 32, 56)
+
+		Theme.label(r, {
+			text = upgrade.name .. "  ·  Rank " .. rank .. "/" .. upgrade.maxRank,
+			size = UDim2.new(1, -130, 0, 20),
+			position = UDim2.fromOffset(12, 8),
+			font = Theme.fontBlack,
+			textSize = 13,
+		})
+		Theme.label(r, {
+			text = string.format("+%d%% por rank", math.floor(upgrade.step * 100 + 0.5)),
+			size = UDim2.new(1, -130, 0, 16),
+			position = UDim2.fromOffset(12, 28),
+			font = Theme.fontBody,
+			textSize = 11,
+			color = Theme.dim,
+		})
+
+		if cost then
+			local btn = Theme.button(r, {
+				text = "💎 " .. cost,
+				size = UDim2.fromOffset(110, 38),
+				position = UDim2.new(1, -122, 0.5, 0),
+				anchor = Vector2.new(0, 0.5),
+				color = Color3.fromRGB(72, 50, 110),
+				textColor = Theme.purple,
+				textSize = 13,
+			})
+			btn.MouseButton1Click:Connect(function()
+				NetClient.action(Net.ActionKind.BuyCrystal, kind)
+			end)
+		else
+			Theme.label(r, {
+				text = "MAX",
+				size = UDim2.fromOffset(110, 38),
+				position = UDim2.new(1, -122, 0.5, 0),
+				anchor = Vector2.new(0, 0.5),
+				color = Theme.dim,
+				font = Theme.fontBlack,
+				xAlign = Enum.TextXAlignment.Center,
+			})
+		end
+	end
+end
+
+---------------------------------------------------------------------------
+-- TAB: REBIRTH
+---------------------------------------------------------------------------
+
+rowBuilders.rebirth = function(parent, snapshot)
+	local order = 0
+	local cfg = GameConfig.Rebirth
+
+	order += 1
+	local info = row(parent, order, 96)
+	Theme.label(info, {
+		text = "♻️  Rebirth " .. (snapshot.rebirths + 1),
+		size = UDim2.new(1, -20, 0, 22),
+		position = UDim2.fromOffset(12, 10),
+		font = Theme.fontBlack,
+		textSize = 18,
+		color = Theme.gold,
+	})
+	Theme.label(info, {
+		text = string.format(
+			"Requer Nível %d  +  %s\nReseta cash, nivel e upgrades.\nMantém cristais e melhorias permanentes.",
+			cfg.RequiredLevel,
+			Format.money(cfg.RequiredCash)
+		),
+		size = UDim2.new(1, -24, 0, 52),
+		position = UDim2.fromOffset(12, 36),
+		font = Theme.fontBody,
+		textSize = 12,
+		color = Theme.dim,
+		wrapped = true,
+	})
+
+	order += 1
+	local rewards = row(parent, order, 64)
+	Theme.label(rewards, {
+		text = "Recompensa:  💎 " .. GameConfig.rebirthCrystals(snapshot.rebirths) .. "  ·  x" .. string.format(
+			"%.1f",
+			GameConfig.rebirthMultiplier(snapshot.rebirths + 1)
+		) .. " em tudo",
+		size = UDim2.new(1, -24, 0, 20),
+		position = UDim2.fromOffset(12, 10),
+		font = Theme.fontBlack,
+		textSize = 13,
+		color = Theme.purple,
+	})
+	Theme.label(rewards, {
+		text = "Rebirth atual: " .. snapshot.rebirths .. "/" .. cfg.Max,
+		size = UDim2.new(1, -24, 0, 16),
+		position = UDim2.fromOffset(12, 32),
+		font = Theme.fontBody,
+		textSize = 11,
+		color = Theme.dim,
+	})
+
+	order += 1
+	local canRebirth = snapshot.level >= cfg.RequiredLevel
+		and snapshot.cash >= cfg.RequiredCash
+		and snapshot.rebirths < cfg.Max
+	local btn = Theme.button(parent, {
+		text = snapshot.rebirths >= cfg.Max and "REBIRTH MÁXIMO" or "FAZER REBIRTH",
+		size = UDim2.new(1, 0, 0, 46),
+		color = canRebirth and Color3.fromRGB(96, 70, 20) or Theme.panelAlt,
+		textColor = canRebirth and Theme.gold or Theme.dim,
+		textSize = 15,
+	})
+	btn.LayoutOrder = order
+	btn.MouseButton1Click:Connect(function()
+		NetClient.action(Net.ActionKind.Rebirth)
+	end)
+
+	order += 1
+	local stats = row(parent, order, 84)
+	Theme.label(stats, {
+		text = "📊  Estatísticas",
+		size = UDim2.new(1, -24, 0, 18),
+		position = UDim2.fromOffset(12, 8),
+		font = Theme.fontBlack,
+		textSize = 13,
+	})
+	Theme.label(stats, {
+		text = string.format(
+			"Colheitas: %s\nTotal ganho: %s\nMaior venda: %s",
+			Format.number(snapshot.stats.harvests),
+			Format.money(snapshot.stats.earned),
+			Format.money(snapshot.stats.bestSale)
+		),
+		size = UDim2.new(1, -24, 0, 58),
+		position = UDim2.fromOffset(12, 24),
+		font = Theme.fontBody,
+		textSize = 11,
+		color = Theme.dim,
+		wrapped = true,
+	})
+end
+
+---------------------------------------------------------------------------
+-- TAB: CODIGOS
+---------------------------------------------------------------------------
+
+rowBuilders.codes = function(parent, snapshot)
+	local order = 1
+	local r = row(parent, order, 92)
+
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(1, -24, 0, 38)
+	box.Position = UDim2.fromOffset(12, 12)
+	box.BackgroundColor3 = Theme.bg
+	box.BorderSizePixel = 0
+	box.Font = Theme.font
+	box.TextSize = 14
+	box.TextColor3 = Theme.text
+	box.PlaceholderText = "digite o código..."
+	box.PlaceholderColor3 = Theme.dim
+	box.Text = ""
+	box.ClearTextOnFocus = false
+	box.Parent = r
+	Theme.corner(box, 8)
+	Theme.stroke(box, Theme.stroke, 1, 0.4)
+
+	local submit = Theme.button(r, {
+		text = "RESGATAR",
+		size = UDim2.new(1, -24, 0, 32),
+		position = UDim2.fromOffset(12, 54),
+		color = Theme.greenDark,
+		textSize = 13,
+	})
+	submit.MouseButton1Click:Connect(function()
+		if box.Text ~= "" then
+			NetClient.action(Net.ActionKind.Redeem, box.Text)
+			box.Text = ""
+		end
+	end)
+
+	for code, entry in pairs(GameConfig.Codes) do
+		order += 1
+		local rr = row(parent, order, 44)
+		local redeemed = snapshot.redeemedCodes and snapshot.redeemedCodes[code]
+		Theme.label(rr, {
+			text = code,
+			size = UDim2.new(1, -130, 1, 0),
+			position = UDim2.fromOffset(12, 0),
+			font = Theme.fontBlack,
+			textSize = 13,
+			color = redeemed and Theme.dim or Theme.text,
+		})
+		Theme.label(rr, {
+			text = redeemed and "resgatado" or entry.label,
+			size = UDim2.fromOffset(110, 44),
+			position = UDim2.new(1, -122, 0, 0),
+			font = Theme.fontBody,
+			textSize = 11,
+			color = redeemed and Theme.dim or Theme.green,
+			xAlign = Enum.TextXAlignment.Right,
+		})
+	end
+end
+
+---------------------------------------------------------------------------
+-- SHELL
+---------------------------------------------------------------------------
+
+-- Assinatura dos campos que a UI mostra. Se nada mudou, nao reconstroi.
+local function signature(snapshot)
+	return table.concat({
+		currentTab,
+		snapshot.level,
+		snapshot.selectedCrop,
+		snapshot.plots,
+		snapshot.upgrades.conveyor,
+		snapshot.upgrades.sell,
+		snapshot.upgrades.luck,
+		snapshot.upgrades.auto,
+		snapshot.crystalUpgrades.growth,
+		snapshot.crystalUpgrades.sell,
+		snapshot.crystalUpgrades.luck,
+		snapshot.rebirths,
+		snapshot.crystals,
+		math.floor(snapshot.cash / 50),
+		snapshot.stats.harvests // 500,
+	}, "|")
+end
+
+local function renderTab(snapshot, force)
+	local content = refs.content
+	if not content then
+		return
+	end
+	local sig = signature(snapshot)
+	if not force and sig == refs.lastSig then
+		return
+	end
+	refs.lastSig = sig
+	clear(content)
+	local builder = rowBuilders[currentTab]
+	if builder then
+		builder(content, snapshot)
+	end
+end
+
+function Panels.build(gui)
+	local panel = Theme.frame(gui, {
+		size = UDim2.fromOffset(340, 470),
+		position = UDim2.new(1, -16, 0.5, 0),
+		anchor = Vector2.new(1, 0.5),
+		color = Theme.bg,
+		transparency = 0.06,
+		radius = 16,
+	})
+	panel.Name = "PanelsRoot"
+	refs.root = panel
+
+	local header = Theme.frame(panel, {
+		size = UDim2.new(1, 0, 0, 34),
+		position = UDim2.fromOffset(0, 8),
+		color = Theme.panel,
+		transparency = 1,
+		radius = 12,
+		stroke = false,
+	})
+	header.Name = "DragHandle"
+	Theme.label(header, {
+		text = "  ⠿  FARMTYCOON",
+		size = UDim2.fromScale(1, 1),
+		font = Theme.fontBlack,
+		textSize = 16,
+		color = Theme.green,
+	})
+	Theme.makeDraggable(panel, header)
+
+	local tabBar = Theme.frame(panel, {
+		size = UDim2.new(1, -20, 0, 38),
+		position = UDim2.fromOffset(10, 42),
+		color = Theme.panel,
+		transparency = 0.2,
+		radius = 10,
+		stroke = false,
+	})
+	local tabLayout = Instance.new("UIListLayout")
+	tabLayout.FillDirection = Enum.FillDirection.Horizontal
+	tabLayout.Padding = UDim.new(0, 4)
+	tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	tabLayout.Parent = tabBar
+	Theme.padding(tabBar, 4)
+
+	refs.tabs = {}
+	for index, tab in ipairs(TABS) do
+		local button = Theme.button(tabBar, {
+			text = tab.label,
+			size = UDim2.new(0.25, -5, 1, 0),
+			color = Theme.panelAlt,
+			textSize = 11,
+			radius = 7,
+		})
+		button.LayoutOrder = index
+		button.Name = "Tab_" .. tab.id
+		refs.tabs[tab.id] = button
+		button.MouseButton1Click:Connect(function()
+			currentTab = tab.id
+			Panels.refresh()
+		end)
+	end
+
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Size = UDim2.new(1, -20, 1, -100)
+	scroll.Position = UDim2.fromOffset(10, 88)
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel = 0
+	scroll.ScrollBarThickness = 4
+	scroll.ScrollBarImageColor3 = Theme.stroke
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroll.CanvasSize = UDim2.fromOffset(0, 0)
+	scroll.Parent = panel
+	refs.content = scroll
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 6)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Name = "Layout"
+	layout.Parent = scroll
+
+	local pad = Instance.new("UIPadding")
+	pad.PaddingRight = UDim.new(0, 6)
+	pad.Parent = scroll
+
+	-- botao de esconder menu
+	local toggle = Theme.button(gui, {
+		text = "☰",
+		size = UDim2.fromOffset(44, 44),
+		position = UDim2.new(1, -16, 0, 16),
+		anchor = Vector2.new(1, 0),
+		color = Theme.bg,
+		transparency = 0.08,
+	})
+	toggle.Name = "MenuToggle"
+	toggle.MouseButton1Click:Connect(function()
+		Panels.toggle()
+	end)
+
+	State.subscribe(function(snapshot)
+		refs.lastSnapshot = snapshot
+		if panel.Visible then
+			renderTab(snapshot)
+		end
+	end)
+
+	panel.Visible = open
+	return panel
+end
+
+function Panels.toggle()
+	open = not open
+	if refs.root then
+		refs.root.Visible = open
+	end
+end
+
+function Panels.refresh()
+	for id, button in pairs(refs.tabs) do
+		button.BackgroundColor3 = id == currentTab and Theme.greenDark or Theme.panelAlt
+	end
+	if refs.lastSnapshot then
+		renderTab(refs.lastSnapshot, true)
+	end
+end
+
+return Panels
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="20">
+          <Properties>
+            <string name="Name">Render</string>
+            <string name="Source"><![CDATA[-- Render
+-- Desenha a fazenda a partir do snapshot do servidor.
+-- Nada de estado de jogo aqui: o cliente so le e pinta.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.GameConfig)
+
+local Render = {}
+
+local folder
+local plotVisuals = {} -- [index] = { model, base, crop, ring }
+local itemVisuals = {} -- [id] = { model, lastPos }
+local lot
+local beltStart, beltLength
+
+local function newModel(name)
+	local model = Instance.new("Model")
+	model.Name = name
+	model.Parent = folder
+	return model
+end
+
+local function part(props)
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	for k, v in pairs(props) do
+		p[k] = v
+	end
+	return p
+end
+
+function Render.init()
+	folder = Instance.new("Folder")
+	folder.Name = "FarmTycoonClient"
+	folder.Parent = Workspace
+end
+
+-- Recebe o modelo do lote pelo nome (o servidor ja criou).
+-- Sem yielded calls: se o modelo ainda nao replicou, tenta de novo no proximo frame.
+function Render.syncLot(snapshot)
+	if not snapshot or snapshot.lotIndex == nil then
+		return
+	end
+	if lot and lot.index == snapshot.lotIndex then
+		return
+	end
+
+	local world = Workspace:FindFirstChild("FarmTycoon")
+	local model = world and world:FindFirstChild("Lot_" .. snapshot.lotIndex)
+	if not model then
+		return
+	end
+
+	Render.clear()
+	lot = { index = snapshot.lotIndex, model = model }
+
+	local platform = model:FindFirstChild("Platform")
+	local conveyor = model:FindFirstChild("Conveyor")
+	if platform then
+		-- o servidor usa o centro do lote no chao (y=0); a plataforma tem 2 de altura
+		lot.origin = platform.Position - Vector3.new(0, 0.5, 0)
+	end
+	if conveyor then
+		beltStart = conveyor:GetAttribute("BeltStart")
+		beltLength = conveyor:GetAttribute("BeltLength") or 30
+	end
+end
+
+function Render.clear()
+	for _, visual in pairs(plotVisuals) do
+		if visual.model then
+			visual.model:Destroy()
+		end
+	end
+	plotVisuals = {}
+	for _, visual in pairs(itemVisuals) do
+		if visual.model then
+			visual.model:Destroy()
+		end
+	end
+	itemVisuals = {}
+	lot = nil
+end
+
+---------------------------------------------------------------------------
+-- PLOTS
+---------------------------------------------------------------------------
+
+local function buildPlotVisual(index, surface)
+	local size = GameConfig.Layout.plotSize
+	local model = newModel("PlotVisual_" .. index)
+
+	local base = part({
+		Name = "Base",
+		Size = Vector3.new(size - 0.6, 0.2, size - 0.6),
+		Position = surface + Vector3.new(0, 0.12, 0),
+		Color = Color3.fromRGB(96, 68, 46),
+		Material = Enum.Material.Ground,
+		Transparency = 0.15,
+	})
+	base.Parent = model
+
+	local ring = part({
+		Name = "Ring",
+		Size = Vector3.new(size - 0.2, 0.08, size - 0.2),
+		Position = surface + Vector3.new(0, 0.02, 0),
+		Color = Color3.fromRGB(96, 235, 148),
+		Material = Enum.Material.Neon,
+		Transparency = 0.6,
+	})
+	ring.Parent = model
+
+	return { model = model, base = base, ring = ring, cropModel = nil, cropId = nil }
+end
+
+local function buildCropVisual(cropId, center)
+	local crop = GameConfig.getCrop(cropId)
+	local model = newModel("Crop_" .. cropId)
+
+	local count = 5
+	for i = 1, count do
+		local angle = (i / count) * math.pi * 2
+		local radius = (GameConfig.Layout.plotSize - 0.6) * 0.3
+		local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+
+		local stem = part({
+			Size = Vector3.new(0.35, 1.4, 0.35),
+			Position = center + offset + Vector3.new(0, 0.8, 0),
+			Color = Color3.fromRGB(78, 150, 78),
+			Material = Enum.Material.Grass,
+		})
+		stem.Parent = model
+
+		local head = part({
+			Size = Vector3.new(1.5, 1.5, 1.5),
+			Position = center + offset + Vector3.new(0, 1.9, 0),
+			Color = crop and crop.color or Color3.fromRGB(230, 230, 230),
+			Material = Enum.Material.Neon,
+			Shape = Enum.PartType.Ball,
+		})
+		head.Parent = model
+		head.Name = "Head"
+	end
+
+	return model
+end
+
+local function updatePlot(index, info, surface, unlocked)
+	local visual = plotVisuals[index]
+	if not visual then
+		visual = buildPlotVisual(index, surface)
+		plotVisuals[index] = visual
+	end
+
+	if not unlocked then
+		visual.base.Transparency = 0.9
+		visual.ring.Transparency = 1
+		if visual.cropModel then
+			visual.cropModel:Destroy()
+			visual.cropModel = nil
+			visual.cropId = nil
+		end
+		return
+	end
+
+	visual.base.Transparency = 0.15
+	visual.ring.Transparency = 0.55
+
+	if not info then
+		if visual.cropModel then
+			visual.cropModel:Destroy()
+			visual.cropModel = nil
+			visual.cropId = nil
+		end
+		visual.ring.Color = Color3.fromRGB(96, 235, 148)
+		return
+	end
+
+	if visual.cropId ~= info.cropId then
+		if visual.cropModel then
+			visual.cropModel:Destroy()
+		end
+		visual.cropModel = buildCropVisual(info.cropId, surface)
+		visual.cropId = info.cropId
+	end
+
+	-- escala pelo progresso
+	local progress = info.ready and 1 or math.clamp(info.progress or 0, 0.08, 1)
+	local scale = 0.35 + progress * 0.65
+	if visual.cropModel then
+		for _, child in ipairs(visual.cropModel:GetChildren()) do
+			if child:IsA("BasePart") and child.Name == "Head" then
+				local base = Vector3.new(1.5, 1.5, 1.5)
+				local target = base * scale
+				child.Size = child.Size:Lerp(target, 0.35)
+			end
+		end
+	end
+
+	local mutation = GameConfig.getMutation(info.mutationId)
+	if mutation.color then
+		visual.ring.Color = mutation.color
+		visual.ring.Transparency = info.ready and 0.25 or 0.6
+	elseif info.ready then
+		visual.ring.Color = Color3.fromRGB(255, 224, 102)
+		visual.ring.Transparency = 0.3
+	else
+		visual.ring.Color = Color3.fromRGB(96, 235, 148)
+		visual.ring.Transparency = 0.6
+	end
+end
+
+---------------------------------------------------------------------------
+-- ITENS NA ESTEIRA
+---------------------------------------------------------------------------
+
+local function spawnItemVisual(item)
+	local crop = GameConfig.getCrop(item.cropId)
+	local mutation = GameConfig.getMutation(item.mutationId)
+
+	local model = newModel("Item_" .. item.id)
+	local body = part({
+		Size = Vector3.new(1.9, 1.9, 1.9),
+		Position = beltStart + Vector3.new(0, 1.35, item.pos * beltLength),
+		Color = mutation.color or (crop and crop.color) or Color3.fromRGB(240, 240, 240),
+		Material = mutation.color and Enum.Material.Neon or Enum.Material.SmoothPlastic,
+		Shape = Enum.PartType.Ball,
+	})
+	body.Parent = model
+
+	if mutation.color then
+		local light = Instance.new("PointLight")
+		light.Color = mutation.color
+		light.Brightness = 1.4
+		light.Range = 9
+		light.Parent = body
+	end
+
+	return { model = model, body = body }
+end
+
+function Render.step(snapshot, dt)
+	if not snapshot or not snapshot.lotIndex then
+		return
+	end
+	Render.syncLot(snapshot)
+	if not lot or not beltStart then
+		return
+	end
+
+	local farm = snapshot.farm
+	if not farm then
+		return
+	end
+
+	-- plots: geometria vem do GameConfig.Layout, igual ao servidor
+	local origin = lot.origin
+	for i = 1, GameConfig.Plots.Max do
+		local surface = origin + GameConfig.plotLocalOffset(i)
+		updatePlot(i, farm.plots[i], surface, i <= (farm.activePlots or 0))
+	end
+
+	-- itens: posicao vem do servidor a 10 Hz; interpola localmente pra nao tremer
+	local speed = farm.speed or 20
+	local rate = speed / beltLength
+	local seen = {}
+	for _, item in ipairs(farm.items or {}) do
+		seen[item.id] = true
+		local visual = itemVisuals[item.id]
+		if not visual then
+			visual = spawnItemVisual(item)
+			visual.pos = item.pos
+			itemVisuals[item.id] = visual
+		end
+
+		-- extrapola a partir do ultimo pos conhecido e suaviza na direcao do servidor
+		visual.pos += rate * dt
+		local target = item.pos
+		if target > visual.pos then
+			visual.pos = visual.pos + (target - visual.pos) * math.min(dt * 24, 1)
+		else
+			visual.pos = target -- reconciliou: servidor vendeu ou resetou
+		end
+
+		local worldPos = beltStart + Vector3.new(0, 1.35, math.min(visual.pos, 1.02) * beltLength)
+		visual.spin = (visual.spin or 0) + dt * 2.4
+		visual.body.CFrame = CFrame.new(worldPos) * CFrame.Angles(visual.spin, visual.spin * 1.4, 0)
+	end
+
+	for id, visual in pairs(itemVisuals) do
+		if not seen[id] then
+			visual.model:Destroy()
+			itemVisuals[id] = nil
+		end
+	end
+end
+
+return Render
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="21">
+          <Properties>
+            <string name="Name">State</string>
+            <string name="Source"><![CDATA[-- State
+-- Snapshot mais recente do servidor + assinatura de listeners. Sem React.
+
+local State = {}
+
+State.snapshot = nil
+State.listeners = {}
+
+function State.set(snapshot)
+	State.snapshot = snapshot
+	for _, callback in ipairs(State.listeners) do
+		task.spawn(callback, snapshot)
+	end
+end
+
+function State.subscribe(callback)
+	table.insert(State.listeners, callback)
+	if State.snapshot then
+		task.spawn(callback, State.snapshot)
+	end
+	return function()
+		for i, listener in ipairs(State.listeners) do
+			if listener == callback then
+				table.remove(State.listeners, i)
+				break
+			end
+		end
+	end
+end
+
+return State
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="22">
+          <Properties>
+            <string name="Name">Theme</string>
+            <string name="Source"><![CDATA[-- Theme
+-- Cores, fontes e fabricas de instancia da UI. Uma paleta so.
+
+local Theme = {}
+
+Theme.bg = Color3.fromRGB(16, 19, 26)
+Theme.panel = Color3.fromRGB(24, 28, 38)
+Theme.panelAlt = Color3.fromRGB(31, 36, 48)
+Theme.stroke = Color3.fromRGB(52, 60, 78)
+Theme.text = Color3.fromRGB(236, 241, 248)
+Theme.dim = Color3.fromRGB(150, 160, 180)
+Theme.green = Color3.fromRGB(96, 235, 148)
+Theme.greenDark = Color3.fromRGB(38, 120, 78)
+Theme.gold = Color3.fromRGB(255, 205, 80)
+Theme.purple = Color3.fromRGB(178, 128, 255)
+Theme.cyan = Color3.fromRGB(110, 224, 255)
+Theme.red = Color3.fromRGB(255, 104, 104)
+
+Theme.font = Enum.Font.GothamBold
+Theme.fontBlack = Enum.Font.GothamBlack
+Theme.fontBody = Enum.Font.GothamMedium
+
+function Theme.corner(instance, radius)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius or 10)
+	corner.Parent = instance
+	return corner
+end
+
+function Theme.stroke(instance, color, thickness, transparency)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = color or Theme.stroke
+	stroke.Thickness = thickness or 1
+	stroke.Transparency = transparency or 0.35
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = instance
+	return stroke
+end
+
+function Theme.padding(instance, px)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, px)
+	pad.PaddingBottom = UDim.new(0, px)
+	pad.PaddingLeft = UDim.new(0, px)
+	pad.PaddingRight = UDim.new(0, px)
+	pad.Parent = instance
+	return pad
+end
+
+function Theme.gradient(instance, top, bottom, rotation)
+	local gradient = Instance.new("UIGradient")
+	gradient.Color = ColorSequence.new(top, bottom)
+	gradient.Rotation = rotation or 90
+	gradient.Parent = instance
+	return gradient
+end
+
+function Theme.frame(parent, props)
+	local frame = Instance.new("Frame")
+	frame.BackgroundColor3 = props.color or Theme.panel
+	frame.BackgroundTransparency = props.transparency or 0
+	frame.BorderSizePixel = 0
+	frame.Size = props.size or UDim2.fromOffset(200, 100)
+	frame.Position = props.position or UDim2.fromOffset(0, 0)
+	frame.AnchorPoint = props.anchor or Vector2.zero
+	frame.Parent = parent
+	if props.radius ~= false then
+		Theme.corner(frame, props.radius or 10)
+	end
+	if props.stroke ~= false then
+		Theme.stroke(frame, props.strokeColor, props.strokeThickness)
+	end
+	if props.clips then
+		frame.ClipsDescendants = true
+	end
+	return frame
+end
+
+function Theme.label(parent, props)
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = props.size or UDim2.fromScale(1, 1)
+	label.Position = props.position or UDim2.fromOffset(0, 0)
+	label.AnchorPoint = props.anchor or Vector2.zero
+	label.Font = props.font or Theme.font
+	label.Text = props.text or ""
+	label.TextColor3 = props.color or Theme.text
+	label.TextSize = props.textSize or 14
+	label.TextXAlignment = props.xAlign or Enum.TextXAlignment.Left
+	label.TextYAlignment = props.yAlign or Enum.TextYAlignment.Center
+	label.TextScaled = props.scaled or false
+	label.RichText = props.rich or false
+	label.TextWrapped = props.wrapped or false
+	label.ZIndex = props.zIndex or 1
+	label.Parent = parent
+	return label
+end
+
+function Theme.button(parent, props)
+	local button = Instance.new("TextButton")
+	button.BackgroundColor3 = props.color or Theme.panelAlt
+	button.BackgroundTransparency = props.transparency or 0
+	button.AutoButtonColor = true
+	button.BorderSizePixel = 0
+	button.Size = props.size or UDim2.fromOffset(120, 36)
+	button.Position = props.position or UDim2.fromOffset(0, 0)
+	button.AnchorPoint = props.anchor or Vector2.zero
+	button.Font = props.font or Theme.font
+	button.Text = props.text or ""
+	button.TextColor3 = props.textColor or Theme.text
+	button.TextSize = props.textSize or 14
+	button.LayoutOrder = props.layoutOrder or 0
+	button.Parent = parent
+	if props.radius ~= false then
+		Theme.corner(button, props.radius or 8)
+	end
+	Theme.stroke(button, props.strokeColor or Theme.stroke, 1, 0.4)
+	return button
+end
+
+function Theme.bar(parent, props)
+	local track = Theme.frame(parent, {
+		size = props.size or UDim2.new(1, 0, 0, 8),
+		position = props.position,
+		color = props.track or Color3.fromRGB(40, 46, 60),
+		radius = 4,
+		stroke = false,
+	})
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.BackgroundColor3 = props.color or Theme.green
+	fill.BorderSizePixel = 0
+	fill.Size = UDim2.fromScale(props.value or 0, 1)
+	fill.Parent = track
+	Theme.corner(fill, 4)
+	return track, fill
+end
+
+-- Arrasta um painel pela alca (handle). Sem handle, so o proprio frame arrasta.
+-- Nunca escuta cliques dos filhos: botoes continuam clicaveis.
+function Theme.makeDraggable(frame, handle)
+	local dragging = false
+	local dragStart, startPos
+	local UserInputService = game:GetService("UserInputService")
+
+	local grip = handle or frame
+	grip.Active = true
+	grip.InputBegan:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			dragging = true
+			dragStart = input.Position
+			startPos = frame.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if not dragging then
+			return
+		end
+		if
+			input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			local delta = input.Position - dragStart
+			frame.Position =
+				UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+return Theme
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="23">
+          <Properties>
+            <string name="Name">Toasts</string>
+            <string name="Source"><![CDATA[-- Toasts
+-- Feedback curto no canto inferior direito. Fila vertical + fade.
+
+local TweenService = game:GetService("TweenService")
+
+local Theme = require(script.Parent.Theme)
+
+local Toasts = {}
+
+local container
+
+function Toasts.init(gui)
+	container = Instance.new("Frame")
+	container.Name = "Toasts"
+	container.BackgroundTransparency = 1
+	container.Size = UDim2.fromOffset(300, 260)
+	container.Position = UDim2.new(1, -16, 1, -16)
+	container.AnchorPoint = Vector2.new(1, 1)
+	container.Parent = gui
+
+	local layout = Instance.new("UIListLayout")
+	layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 6)
+	layout.Parent = container
+end
+
+function Toasts.push(text, color)
+	if not container then
+		return
+	end
+
+	local frame = Theme.frame(container, {
+		size = UDim2.new(1, 0, 0, 38),
+		color = Theme.panel,
+		transparency = 0.08,
+		radius = 10,
+	})
+	frame.BackgroundTransparency = 1
+
+	local label = Theme.label(frame, {
+		text = text,
+		size = UDim2.new(1, -20, 1, 0),
+		position = UDim2.fromOffset(10, 0),
+		font = Theme.font,
+		textSize = 13,
+		color = color or Theme.text,
+		wrapped = true,
+	})
+
+	TweenService:Create(frame, TweenInfo.new(0.15), { BackgroundTransparency = 0.08 }):Play()
+	TweenService:Create(label, TweenInfo.new(0.15), { TextTransparency = 0 }):Play()
+
+	task.delay(2.6, function()
+		TweenService:Create(frame, TweenInfo.new(0.35), { BackgroundTransparency = 1 }):Play()
+		TweenService:Create(label, TweenInfo.new(0.35), { TextTransparency = 1 }):Play()
+		task.wait(0.4)
+		frame:Destroy()
+	end)
+end
+
+return Toasts
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+  </Item>
+</roblox>

@@ -1,0 +1,22 @@
+{
+  "name": "farm-tycoon",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Farm Tycoon — jogo de fazenda + tycoon para Roblox (Luau, Rojo)",
+  "type": "module",
+  "scripts": {
+    "build": "rojo build default.project.json -o build/FarmTycoon.rbxlx",
+    "serve": "rojo serve default.project.json",
+    "test": "node tests/run.mjs",
+    "sim": "node tests/simulate.mjs",
+    "check": "node tests/check.mjs",
+    "fmt": "stylua src tests",
+    "verify": "npm run check && npm test && npm run boot && npm run sim && npm run build",
+    "boot": "node tests/boot.mjs"
+  },
+  "devDependencies": {
+    "@johnnymorganz/stylua-bin": "^2.6.0",
+    "@luau-rs/luau": "^0.739.0",
+    "rojo": "1.0.3-rojo7.6.1"
+  }
+}
