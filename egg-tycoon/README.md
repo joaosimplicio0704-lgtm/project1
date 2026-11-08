@@ -139,18 +139,34 @@ Curva de rebirth medida (simulando um jogador que toca 3×/s):
 
 ### Bugs pegos pelos testes
 
-O jogo tinha 5 defeitos que só apareciam rodando de verdade:
+O jogo tinha 8 defeitos que só apareciam rodando de verdade — nenhum dava erro de
+sintaxe, todos passavam no `stylua` e no build:
 
 1. `fail()` não retornava nada → toda recusa do servidor virava `nil` silencioso e o handler `equip` dava sucesso falso
 2. `require(Shared.Format)` chamado no meio de funções em vez de no topo
 3. **Rebirth apagava a coleção de pets** (o comentário dizia que mantinha)
 4. Clicar no ovo no mapa só mudava o painel do cliente — o servidor nunca sabia, então sempre abria o ovo padrão
 5. Clique na Loja de Halloween apontava pra `eggId = "halloween"` que não existia no config
+6. **Clicar em qualquer placa do mapa não abria nada** — o `WorldUI` ligava no `ClickDetector` mas roteava o próprio detector (nome `"ClickDetector"`) em vez da placa. Só o ovo funcionava, por uma ligação duplicada
+7. Nenhum `SpawnLocation` no mapa — o jogador nascia no ponto padrão, longe de tudo
+8. A UI do cliente nunca tinha sido instanciada fora do Studio
 
 E 2 de balanceamento:
 
-6. Slots travavam em 9 com a renda congelada por horas → maxTier 6 → 12
-7. Custo de rebirth escalava junto com a renda = loop fechado: 6h+ pro primeiro rebirth; com teto fixo = 4 rebirths em 13s. Solução: teto que cresce por rebirth
+9. Slots travavam em 9 com a renda congelada por horas → maxTier 6 → 12
+10. Custo de rebirth escalava junto com a renda = loop fechado: 6h+ pro primeiro rebirth; com teto fixo = 4 rebirths em 13s. Solução: teto que cresce por rebirth
+
+### Testes
+
+| comando | o que faz |
+| --- | --- |
+| `npm run check` | StyLua/analisador nos 22 arquivos `.luau` |
+| `npm test` | 62 checagens de config e economia |
+| `npm run boot` | sobe o servidor de verdade com 2 jogadores e 10 min de jogo |
+| `npm run client` | instancia a UI inteira (253 elementos) num host falso do Roblox: pedestais, pets flutuando, atalhos, eventos de rede |
+| `npm run sim` | 8 h de um bot jogando, e imprime a curva de rebirth |
+
+`npm run verify` roda os cinco e depois o build.
 
 ---
 

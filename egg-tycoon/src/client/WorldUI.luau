@@ -23,18 +23,17 @@ function WorldUI.build(handlerMap)
 		return
 	end
 
-	for _, instance in ipairs(folder:GetDescendants()) do
-		if instance:IsA("ClickDetector") or (instance:IsA("BasePart") and instance:GetAttribute("EggId")) then
-			local detector = instance:IsA("ClickDetector") and instance
-				or instance:FindFirstChildOfClass("ClickDetector")
-			if detector then
-				detector.MouseClick:Connect(function(player)
-					if player ~= Players.LocalPlayer then
-						return
-					end
-					WorldUI.route(instance)
-				end)
-			end
+	-- Itera os ClickDetectors e roteia o PAI deles. Roteando o detector, o nome
+	-- seria "ClickDetector" e nenhuma zona abriria.
+	for _, detector in ipairs(folder:GetDescendants()) do
+		if detector:IsA("ClickDetector") then
+			local target = detector.Parent or detector
+			detector.MouseClick:Connect(function(player)
+				if player ~= Players.LocalPlayer then
+					return
+				end
+				WorldUI.route(target)
+			end)
 		end
 	end
 end

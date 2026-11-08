@@ -11,8 +11,9 @@
     "check": "node tests/check.mjs",
     "sim": "node tests/simulate.mjs",
     "fmt": "stylua src tests",
-    "verify": "npm run check && npm test && npm run boot && npm run sim && npm run build",
-    "boot": "node tests/boot.mjs"
+    "verify": "npm run check && npm run test && npm run boot && npm run client && npm run sim && npm run build",
+    "boot": "node tests/boot.mjs",
+    "client": "node tests/client.mjs"
   },
   "devDependencies": {
     "@luau-rs/luau": "^0.739.0",
