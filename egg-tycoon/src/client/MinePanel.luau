@@ -34,7 +34,7 @@ local function buildRow(parent, index)
 	local row = Instance.new("Frame")
 	row.Name = "MineRow" .. index
 	row.Size = UDim2.new(1, -32, 0, ROW_H)
-	row.Position = UDim2.fromOffset(16, 96 + (index - 1) * (ROW_H + ROW_GAP))
+	row.Position = UDim2.fromOffset(16, 78 + (index - 1) * (ROW_H + ROW_GAP))
 	row.BackgroundColor3 = Color3.fromRGB(246, 250, 255)
 	row.BorderSizePixel = 0
 	row.ZIndex = 26
@@ -115,7 +115,7 @@ function MinePanel.build(parentGui)
 
 	local root = Theme.panel(gui, {
 		name = "MinePanel",
-		size = UDim2.fromOffset(620, 620),
+		size = UDim2.fromOffset(620, 600),
 		position = UDim2.new(0.5, 0, 0.5, 0),
 		color = Theme.white,
 		radius = 30,
@@ -124,24 +124,9 @@ function MinePanel.build(parentGui)
 	root.Visible = false
 	refs.root = root
 
-	local header = Instance.new("Frame")
-	header.Size = UDim2.new(1, 0, 0, 78)
-	header.BackgroundColor3 = Color3.fromRGB(120, 200, 255)
-	header.BorderSizePixel = 0
-	header.ZIndex = 26
-	header.Parent = root
-	Theme.corner(header, 28)
-
-	Theme.label(root, {
-		text = "⛏️ MINA DOS PETS",
-		size = UDim2.new(1, 0, 0, 60),
-		position = UDim2.fromOffset(0, 8),
-		textSize = 36,
-		color = Color3.fromRGB(255, 255, 255),
-		strokeTransparency = 0,
-		strokeColor = Color3.fromRGB(40, 100, 160),
-		zIndex = 27,
-	})
+	-- placa pendurada, como nas referências: o nome fica FORA do painel,
+	-- numa plaquinha escura. Dá a sensação de loja/postinho de verdade.
+	Theme.titleTag(root, "⛏️ MINA DOS PETS", { width = 300, offset = -26, zIndex = 25 })
 
 	local close = Theme.button(root, {
 		text = "✕",
@@ -160,7 +145,7 @@ function MinePanel.build(parentGui)
 	refs.best = Theme.label(root, {
 		text = "melhor achado: —",
 		size = UDim2.new(1, -32, 0, 26),
-		position = UDim2.fromOffset(16, 62),
+		position = UDim2.fromOffset(16, 44),
 		textSize = 20,
 		align = Enum.TextXAlignment.Left,
 		color = Color3.fromRGB(90, 100, 120),

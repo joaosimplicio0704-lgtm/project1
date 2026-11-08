@@ -123,24 +123,9 @@ function ShopPanel.build(parentGui)
 	root.Visible = false
 	refs.root = root
 
-	local header = Instance.new("Frame")
-	header.Size = UDim2.new(1, 0, 0, 78)
-	header.BackgroundColor3 = Color3.fromRGB(130, 210, 130)
-	header.BorderSizePixel = 0
-	header.ZIndex = 26
-	header.Parent = root
-	Theme.corner(header, 28)
-
-	refs.title = Theme.label(root, {
-		text = "LOJA",
-		size = UDim2.new(1, 0, 0, 60),
-		position = UDim2.fromOffset(0, 8),
-		textSize = 40,
-		color = Color3.fromRGB(255, 255, 255),
-		strokeTransparency = 0,
-		strokeColor = Color3.fromRGB(60, 130, 60),
-		zIndex = 27,
-	})
+	-- titleTag devolve o TextLabel interno, então refs.title.Text continua
+	-- funcionando quando alterna entre LOJA e GEMAS.
+	refs.title = Theme.titleTag(root, "LOJA", { width = 190, offset = -26, zIndex = 25, textSize = 26 })
 
 	local close = Theme.button(root, {
 		text = "✕",

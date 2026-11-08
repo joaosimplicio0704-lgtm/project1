@@ -23,30 +23,30 @@
       "$className": "Lighting",
       "$properties": {
         "Ambient": [
-          0.588,
-          0.643,
-          0.729
+          0.4627450980392157,
+          0.5019607843137255,
+          0.5882352941176471
         ],
         "OutdoorAmbient": [
-          0.769,
-          0.824,
-          0.91
+          0.611764705882353,
+          0.6666666666666666,
+          0.7686274509803922
         ],
-        "Brightness": 3.1,
-        "ClockTime": 14.2,
+        "Brightness": 1.9,
+        "ClockTime": 15.4,
         "GeographicLatitude": -15,
         "GlobalShadows": true,
-        "EnvironmentDiffuseScale": 0.7,
-        "EnvironmentSpecularScale": 0.25,
-        "ShadowSoftness": 0.75,
-        "ExposureCompensation": 0.35,
+        "EnvironmentDiffuseScale": 0.45,
+        "EnvironmentSpecularScale": 0.12,
+        "ShadowSoftness": 0.55,
+        "ExposureCompensation": -0.25,
         "FogColor": [
-          0.776,
-          0.863,
-          0.965
+          0.7686274509803922,
+          0.8470588235294118,
+          0.9411764705882353
         ],
-        "FogStart": 700,
-        "FogEnd": 3400
+        "FogStart": 900,
+        "FogEnd": 4000
       }
     },
     "ReplicatedStorage": {

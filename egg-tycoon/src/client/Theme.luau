@@ -257,4 +257,128 @@ function Theme.makeDraggable(frame, handle)
 	end)
 end
 
+-- Clareia uma cor. Complementa o Style.darken/lighten do servidor: a UI não
+-- pode depender de shared/Style (que é do mundo), então tem o dela.
+function lighten(color, amount)
+	amount = amount or 0.25
+	return Color3.new(
+		math.min(1, color.R + (1 - color.R) * amount),
+		math.min(1, color.G + (1 - color.G) * amount),
+		math.min(1, color.B + (1 - color.B) * amount)
+	)
+end
+Theme.lighten = lighten
+
+---------------------------------------------------------------------------
+-- VOCABULÁRIO DAS REFERÊNCIAS (placa + cartão de item)
+---------------------------------------------------------------------------
+
+-- Placa de título: a plaquinha ESCURA que fica pendurada na borda de cima do
+-- painel, com o nome escrito em branco. É o detalhe que dá "loja de verdade"
+-- em vez de "formulário de programa". Aparece em todo painel da referência.
+function Theme.titleTag(parent, text, props)
+	props = props or {}
+	local tag = Instance.new("Frame")
+	tag.Name = props.name or "TitleTag"
+	tag.AnchorPoint = Vector2.new(0.5, 0)
+	tag.Position = UDim2.new(0.5, 0, 0, props.offset or -22)
+	tag.Size = UDim2.fromOffset(props.width or 220, props.height or 46)
+	tag.BackgroundColor3 = props.color or Color3.fromRGB(46, 46, 52)
+	tag.BorderSizePixel = 0
+	tag.ZIndex = (props.zIndex or 10) + 4
+	tag.Parent = parent
+
+	Theme.corner(tag, props.radius or 12)
+	Theme.stroke(tag, Color3.fromRGB(26, 26, 30), 3)
+
+	local textLabel = Theme.label(tag, {
+		text = text,
+		size = UDim2.fromScale(1, 1),
+		textSize = props.textSize or 24,
+		color = props.textColor or Color3.fromRGB(255, 255, 255),
+		strokeTransparency = 1,
+		zIndex = tag.ZIndex + 1,
+	})
+	-- devolve o LABEL, não o frame: o ShopPanel troca o texto entre LOJA e
+	-- GEMAS, e agora o texto mora dentro da placa.
+	return textLabel
+end
+
+-- Cartão de item: o quadrado escuro arredondado da loja, com um "medalhão"
+-- redondo no meio e o preço em botão verde embaixo.
+-- props: { title, icon (emoji), accent (cor do medalhão), price, onBuy }
+function Theme.itemCard(parent, props)
+	props = props or {}
+	local card = Instance.new("Frame")
+	card.Name = props.name or "ItemCard"
+	card.Size = props.size or UDim2.fromOffset(150, 176)
+	card.BackgroundColor3 = props.color or Color3.fromRGB(58, 58, 64)
+	card.BorderSizePixel = 0
+	card.ZIndex = props.zIndex or 12
+	card.LayoutOrder = props.layoutOrder or 0
+	card.Parent = parent
+
+	Theme.corner(card, 18)
+	Theme.stroke(card, Color3.fromRGB(30, 30, 34), 3)
+
+	if props.title then
+		Theme.label(card, {
+			text = props.title,
+			size = UDim2.new(1, -10, 0, 34),
+			position = UDim2.fromOffset(5, 6),
+			textSize = props.titleSize or 15,
+			color = Color3.fromRGB(255, 255, 255),
+			strokeTransparency = 0.15,
+			wrapped = true,
+			zIndex = card.ZIndex + 1,
+		})
+	end
+
+	-- medalhão: círculo com brilho no meio
+	local medal = Instance.new("Frame")
+	medal.Name = "Medal"
+	medal.AnchorPoint = Vector2.new(0.5, 0)
+	medal.Position = UDim2.new(0.5, 0, 0, 44)
+	medal.Size = UDim2.fromOffset(props.medal or 78, props.medal or 78)
+	medal.BackgroundColor3 = props.accent or Color3.fromRGB(120, 200, 120)
+	medal.BorderSizePixel = 0
+	medal.ZIndex = card.ZIndex + 1
+	medal.Parent = card
+	Theme.corner(medal, math.floor((props.medal or 78) / 2))
+	Theme.stroke(medal, Color3.fromRGB(30, 30, 34), 3)
+	if props.accent then
+		Theme.gradient(medal, Theme.lighten(props.accent, 0.35), props.accent)
+	end
+
+	Theme.label(medal, {
+		text = props.icon or "?",
+		size = UDim2.fromScale(1, 1),
+		textSize = props.iconSize or 34,
+		strokeTransparency = 1,
+		zIndex = medal.ZIndex + 1,
+	})
+
+	-- preço: botão verde com moeda, igual à referência
+	if props.price then
+		local buy = Theme.button(card, {
+			text = "⬤ " .. tostring(props.price),
+			size = UDim2.new(1, -16, 0, 34),
+			position = UDim2.new(0, 8, 1, -42),
+			color = Color3.fromRGB(120, 214, 90),
+			textSize = 19,
+			radius = 10,
+			zIndex = card.ZIndex + 2,
+			strokeThickness = 2,
+			shadow = false,
+		})
+		buy.TextXAlignment = Enum.TextXAlignment.Center
+		if props.onBuy then
+			buy.MouseButton1Click:Connect(props.onBuy)
+		end
+		card.Buy = buy
+	end
+
+	return card
+end
+
 return Theme

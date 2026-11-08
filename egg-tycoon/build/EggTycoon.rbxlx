@@ -3,30 +3,30 @@
     <Properties>
       <string name="Name">Lighting</string>
       <Color3 name="Ambient">
-        <R>0.588</R>
-        <G>0.643</G>
-        <B>0.729</B>
+        <R>0.4627451</R>
+        <G>0.5019608</G>
+        <B>0.5882353</B>
       </Color3>
-      <float name="Brightness">3.1</float>
-      <float name="ClockTime">14.2</float>
-      <float name="EnvironmentDiffuseScale">0.7</float>
-      <float name="EnvironmentSpecularScale">0.25</float>
-      <float name="ExposureCompensation">0.35</float>
+      <float name="Brightness">1.9</float>
+      <float name="ClockTime">15.4</float>
+      <float name="EnvironmentDiffuseScale">0.45</float>
+      <float name="EnvironmentSpecularScale">0.12</float>
+      <float name="ExposureCompensation">-0.25</float>
       <Color3 name="FogColor">
-        <R>0.776</R>
-        <G>0.863</G>
-        <B>0.965</B>
+        <R>0.76862746</R>
+        <G>0.84705883</G>
+        <B>0.9411765</B>
       </Color3>
-      <float name="FogEnd">3400</float>
-      <float name="FogStart">700</float>
+      <float name="FogEnd">4000</float>
+      <float name="FogStart">900</float>
       <float name="GeographicLatitude">-15</float>
       <bool name="GlobalShadows">true</bool>
       <Color3 name="OutdoorAmbient">
-        <R>0.769</R>
-        <G>0.824</G>
-        <B>0.91</B>
+        <R>0.6117647</R>
+        <G>0.6666667</G>
+        <B>0.76862746</B>
       </Color3>
-      <float name="ShadowSoftness">0.75</float>
+      <float name="ShadowSoftness">0.55</float>
     </Properties>
   </Item>
   <Item class="ReplicatedStorage" referent="1">
@@ -3526,19 +3526,35 @@ function World.build()
 	-- e Exposure 0.35 a ilha estourava — pedra virava branco puro, grama
 	-- virava neon e perdia todo o matiz. Cartoon é cor saturada e legível,
 	-- não luz forte.
-	Lighting.Ambient = Color3.fromRGB(122, 134, 154)
-	Lighting.OutdoorAmbient = Color3.fromRGB(168, 184, 206)
-	Lighting.Brightness = 2.0
-	Lighting.ClockTime = 14.2
+	-- SATURAÇÃO DE LUZ: o problema que o jogador viu na tela.
+	--
+	-- Três coisas somavam para lavar tudo em branco:
+	--   1. Brightness 2.0 + Exposure 0 = a luz do sol já ia no limite
+	--   2. as PointLights dos biomas (corrigidas acima, no buildBiome)
+	--   3. o Sol em ClockTime 14.2, quase a pino: face horizontal recebe
+	--      incidência máxima e é justamente o chão que o jogador olha.
+	--
+	-- Agora: sol mais baixo (17.5) e mais fraco, exposição levemente
+	-- NEGATIVA. Exposição negativa puxa o branco de volta para a cor, é o
+	-- ajuste que faz sombra existir e matiz aparecer. Cartoon não é imagem
+	-- estourada; é cor chapada com contraste legível.
+	-- O alvo NÃO é escurecer: é manter a cor legível. Escuro demais também é
+	-- ruim (some o matiz, vira sopa cinza). O que estourava era a SOMA:
+	-- sol forte + ambiente altíssimo + holofote na ilha. Tirei o holofote
+	-- (buildBiome), trouxe sol e ambiente para perto do padrão do Roblox.
+	Lighting.Ambient = Color3.fromRGB(118, 128, 150)
+	Lighting.OutdoorAmbient = Color3.fromRGB(156, 170, 196)
+	Lighting.Brightness = 1.9
+	Lighting.ClockTime = 15.4
 	Lighting.GeographicLatitude = -15
-	Lighting.EnvironmentDiffuseScale = 0.55
-	Lighting.EnvironmentSpecularScale = 0.2
+	Lighting.EnvironmentDiffuseScale = 0.45
+	Lighting.EnvironmentSpecularScale = 0.12
 	Lighting.GlobalShadows = true
-	Lighting.ShadowSoftness = 0.75
-	Lighting.ExposureCompensation = 0.0
-	Lighting.FogColor = Color3.fromRGB(198, 220, 246)
-	Lighting.FogStart = 700
-	Lighting.FogEnd = 3400
+	Lighting.ShadowSoftness = 0.55
+	Lighting.ExposureCompensation = -0.25
+	Lighting.FogColor = Color3.fromRGB(196, 216, 240)
+	Lighting.FogStart = 900
+	Lighting.FogEnd = 4000
 
 	-- O céu não é opcional: sem um Sky o horizonte fica cinza e as ilhas
 	-- distantes somem. Nada de asset pago — o Sky padrão do Roblox já serve.
@@ -3555,9 +3571,12 @@ function World.build()
 
 	local existing = Lighting:FindFirstChildOfClass("Atmosphere")
 	local atmosphere = existing or Instance.new("Atmosphere")
-	atmosphere.Density = 0.22
-	atmosphere.Haze = 0.55
-	atmosphere.Glare = 0.08
+	-- Haze alto lava tudo que está longe e Glare cria aquele "borrão de
+	-- sol" na tela. Os dois estavam altos demais para um jogo onde a criança
+	-- precisa LER o mapa.
+	atmosphere.Density = 0.18
+	atmosphere.Haze = 0.30
+	atmosphere.Glare = 0.0
 	atmosphere.Color = Color3.fromRGB(210, 226, 245)
 	atmosphere.Decay = Color3.fromRGB(130, 150, 175)
 	atmosphere.Parent = Lighting
@@ -6160,16 +6179,33 @@ function World.buildBiome(biome, portalPosition, parent)
 	local ambientColor = Color3.fromRGB(spec.ambience[1], spec.ambience[2], spec.ambience[3])
 	local glowColor = Color3.fromRGB(spec.glow[1], spec.glow[2], spec.glow[3])
 
+	-- A LUZ QUE LAVAVA A ILHA.
+	--
+	-- Antes isto era uma PointLight com Range 220-270 e Brightness 1.2-1.9,
+	-- pendurada 46 studs acima do chão. Range de 250 cobre a ilha inteira a
+	-- partir de um ponto só: a face virada para ela recebe a luz de frente e
+	-- satura em branco. Era EXATAMENTE o "tudo branco" que aparece na tela
+	-- do jogador — e no meu render não aparecia porque o preview limitava o
+	-- ganho em 1.0, então ele mentia dizendo que estava tudo bem.
+	--
+	-- Duas correções:
+	--   1. Range curto e altura menor: a luz ilumina o chão ao redor em vez
+	--      de atravessar a ilha.
+	--   2. Brilho baixo. O papel desta luz é dar TOM (a floresta mais verde,
+	--      o deserto mais quente), não clarear. Tom se dá com cor e pouca
+	--      intensidade; intensidade alta vira branco e apaga o matiz.
 	local sun = Instance.new("PointLight")
 	sun.Name = "BiomeLight"
-	sun.Brightness = spec.intensity
-	sun.Range = spec.range
+	sun.Brightness = math.min(spec.intensity, 0.55)
+	-- 0.42 do raio: chega na metade da ilha, não na borda de fora. Ilha de
+	-- raio 105 fica com alcance ~44 — luz de ambiente, não holofote.
+	sun.Range = math.max(34, biome.radius * 0.42)
 	sun.Color = ambientColor
 	sun.Shadows = false
 	sun.Parent = part({
 		Name = "LightAnchor",
 		Size = Vector3.new(2, 2, 2),
-		Position = center + Vector3.new(0, groundY + 46, 0),
+		Position = center + Vector3.new(0, groundY + 22, 0),
 		Color = glowColor,
 		Material = Enum.Material.Neon,
 		Transparency = 1,
@@ -7197,24 +7233,8 @@ function EggPanel.build(parentGui)
 	refs.root = root
 
 	-- cabeçalho com título estilo "Ovos"
-	local header = Instance.new("Frame")
-	header.Size = UDim2.new(1, 0, 0, 78)
-	header.BackgroundColor3 = Color3.fromRGB(255, 196, 90)
-	header.BorderSizePixel = 0
-	header.ZIndex = 26
-	header.Parent = root
-	Theme.corner(header, 28)
 
-	local title = Theme.label(root, {
-		text = "OVOS",
-		size = UDim2.new(1, 0, 0, 60),
-		position = UDim2.fromOffset(0, 8),
-		textSize = 44,
-		color = Color3.fromRGB(255, 255, 255),
-		strokeTransparency = 0,
-		strokeColor = Color3.fromRGB(190, 120, 30),
-		zIndex = 27,
-	})
+	local title = Theme.titleTag(root, "OVOS", { width = 190, offset = -26, zIndex = 25, textSize = 26 })
 
 	local close = Theme.button(root, {
 		text = "✕",
@@ -7770,7 +7790,7 @@ local function buildRow(parent, index)
 	local row = Instance.new("Frame")
 	row.Name = "MineRow" .. index
 	row.Size = UDim2.new(1, -32, 0, ROW_H)
-	row.Position = UDim2.fromOffset(16, 96 + (index - 1) * (ROW_H + ROW_GAP))
+	row.Position = UDim2.fromOffset(16, 78 + (index - 1) * (ROW_H + ROW_GAP))
 	row.BackgroundColor3 = Color3.fromRGB(246, 250, 255)
 	row.BorderSizePixel = 0
 	row.ZIndex = 26
@@ -7851,7 +7871,7 @@ function MinePanel.build(parentGui)
 
 	local root = Theme.panel(gui, {
 		name = "MinePanel",
-		size = UDim2.fromOffset(620, 620),
+		size = UDim2.fromOffset(620, 600),
 		position = UDim2.new(0.5, 0, 0.5, 0),
 		color = Theme.white,
 		radius = 30,
@@ -7860,24 +7880,9 @@ function MinePanel.build(parentGui)
 	root.Visible = false
 	refs.root = root
 
-	local header = Instance.new("Frame")
-	header.Size = UDim2.new(1, 0, 0, 78)
-	header.BackgroundColor3 = Color3.fromRGB(120, 200, 255)
-	header.BorderSizePixel = 0
-	header.ZIndex = 26
-	header.Parent = root
-	Theme.corner(header, 28)
-
-	Theme.label(root, {
-		text = "⛏️ MINA DOS PETS",
-		size = UDim2.new(1, 0, 0, 60),
-		position = UDim2.fromOffset(0, 8),
-		textSize = 36,
-		color = Color3.fromRGB(255, 255, 255),
-		strokeTransparency = 0,
-		strokeColor = Color3.fromRGB(40, 100, 160),
-		zIndex = 27,
-	})
+	-- placa pendurada, como nas referências: o nome fica FORA do painel,
+	-- numa plaquinha escura. Dá a sensação de loja/postinho de verdade.
+	Theme.titleTag(root, "⛏️ MINA DOS PETS", { width = 300, offset = -26, zIndex = 25 })
 
 	local close = Theme.button(root, {
 		text = "✕",
@@ -7896,7 +7901,7 @@ function MinePanel.build(parentGui)
 	refs.best = Theme.label(root, {
 		text = "melhor achado: —",
 		size = UDim2.new(1, -32, 0, 26),
-		position = UDim2.fromOffset(16, 62),
+		position = UDim2.fromOffset(16, 44),
 		textSize = 20,
 		align = Enum.TextXAlignment.Left,
 		color = Color3.fromRGB(90, 100, 120),
@@ -8296,24 +8301,7 @@ function PetsPanel.build(parentGui)
 	root.Visible = false
 	refs.root = root
 
-	local header = Instance.new("Frame")
-	header.Size = UDim2.new(1, 0, 0, 78)
-	header.BackgroundColor3 = Color3.fromRGB(160, 210, 255)
-	header.BorderSizePixel = 0
-	header.ZIndex = 26
-	header.Parent = root
-	Theme.corner(header, 28)
-
-	Theme.label(root, {
-		text = "MEUS PETS",
-		size = UDim2.new(1, 0, 0, 60),
-		position = UDim2.fromOffset(0, 8),
-		textSize = 40,
-		color = Color3.fromRGB(255, 255, 255),
-		strokeTransparency = 0,
-		strokeColor = Color3.fromRGB(50, 110, 180),
-		zIndex = 27,
-	})
+	Theme.titleTag(root, "MEUS PETS", { width = 240, offset = -26, zIndex = 24 })
 
 	local close = Theme.button(root, {
 		text = "✕",
@@ -8659,24 +8647,9 @@ function ShopPanel.build(parentGui)
 	root.Visible = false
 	refs.root = root
 
-	local header = Instance.new("Frame")
-	header.Size = UDim2.new(1, 0, 0, 78)
-	header.BackgroundColor3 = Color3.fromRGB(130, 210, 130)
-	header.BorderSizePixel = 0
-	header.ZIndex = 26
-	header.Parent = root
-	Theme.corner(header, 28)
-
-	refs.title = Theme.label(root, {
-		text = "LOJA",
-		size = UDim2.new(1, 0, 0, 60),
-		position = UDim2.fromOffset(0, 8),
-		textSize = 40,
-		color = Color3.fromRGB(255, 255, 255),
-		strokeTransparency = 0,
-		strokeColor = Color3.fromRGB(60, 130, 60),
-		zIndex = 27,
-	})
+	-- titleTag devolve o TextLabel interno, então refs.title.Text continua
+	-- funcionando quando alterna entre LOJA e GEMAS.
+	refs.title = Theme.titleTag(root, "LOJA", { width = 190, offset = -26, zIndex = 25, textSize = 26 })
 
 	local close = Theme.button(root, {
 		text = "✕",
@@ -9336,6 +9309,130 @@ function Theme.makeDraggable(frame, handle)
 				UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 		end
 	end)
+end
+
+-- Clareia uma cor. Complementa o Style.darken/lighten do servidor: a UI não
+-- pode depender de shared/Style (que é do mundo), então tem o dela.
+function lighten(color, amount)
+	amount = amount or 0.25
+	return Color3.new(
+		math.min(1, color.R + (1 - color.R) * amount),
+		math.min(1, color.G + (1 - color.G) * amount),
+		math.min(1, color.B + (1 - color.B) * amount)
+	)
+end
+Theme.lighten = lighten
+
+---------------------------------------------------------------------------
+-- VOCABULÁRIO DAS REFERÊNCIAS (placa + cartão de item)
+---------------------------------------------------------------------------
+
+-- Placa de título: a plaquinha ESCURA que fica pendurada na borda de cima do
+-- painel, com o nome escrito em branco. É o detalhe que dá "loja de verdade"
+-- em vez de "formulário de programa". Aparece em todo painel da referência.
+function Theme.titleTag(parent, text, props)
+	props = props or {}
+	local tag = Instance.new("Frame")
+	tag.Name = props.name or "TitleTag"
+	tag.AnchorPoint = Vector2.new(0.5, 0)
+	tag.Position = UDim2.new(0.5, 0, 0, props.offset or -22)
+	tag.Size = UDim2.fromOffset(props.width or 220, props.height or 46)
+	tag.BackgroundColor3 = props.color or Color3.fromRGB(46, 46, 52)
+	tag.BorderSizePixel = 0
+	tag.ZIndex = (props.zIndex or 10) + 4
+	tag.Parent = parent
+
+	Theme.corner(tag, props.radius or 12)
+	Theme.stroke(tag, Color3.fromRGB(26, 26, 30), 3)
+
+	local textLabel = Theme.label(tag, {
+		text = text,
+		size = UDim2.fromScale(1, 1),
+		textSize = props.textSize or 24,
+		color = props.textColor or Color3.fromRGB(255, 255, 255),
+		strokeTransparency = 1,
+		zIndex = tag.ZIndex + 1,
+	})
+	-- devolve o LABEL, não o frame: o ShopPanel troca o texto entre LOJA e
+	-- GEMAS, e agora o texto mora dentro da placa.
+	return textLabel
+end
+
+-- Cartão de item: o quadrado escuro arredondado da loja, com um "medalhão"
+-- redondo no meio e o preço em botão verde embaixo.
+-- props: { title, icon (emoji), accent (cor do medalhão), price, onBuy }
+function Theme.itemCard(parent, props)
+	props = props or {}
+	local card = Instance.new("Frame")
+	card.Name = props.name or "ItemCard"
+	card.Size = props.size or UDim2.fromOffset(150, 176)
+	card.BackgroundColor3 = props.color or Color3.fromRGB(58, 58, 64)
+	card.BorderSizePixel = 0
+	card.ZIndex = props.zIndex or 12
+	card.LayoutOrder = props.layoutOrder or 0
+	card.Parent = parent
+
+	Theme.corner(card, 18)
+	Theme.stroke(card, Color3.fromRGB(30, 30, 34), 3)
+
+	if props.title then
+		Theme.label(card, {
+			text = props.title,
+			size = UDim2.new(1, -10, 0, 34),
+			position = UDim2.fromOffset(5, 6),
+			textSize = props.titleSize or 15,
+			color = Color3.fromRGB(255, 255, 255),
+			strokeTransparency = 0.15,
+			wrapped = true,
+			zIndex = card.ZIndex + 1,
+		})
+	end
+
+	-- medalhão: círculo com brilho no meio
+	local medal = Instance.new("Frame")
+	medal.Name = "Medal"
+	medal.AnchorPoint = Vector2.new(0.5, 0)
+	medal.Position = UDim2.new(0.5, 0, 0, 44)
+	medal.Size = UDim2.fromOffset(props.medal or 78, props.medal or 78)
+	medal.BackgroundColor3 = props.accent or Color3.fromRGB(120, 200, 120)
+	medal.BorderSizePixel = 0
+	medal.ZIndex = card.ZIndex + 1
+	medal.Parent = card
+	Theme.corner(medal, math.floor((props.medal or 78) / 2))
+	Theme.stroke(medal, Color3.fromRGB(30, 30, 34), 3)
+	if props.accent then
+		Theme.gradient(medal, Theme.lighten(props.accent, 0.35), props.accent)
+	end
+
+	Theme.label(medal, {
+		text = props.icon or "?",
+		size = UDim2.fromScale(1, 1),
+		textSize = props.iconSize or 34,
+		strokeTransparency = 1,
+		zIndex = medal.ZIndex + 1,
+	})
+
+	-- preço: botão verde com moeda, igual à referência
+	if props.price then
+		local buy = Theme.button(card, {
+			text = "⬤ " .. tostring(props.price),
+			size = UDim2.new(1, -16, 0, 34),
+			position = UDim2.new(0, 8, 1, -42),
+			color = Color3.fromRGB(120, 214, 90),
+			textSize = 19,
+			radius = 10,
+			zIndex = card.ZIndex + 2,
+			strokeThickness = 2,
+			shadow = false,
+		})
+		buy.TextXAlignment = Enum.TextXAlignment.Center
+		if props.onBuy then
+			buy.MouseButton1Click:Connect(props.onBuy)
+		end
+		card.Buy = buy
+	end
+
+	return card
 end
 
 return Theme
@@ -77934,7 +78031,7 @@ return WorldUI
               <bool name="Anchored">true</bool>
               <CoordinateFrame name="CFrame">
                 <X>380</X>
-                <Y>50.8</Y>
+                <Y>26.8</Y>
                 <Z>0</Z>
                 <R00>1</R00>
                 <R01>0</R01>
@@ -77959,9 +78056,9 @@ return WorldUI
             <Item class="PointLight" referent="2531">
               <Properties>
                 <string name="Name">BiomeLight</string>
-                <float name="Brightness">1.5</float>
+                <float name="Brightness">0.55</float>
                 <Color3uint8 name="Color3uint8">14087935</Color3uint8>
-                <float name="Range">260</float>
+                <float name="Range">44.1</float>
               </Properties>
             </Item>
           </Item>
@@ -130763,7 +130860,7 @@ return WorldUI
               <bool name="Anchored">true</bool>
               <CoordinateFrame name="CFrame">
                 <X>190</X>
-                <Y>57.2</Y>
+                <Y>33.2</Y>
                 <Z>329</Z>
                 <R00>1</R00>
                 <R01>0</R01>
@@ -130788,9 +130885,9 @@ return WorldUI
             <Item class="PointLight" referent="4383">
               <Properties>
                 <string name="Name">BiomeLight</string>
-                <float name="Brightness">1.2</float>
+                <float name="Brightness">0.55</float>
                 <Color3uint8 name="Color3uint8">12381380</Color3uint8>
-                <float name="Range">250</float>
+                <float name="Range">44.1</float>
               </Properties>
             </Item>
           </Item>
@@ -167793,7 +167890,7 @@ return WorldUI
               <bool name="Anchored">true</bool>
               <CoordinateFrame name="CFrame">
                 <X>-190</X>
-                <Y>50.8</Y>
+                <Y>26.8</Y>
                 <Z>329</Z>
                 <R00>1</R00>
                 <R01>0</R01>
@@ -167818,9 +167915,9 @@ return WorldUI
             <Item class="PointLight" referent="5677">
               <Properties>
                 <string name="Name">BiomeLight</string>
-                <float name="Brightness">1.8</float>
+                <float name="Brightness">0.55</float>
                 <Color3uint8 name="Color3uint8">12249343</Color3uint8>
-                <float name="Range">270</float>
+                <float name="Range">44.1</float>
               </Properties>
             </Item>
           </Item>
@@ -231727,7 +231824,7 @@ return WorldUI
               <bool name="Anchored">true</bool>
               <CoordinateFrame name="CFrame">
                 <X>-380</X>
-                <Y>63.6</Y>
+                <Y>39.6</Y>
                 <Z>0</Z>
                 <R00>1</R00>
                 <R01>0</R01>
@@ -231752,9 +231849,9 @@ return WorldUI
             <Item class="PointLight" referent="7894">
               <Properties>
                 <string name="Name">BiomeLight</string>
-                <float name="Brightness">1.5</float>
+                <float name="Brightness">0.55</float>
                 <Color3uint8 name="Color3uint8">16772304</Color3uint8>
-                <float name="Range">260</float>
+                <float name="Range">44.1</float>
               </Properties>
             </Item>
           </Item>
@@ -292067,7 +292164,7 @@ return WorldUI
               <bool name="Anchored">true</bool>
               <CoordinateFrame name="CFrame">
                 <X>-190</X>
-                <Y>57.2</Y>
+                <Y>33.2</Y>
                 <Z>-329</Z>
                 <R00>1</R00>
                 <R01>0</R01>
@@ -292092,9 +292189,9 @@ return WorldUI
             <Item class="PointLight" referent="10001">
               <Properties>
                 <string name="Name">BiomeLight</string>
-                <float name="Brightness">1.3</float>
+                <float name="Brightness">0.55</float>
                 <Color3uint8 name="Color3uint8">11695234</Color3uint8>
-                <float name="Range">240</float>
+                <float name="Range">44.1</float>
               </Properties>
             </Item>
           </Item>
@@ -335177,7 +335274,7 @@ return WorldUI
               <bool name="Anchored">true</bool>
               <CoordinateFrame name="CFrame">
                 <X>190</X>
-                <Y>54</Y>
+                <Y>30</Y>
                 <Z>-329</Z>
                 <R00>1</R00>
                 <R01>0</R01>
@@ -335202,9 +335299,9 @@ return WorldUI
             <Item class="PointLight" referent="11506">
               <Properties>
                 <string name="Name">BiomeLight</string>
-                <float name="Brightness">1.6</float>
+                <float name="Brightness">0.55</float>
                 <Color3uint8 name="Color3uint8">9883391</Color3uint8>
-                <float name="Range">250</float>
+                <float name="Range">44.1</float>
               </Properties>
             </Item>
           </Item>
@@ -371830,7 +371927,7 @@ return WorldUI
               <bool name="Anchored">true</bool>
               <CoordinateFrame name="CFrame">
                 <X>0</X>
-                <Y>168.8</Y>
+                <Y>144.8</Y>
                 <Z>0</Z>
                 <R00>1</R00>
                 <R01>0</R01>
@@ -371855,9 +371952,9 @@ return WorldUI
             <Item class="PointLight" referent="12793">
               <Properties>
                 <string name="Name">BiomeLight</string>
-                <float name="Brightness">1.9</float>
+                <float name="Brightness">0.55</float>
                 <Color3uint8 name="Color3uint8">16752818</Color3uint8>
-                <float name="Range">220</float>
+                <float name="Range">34.4</float>
               </Properties>
             </Item>
           </Item>

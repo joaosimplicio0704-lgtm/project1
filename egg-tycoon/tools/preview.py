@@ -188,14 +188,20 @@ def lighting_gain(lighting):
         return 1.0
     brightness = lighting.get("Brightness", 2.0)
     exposure = lighting.get("ExposureCompensation", 0.0)
-    # Referência neutra: Brightness 2.0 + Exposure 0.0 = 1.0.
+    # Referência neutra = PADRÃO DO ROBLOX: Brightness 2.0 + Exposure 0.0 =
+    # 1.0. Ancorar no padrão da engine é o único jeito de o número significar
+    # algo: ganho 1.0 é "o jogo parece o Roblox normal".
     #
-    # O ganho é limitado a 1.0 DE PROPÓSITO. A cor da peça já é a cor final:
-    # multiplicar por mais de 1 só serve para estourar para branco, e é
-    # exatamente isso que eu quero detectar no preview. Ganho > 1 existia
-    # antes e fazia toda ilha parecer lavada sem eu conseguir ver a causa.
-    raw = (brightness / 2.0) * (1.0 + max(-0.5, exposure))
-    return max(0.35, min(1.0, raw))
+    # AQUI ESTAVA O MEU ERRO: eu limitava o ganho em 1.0 "para não estourar",
+    # e com isso o render nunca mostrava a saturação. O jogo de verdade
+    # estourava em branco na tela do jogador enquanto o preview dizia que
+    # estava tudo certo. Um preview que não pode mostrar o defeito não serve
+    # para validar nada.
+    #
+    # Agora o ganho é livre na parte de cima: se a luz do build estiver
+    # forte, o render ESTOURA igual ao jogo, e o problema aparece antes de
+    # eu commitar.
+    return max(0.25, min(3.0, (brightness / 2.0) * (1.0 + exposure)))
 
 
 def render(parts, out_path, yaw=40, pitch=30, width=1600, height=900, label=None,
@@ -275,6 +281,8 @@ def render(parts, out_path, yaw=40, pitch=30, width=1600, height=900, label=None
 
         # O ganho vem do Lighting do build (ver lighting_gain).
         # Neon fica de fora: brilha sozinho, não depende do sol.
+        # O shade já trava em 255: com ganho alto, a cor vira branco puro
+        # exatamente como no Roblox.
         top = shade(base, 1.08 if glow else 1.02 * gain)
         left = shade(base, 0.86 if glow else 0.74 * gain)
         right = shade(base, 0.76 if glow else 0.56 * gain)

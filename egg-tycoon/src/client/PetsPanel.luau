@@ -215,24 +215,7 @@ function PetsPanel.build(parentGui)
 	root.Visible = false
 	refs.root = root
 
-	local header = Instance.new("Frame")
-	header.Size = UDim2.new(1, 0, 0, 78)
-	header.BackgroundColor3 = Color3.fromRGB(160, 210, 255)
-	header.BorderSizePixel = 0
-	header.ZIndex = 26
-	header.Parent = root
-	Theme.corner(header, 28)
-
-	Theme.label(root, {
-		text = "MEUS PETS",
-		size = UDim2.new(1, 0, 0, 60),
-		position = UDim2.fromOffset(0, 8),
-		textSize = 40,
-		color = Color3.fromRGB(255, 255, 255),
-		strokeTransparency = 0,
-		strokeColor = Color3.fromRGB(50, 110, 180),
-		zIndex = 27,
-	})
+	Theme.titleTag(root, "MEUS PETS", { width = 240, offset = -26, zIndex = 24 })
 
 	local close = Theme.button(root, {
 		text = "✕",

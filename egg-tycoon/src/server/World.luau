@@ -99,19 +99,35 @@ function World.build()
 	-- e Exposure 0.35 a ilha estourava — pedra virava branco puro, grama
 	-- virava neon e perdia todo o matiz. Cartoon é cor saturada e legível,
 	-- não luz forte.
-	Lighting.Ambient = Color3.fromRGB(122, 134, 154)
-	Lighting.OutdoorAmbient = Color3.fromRGB(168, 184, 206)
-	Lighting.Brightness = 2.0
-	Lighting.ClockTime = 14.2
+	-- SATURAÇÃO DE LUZ: o problema que o jogador viu na tela.
+	--
+	-- Três coisas somavam para lavar tudo em branco:
+	--   1. Brightness 2.0 + Exposure 0 = a luz do sol já ia no limite
+	--   2. as PointLights dos biomas (corrigidas acima, no buildBiome)
+	--   3. o Sol em ClockTime 14.2, quase a pino: face horizontal recebe
+	--      incidência máxima e é justamente o chão que o jogador olha.
+	--
+	-- Agora: sol mais baixo (17.5) e mais fraco, exposição levemente
+	-- NEGATIVA. Exposição negativa puxa o branco de volta para a cor, é o
+	-- ajuste que faz sombra existir e matiz aparecer. Cartoon não é imagem
+	-- estourada; é cor chapada com contraste legível.
+	-- O alvo NÃO é escurecer: é manter a cor legível. Escuro demais também é
+	-- ruim (some o matiz, vira sopa cinza). O que estourava era a SOMA:
+	-- sol forte + ambiente altíssimo + holofote na ilha. Tirei o holofote
+	-- (buildBiome), trouxe sol e ambiente para perto do padrão do Roblox.
+	Lighting.Ambient = Color3.fromRGB(118, 128, 150)
+	Lighting.OutdoorAmbient = Color3.fromRGB(156, 170, 196)
+	Lighting.Brightness = 1.9
+	Lighting.ClockTime = 15.4
 	Lighting.GeographicLatitude = -15
-	Lighting.EnvironmentDiffuseScale = 0.55
-	Lighting.EnvironmentSpecularScale = 0.2
+	Lighting.EnvironmentDiffuseScale = 0.45
+	Lighting.EnvironmentSpecularScale = 0.12
 	Lighting.GlobalShadows = true
-	Lighting.ShadowSoftness = 0.75
-	Lighting.ExposureCompensation = 0.0
-	Lighting.FogColor = Color3.fromRGB(198, 220, 246)
-	Lighting.FogStart = 700
-	Lighting.FogEnd = 3400
+	Lighting.ShadowSoftness = 0.55
+	Lighting.ExposureCompensation = -0.25
+	Lighting.FogColor = Color3.fromRGB(196, 216, 240)
+	Lighting.FogStart = 900
+	Lighting.FogEnd = 4000
 
 	-- O céu não é opcional: sem um Sky o horizonte fica cinza e as ilhas
 	-- distantes somem. Nada de asset pago — o Sky padrão do Roblox já serve.
@@ -128,9 +144,12 @@ function World.build()
 
 	local existing = Lighting:FindFirstChildOfClass("Atmosphere")
 	local atmosphere = existing or Instance.new("Atmosphere")
-	atmosphere.Density = 0.22
-	atmosphere.Haze = 0.55
-	atmosphere.Glare = 0.08
+	-- Haze alto lava tudo que está longe e Glare cria aquele "borrão de
+	-- sol" na tela. Os dois estavam altos demais para um jogo onde a criança
+	-- precisa LER o mapa.
+	atmosphere.Density = 0.18
+	atmosphere.Haze = 0.30
+	atmosphere.Glare = 0.0
 	atmosphere.Color = Color3.fromRGB(210, 226, 245)
 	atmosphere.Decay = Color3.fromRGB(130, 150, 175)
 	atmosphere.Parent = Lighting
@@ -2733,16 +2752,33 @@ function World.buildBiome(biome, portalPosition, parent)
 	local ambientColor = Color3.fromRGB(spec.ambience[1], spec.ambience[2], spec.ambience[3])
 	local glowColor = Color3.fromRGB(spec.glow[1], spec.glow[2], spec.glow[3])
 
+	-- A LUZ QUE LAVAVA A ILHA.
+	--
+	-- Antes isto era uma PointLight com Range 220-270 e Brightness 1.2-1.9,
+	-- pendurada 46 studs acima do chão. Range de 250 cobre a ilha inteira a
+	-- partir de um ponto só: a face virada para ela recebe a luz de frente e
+	-- satura em branco. Era EXATAMENTE o "tudo branco" que aparece na tela
+	-- do jogador — e no meu render não aparecia porque o preview limitava o
+	-- ganho em 1.0, então ele mentia dizendo que estava tudo bem.
+	--
+	-- Duas correções:
+	--   1. Range curto e altura menor: a luz ilumina o chão ao redor em vez
+	--      de atravessar a ilha.
+	--   2. Brilho baixo. O papel desta luz é dar TOM (a floresta mais verde,
+	--      o deserto mais quente), não clarear. Tom se dá com cor e pouca
+	--      intensidade; intensidade alta vira branco e apaga o matiz.
 	local sun = Instance.new("PointLight")
 	sun.Name = "BiomeLight"
-	sun.Brightness = spec.intensity
-	sun.Range = spec.range
+	sun.Brightness = math.min(spec.intensity, 0.55)
+	-- 0.42 do raio: chega na metade da ilha, não na borda de fora. Ilha de
+	-- raio 105 fica com alcance ~44 — luz de ambiente, não holofote.
+	sun.Range = math.max(34, biome.radius * 0.42)
 	sun.Color = ambientColor
 	sun.Shadows = false
 	sun.Parent = part({
 		Name = "LightAnchor",
 		Size = Vector3.new(2, 2, 2),
-		Position = center + Vector3.new(0, groundY + 46, 0),
+		Position = center + Vector3.new(0, groundY + 22, 0),
 		Color = glowColor,
 		Material = Enum.Material.Neon,
 		Transparency = 1,
