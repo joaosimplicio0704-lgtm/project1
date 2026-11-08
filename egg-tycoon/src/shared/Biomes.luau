@@ -6,9 +6,12 @@
 local Biomes = {}
 
 Biomes.HubRadius = 96
-Biomes.RingDistance = 312
-Biomes.IslandRadius = 122
-Biomes.SkyHeight = 236
+-- Raio do anel das ilhas. Com 6 ilhas num anel de 520, os centros ficam a 520
+-- studs um do outro: da borda de uma ilha até a próxima sobram ~276 studs. Com
+-- o valor antigo (312) o vão era de 68 — as ilhas pareciam coladas.
+Biomes.RingDistance = 520
+Biomes.IslandRadius = 140
+Biomes.SkyHeight = 300
 
 -- kind: "free" nunca bloqueia | "hatched" precisa ter chovido N ovos
 --       | "rebirths" precisa de N renascimentos
@@ -21,8 +24,8 @@ Biomes.List = {
 		unlock = { kind = "free", value = 0 },
 		blurb = "Onde todo mundo começa. Grama macia e flores.",
 		theme = "meadow",
-		center = { x = 312, y = 0, z = 0 },
-		radius = 122,
+		center = { x = 520, y = 0, z = 0 },
+		radius = 140,
 		colors = {
 			grass = { 116, 208, 96 },
 			grassDark = { 84, 172, 76 },
@@ -30,6 +33,14 @@ Biomes.List = {
 			sand = { 240, 226, 190 },
 			accent = { 255, 150, 190 },
 			water = { 96, 210, 236 },
+		},
+		light = {
+			ambience = { 255, 246, 214 },
+			glow = { 255, 236, 180 },
+			intensity = 2.6,
+			range = 260,
+			sky = { 168, 214, 255 },
+			haze = 0.15,
 		},
 		height = { base = 3, amp = 9, scale = 0.055, ridged = false, detail = 4 },
 		decor = { trees = 26, rocks = 14, flowers = 44, crystals = 0 },
@@ -42,8 +53,8 @@ Biomes.List = {
 		unlock = { kind = "hatched", value = 3 },
 		blurb = "Árvores gigantes e cogumelos que brilham.",
 		theme = "forest",
-		center = { x = 156, y = 0, z = 270 },
-		radius = 122,
+		center = { x = 260, y = 0, z = 450 },
+		radius = 140,
 		colors = {
 			grass = { 74, 168, 92 },
 			grassDark = { 48, 128, 72 },
@@ -51,6 +62,14 @@ Biomes.List = {
 			sand = { 214, 206, 168 },
 			accent = { 130, 235, 150 },
 			water = { 72, 176, 168 },
+		},
+		light = {
+			ambience = { 196, 236, 188 },
+			glow = { 168, 255, 160 },
+			intensity = 2.0,
+			range = 250,
+			sky = { 130, 186, 150 },
+			haze = 0.32,
 		},
 		height = { base = 4, amp = 22, scale = 0.05, ridged = false, detail = 5 },
 		decor = { trees = 54, rocks = 16, flowers = 20, crystals = 0 },
@@ -63,8 +82,8 @@ Biomes.List = {
 		unlock = { kind = "rebirths", value = 1 },
 		blurb = "Dunas, obeliscos e ruínas soterradas.",
 		theme = "desert",
-		center = { x = -155, y = 0, z = 270 },
-		radius = 122,
+		center = { x = -260, y = 0, z = 450 },
+		radius = 140,
 		colors = {
 			grass = { 236, 208, 150 },
 			grassDark = { 214, 178, 116 },
@@ -72,6 +91,14 @@ Biomes.List = {
 			sand = { 246, 226, 176 },
 			accent = { 255, 196, 90 },
 			water = { 120, 220, 232 },
+		},
+		light = {
+			ambience = { 255, 232, 186 },
+			glow = { 255, 200, 110 },
+			intensity = 3.2,
+			range = 270,
+			sky = { 255, 214, 160 },
+			haze = 0.22,
 		},
 		height = { base = 2, amp = 14, scale = 0.04, ridged = false, detail = 4 },
 		decor = { trees = 6, rocks = 12, flowers = 0, crystals = 8 },
@@ -84,8 +111,8 @@ Biomes.List = {
 		unlock = { kind = "rebirths", value = 2 },
 		blurb = "Montanhas de gelo e pinheiros nevados.",
 		theme = "ice",
-		center = { x = -312, y = 0, z = 0 },
-		radius = 122,
+		center = { x = -520, y = 0, z = 0 },
+		radius = 140,
 		colors = {
 			grass = { 232, 246, 255 },
 			grassDark = { 196, 226, 248 },
@@ -93,6 +120,14 @@ Biomes.List = {
 			sand = { 240, 248, 255 },
 			accent = { 140, 220, 255 },
 			water = { 156, 224, 246 },
+		},
+		light = {
+			ambience = { 208, 236, 255 },
+			glow = { 170, 224, 255 },
+			intensity = 2.6,
+			range = 260,
+			sky = { 150, 196, 240 },
+			haze = 0.18,
 		},
 		height = { base = 5, amp = 46, scale = 0.045, ridged = true, detail = 6 },
 		decor = { trees = 30, rocks = 18, flowers = 0, crystals = 14 },
@@ -105,8 +140,8 @@ Biomes.List = {
 		unlock = { kind = "rebirths", value = 3 },
 		blurb = "Pedra escura, névoa roxa e obeliscos.",
 		theme = "shadow",
-		center = { x = -156, y = 0, z = -270 },
-		radius = 122,
+		center = { x = -260, y = 0, z = -450 },
+		radius = 140,
 		colors = {
 			grass = { 96, 86, 130 },
 			grassDark = { 66, 58, 98 },
@@ -114,6 +149,14 @@ Biomes.List = {
 			sand = { 120, 110, 150 },
 			accent = { 178, 120, 245 },
 			water = { 90, 80, 140 },
+		},
+		light = {
+			ambience = { 130, 116, 178 },
+			glow = { 178, 120, 255 },
+			intensity = 2.2,
+			range = 240,
+			sky = { 66, 58, 104 },
+			haze = 0.42,
 		},
 		height = { base = 3, amp = 30, scale = 0.055, ridged = true, detail = 5 },
 		decor = { trees = 18, rocks = 22, flowers = 0, crystals = 20 },
@@ -126,8 +169,8 @@ Biomes.List = {
 		unlock = { kind = "rebirths", value = 4 },
 		blurb = "Abóboras gigantes, névoa laranja e fantasmas.",
 		theme = "halloween",
-		center = { x = 156, y = 0, z = -270 },
-		radius = 122,
+		center = { x = 260, y = 0, z = -450 },
+		radius = 140,
 		colors = {
 			grass = { 152, 176, 96 },
 			grassDark = { 108, 132, 66 },
@@ -135,6 +178,14 @@ Biomes.List = {
 			sand = { 196, 168, 120 },
 			accent = { 255, 140, 50 },
 			water = { 110, 150, 120 },
+		},
+		light = {
+			ambience = { 255, 206, 150 },
+			glow = { 255, 140, 50 },
+			intensity = 2.8,
+			range = 250,
+			sky = { 120, 92, 130 },
+			haze = 0.35,
 		},
 		height = { base = 3, amp = 20, scale = 0.05, ridged = false, detail = 4 },
 		decor = { trees = 14, rocks = 14, flowers = 0, crystals = 10 },
@@ -147,8 +198,8 @@ Biomes.List = {
 		unlock = { kind = "rebirths", value = 5 },
 		blurb = "Ilha flutuante entre estrelas. O ovo dos 30M.",
 		theme = "cosmos",
-		center = { x = 0, y = 236, z = 0 },
-		radius = 74,
+		center = { x = 0, y = 300, z = 0 },
+		radius = 96,
 		colors = {
 			grass = { 72, 64, 128 },
 			grassDark = { 50, 44, 96 },
@@ -156,6 +207,14 @@ Biomes.List = {
 			sand = { 140, 130, 210 },
 			accent = { 190, 150, 255 },
 			water = { 70, 60, 140 },
+		},
+		light = {
+			ambience = { 178, 160, 255 },
+			glow = { 190, 150, 255 },
+			intensity = 3.4,
+			range = 220,
+			sky = { 34, 24, 62 },
+			haze = 0.10,
 		},
 		height = { base = 2, amp = 12, scale = 0.06, ridged = false, detail = 4 },
 		decor = { trees = 8, rocks = 10, flowers = 0, crystals = 26 },

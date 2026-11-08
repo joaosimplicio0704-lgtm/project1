@@ -24,7 +24,7 @@ local refs = { cards = {}, root = nil }
 local gui
 
 local CARD_W = 176
-local CARD_H = 208
+local CARD_H = 232
 local PER_ROW = 4
 local GAP = 12
 
@@ -59,7 +59,7 @@ local function makeCard(parent, biome, index)
 
 	local name = Instance.new("TextLabel")
 	name.Size = UDim2.fromScale(0.94, 0.16)
-	name.Position = UDim2.fromScale(0.03, 0.44)
+	name.Position = UDim2.fromScale(0.03, 0.375)
 	name.BackgroundTransparency = 1
 	name.Text = biome.name
 	name.TextScaled = true
@@ -69,11 +69,27 @@ local function makeCard(parent, biome, index)
 	name.TextStrokeColor3 = Theme.outline
 	name.Parent = card
 
+	-- faixa de descricao: diz em uma linha o que tem na ilha. É o que faz a
+	-- criança escolher para onde ir em vez de clicar no primeiro.
+	local blurb = Instance.new("TextLabel")
+	blurb.Name = "Blurb"
+	blurb.Size = UDim2.fromScale(0.94, 0.12)
+	blurb.Position = UDim2.fromScale(0.03, 0.51)
+	blurb.BackgroundTransparency = 1
+	blurb.Text = biome.blurb
+	blurb.TextScaled = true
+	blurb.Font = Theme.font
+	blurb.TextColor3 = Theme.white
+	blurb.TextStrokeTransparency = 0.55
+	blurb.TextStrokeColor3 = Theme.outline
+	blurb.TextWrapped = true
+	blurb.Parent = card
+
 	local egg = GameConfig.EggById[biome.eggId]
 	local detail = Instance.new("TextLabel")
 	detail.Name = "Detail"
 	detail.Size = UDim2.fromScale(0.94, 0.14)
-	detail.Position = UDim2.fromScale(0.03, 0.62)
+	detail.Position = UDim2.fromScale(0.03, 0.655)
 	detail.BackgroundTransparency = 1
 	detail.Text = egg and (egg.emoji .. " " .. Format.number(egg.cost)) or "—"
 	detail.TextScaled = true
@@ -87,7 +103,7 @@ local function makeCard(parent, biome, index)
 	local lock = Instance.new("TextLabel")
 	lock.Name = "Lock"
 	lock.Size = UDim2.fromScale(0.94, 0.16)
-	lock.Position = UDim2.fromScale(0.03, 0.79)
+	lock.Position = UDim2.fromScale(0.03, 0.825)
 	lock.BackgroundTransparency = 1
 	lock.Text = ""
 	lock.TextScaled = true
@@ -148,7 +164,7 @@ function BiomesPanel.build(parent)
 
 	local frame = Instance.new("Frame")
 	frame.Name = "Card"
-	frame.Size = UDim2.fromOffset(PER_ROW * CARD_W + (PER_ROW - 1) * GAP + 48, 420)
+	frame.Size = UDim2.fromOffset(PER_ROW * CARD_W + (PER_ROW - 1) * GAP + 48, 470)
 	frame.Position = UDim2.fromScale(0.5, 0.5)
 	frame.AnchorPoint = Vector2.new(0.5, 0.5)
 	frame.BackgroundColor3 = Theme.panel

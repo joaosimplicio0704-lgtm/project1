@@ -83,16 +83,23 @@ end
 local root
 
 function World.build()
-	Lighting.Ambient = Color3.fromRGB(120, 132, 150)
-	Lighting.OutdoorAmbient = Color3.fromRGB(160, 178, 200)
-	Lighting.Brightness = 2.8
-	Lighting.ClockTime = 13.6
+	-- LUZ AMBIENTE GLOBAL
+	-- O ambiente do Roblox é escuro por padrão: sombra quase preta, e as ilhas
+	-- longe do sol somem. Aqui a luz é lavada de propósito, para o mapa parecer
+	-- um desenho: ambiente alto, sombra suave, névoa leve no horizonte.
+	Lighting.Ambient = Color3.fromRGB(150, 164, 186)
+	Lighting.OutdoorAmbient = Color3.fromRGB(196, 210, 232)
+	Lighting.Brightness = 3.1
+	Lighting.ClockTime = 14.2
 	Lighting.GeographicLatitude = -15
-	Lighting.EnvironmentDiffuseScale = 0.5
-	Lighting.EnvironmentSpecularScale = 0.3
+	Lighting.EnvironmentDiffuseScale = 0.7
+	Lighting.EnvironmentSpecularScale = 0.25
 	Lighting.GlobalShadows = true
-	Lighting.ShadowSoftness = 0.6
-	Lighting.ExposureCompensation = 0.25
+	Lighting.ShadowSoftness = 0.75
+	Lighting.ExposureCompensation = 0.35
+	Lighting.FogColor = Color3.fromRGB(198, 220, 246)
+	Lighting.FogStart = 700
+	Lighting.FogEnd = 3400
 
 	-- O céu não é opcional: sem um Sky o horizonte fica cinza e as ilhas
 	-- distantes somem. Nada de asset pago — o Sky padrão do Roblox já serve.
@@ -127,7 +134,7 @@ function World.build()
 	-- agua de fundo + ilha principal em degrade de grama
 	part({
 		Name = "Ocean",
-		Size = Vector3.new(3000, 4, 3000),
+		Size = Vector3.new(3200, 4, 3200),
 		Position = Vector3.new(0, -8, 0),
 		Color = PALETTE.water,
 		Material = Enum.Material.Water,
@@ -135,10 +142,21 @@ function World.build()
 		CanCollide = false,
 	}, root)
 
+	-- laje de acesso aos portais: a praça é quadrada e os portais ficam num
+	-- anel; sem isso os cantos do anel caem na grama e o jogador tropeça.
+	part({
+		Name = "PortalRingPad",
+		Size = Vector3.new(240, 1.4, 240),
+		Position = Vector3.new(0, 0.9, 0),
+		Color = PALETTE.path,
+		Material = Enum.Material.Brick,
+		Transparency = 0.35,
+	}, root)
+
 	-- praça central em tijolinho claro
 	part({
 		Name = "Plaza",
-		Size = Vector3.new(150, 3, 150),
+		Size = Vector3.new(210, 3, 210),
 		Position = Vector3.new(0, 0.5, 0),
 		Color = PALETTE.path,
 		Material = Enum.Material.Brick,
@@ -147,7 +165,7 @@ function World.build()
 	-- ilha de grama ao redor (grande, quadrada, com borda de terra)
 	part({
 		Name = "Island",
-		Size = Vector3.new(340, 8, 340),
+		Size = Vector3.new(420, 8, 420),
 		Position = Vector3.new(0, -3.5, 0),
 		Color = PALETTE.grass,
 		Material = Enum.Material.Grass,
@@ -155,7 +173,7 @@ function World.build()
 
 	local dirtRing = part({
 		Name = "DirtRing",
-		Size = Vector3.new(348, 6, 348),
+		Size = Vector3.new(430, 6, 430),
 		Position = Vector3.new(0, -6, 0),
 		Color = Color3.fromRGB(170, 110, 70),
 		Material = Enum.Material.Ground,
@@ -166,7 +184,7 @@ function World.build()
 	local rng = Random.new(31)
 	for i = 1, 26 do
 		local angle = (i / 26) * math.pi * 2
-		local radius = 178 + rng:NextNumber() * 16
+		local radius = 214 + rng:NextNumber() * 20
 		local x = math.cos(angle) * radius
 		local z = math.sin(angle) * radius
 		local h = 8 + rng:NextNumber() * 10
@@ -180,6 +198,7 @@ function World.build()
 
 	World.buildTrees()
 	World.buildFountain()
+	World.buildFestival()
 	World.buildEggStands()
 	World.buildShop()
 	World.buildGemShop()
@@ -194,7 +213,7 @@ function World.build()
 	local spawnPad = part({
 		Name = "SpawnLocation",
 		Size = Vector3.new(18, 1, 18),
-		Position = Vector3.new(0, 3.2, 62),
+		Position = Vector3.new(0, 3.2, 86),
 		Color = PALETTE.path,
 		Material = Enum.Material.Brick,
 	}, root)
@@ -202,7 +221,7 @@ function World.build()
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "Spawn"
 	spawn.Size = Vector3.new(16, 0.4, 16)
-	spawn.Position = Vector3.new(0, 3.9, 62)
+	spawn.Position = Vector3.new(0, 3.9, 86)
 	spawn.Anchored = true
 	spawn.CanCollide = false
 	spawn.Transparency = 1
@@ -214,13 +233,13 @@ function World.build()
 	part({
 		Name = "SpawnRing",
 		Size = Vector3.new(17, 0.25, 17),
-		Position = Vector3.new(0, 3.75, 62),
+		Position = Vector3.new(0, 3.75, 86),
 		Color = Color3.fromRGB(96, 240, 235),
 		Material = Enum.Material.Neon,
 		CanCollide = false,
 	}, root)
 
-	World.spawnPoint = Vector3.new(0, 5, 62)
+	World.spawnPoint = Vector3.new(0, 5, 86)
 end
 
 function World.spawnCFrame()
@@ -782,6 +801,660 @@ function World.buildTradePost()
 end
 
 ---------------------------------------------------------------------------
+-- FESTA DO HUB
+---------------------------------------------------------------------------
+
+-- A praça é o primeiro lugar que a criança vê. Aqui entram bandeirinhas
+-- coloridas, balões, estátua do ovo gigante e postes de luz — tudo primitivo,
+-- tudo colorido, nada pago. É o que separa "um mapa" de "um lugar".
+function World.buildFestival()
+	local model = Instance.new("Model")
+	model.Name = "Festival"
+	model.Parent = root
+
+	-- ESTATUA DO OVO: o mascote do jogo, girando na entrada
+	local statue = Instance.new("Model")
+	statue.Name = "EggStatue"
+	statue.Parent = model
+
+	part({
+		Name = "StatueBase",
+		Size = Vector3.new(26, 6, 26),
+		Position = Vector3.new(0, 3, 150),
+		Color = PALETTE.white,
+		Material = Enum.Material.Marble,
+	}, statue)
+
+	part({
+		Name = "StatueRing",
+		Size = Vector3.new(22, 1, 22),
+		Position = Vector3.new(0, 6.6, 150),
+		Color = PALETTE.gold,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+	}, statue)
+
+	local bigEgg = ball({
+		Name = "EggStatueBody",
+		Size = Vector3.new(20, 27, 20),
+		Position = Vector3.new(0, 21, 150),
+		Color = Color3.fromRGB(255, 244, 214),
+		Material = Enum.Material.SmoothPlastic,
+	}, statue)
+	bigEgg:SetAttribute("Spin", true)
+
+	local rng = Random.new(99)
+	for i = 1, 12 do
+		local theta = rng:NextNumber() * math.pi * 2
+		local phi = math.acos(2 * rng:NextNumber() - 1)
+		ball({
+			Name = "StatueSpot",
+			Size = Vector3.new(3.4, 3.4, 3.4),
+			Position = Vector3.new(0, 21, 150) + Vector3.new(
+				math.sin(phi) * math.cos(theta) * 10,
+				math.cos(phi) * 13,
+				math.sin(phi) * math.sin(theta) * 10
+			),
+			Color = Color3.fromRGB(255, 178, 96),
+			Material = Enum.Material.SmoothPlastic,
+			CanCollide = false,
+		}, statue)
+	end
+
+	-- BANDEIRINHAS: dois arcos de linha colorida cruzando a praça
+	local flagColors = {
+		Color3.fromRGB(255, 96, 108),
+		Color3.fromRGB(255, 206, 61),
+		Color3.fromRGB(126, 217, 87),
+		Color3.fromRGB(96, 186, 255),
+		Color3.fromRGB(178, 130, 255),
+	}
+	for arc = 1, 2 do
+		local angle = arc == 1 and 0.35 or math.pi - 0.35
+		local ax = math.cos(angle)
+		local az = math.sin(angle)
+		for i = -9, 9 do
+			local t = i / 9
+			local px = ax * t * 150
+			local pz = az * t * 150
+			local height = 46 + math.cos(t * math.pi / 2) * 16
+			local flag = part({
+				Name = "Bunting",
+				Size = Vector3.new(5.5, 7, 0.5),
+				Position = Vector3.new(px, height, pz),
+				Color = flagColors[(i % #flagColors) + 1],
+				Material = Enum.Material.Fabric,
+				CanCollide = false,
+			}, model)
+			flag.CFrame = CFrame.new(flag.Position) * CFrame.Angles(0, angle, math.rad(180))
+		end
+	end
+
+	-- POSTES: dois anéis de luz, um na praça e um na borda do hub
+	for ring = 1, 2 do
+		local count = ring == 1 and 6 or 12
+		local radius = ring == 1 and 88 or 170
+		for i = 1, count do
+			local angle = (i / count) * math.pi * 2
+			local x = math.cos(angle) * radius
+			local z = math.sin(angle) * radius
+			part({
+				Name = "HubPost",
+				Size = Vector3.new(2.4, 22, 2.4),
+				Position = Vector3.new(x, 12, z),
+				Color = PALETTE.stoneDark,
+				Material = Enum.Material.Metal,
+			}, model)
+			local lamp = ball({
+				Name = "HubLamp",
+				Size = Vector3.new(7, 7, 7),
+				Position = Vector3.new(x, 25, z),
+				Color = ring == 1 and Color3.fromRGB(255, 236, 170) or Color3.fromRGB(170, 226, 255),
+				Material = Enum.Material.Neon,
+				Transparency = 0.1,
+			}, model)
+			local light = Instance.new("PointLight")
+			light.Brightness = 2
+			light.Range = 60
+			light.Color = ring == 1 and Color3.fromRGB(255, 226, 160) or Color3.fromRGB(160, 220, 255)
+			light.Parent = lamp
+		end
+	end
+
+	-- BALÕES: sobem em espiral nas laterais, presos por um fio
+	local balloonColors = {
+		Color3.fromRGB(255, 110, 120),
+		Color3.fromRGB(255, 214, 90),
+		Color3.fromRGB(120, 220, 130),
+		Color3.fromRGB(120, 180, 255),
+		Color3.fromRGB(200, 150, 255),
+	}
+	for cluster = 1, 6 do
+		local angle = (cluster / 6) * math.pi * 2 + 0.4
+		local cx = math.cos(angle) * 120
+		local cz = math.sin(angle) * 120
+		for b = 1, 5 do
+			local lift = 26 + b * 9
+			local spread = 3 + b * 1.2
+			ball({
+				Name = "Balloon",
+				Size = Vector3.new(8, 9.4, 8),
+				Position = Vector3.new(cx + math.cos(b * 1.7) * spread, lift, cz + math.sin(b * 1.7) * spread),
+				Color = balloonColors[(b % #balloonColors) + 1],
+				Material = Enum.Material.Fabric,
+				CanCollide = false,
+			}, model)
+		end
+		part({
+			Name = "BalloonString",
+			Size = Vector3.new(0.3, 34, 0.3),
+			Position = Vector3.new(cx, 24, cz),
+			Color = Color3.fromRGB(240, 240, 240),
+			Material = Enum.Material.Fabric,
+			CanCollide = false,
+		}, model)
+	end
+end
+
+---------------------------------------------------------------------------
+-- MARCOS (o icone gigante de cada ilha)
+---------------------------------------------------------------------------
+
+-- Cada bioma ganha um objeto grande e inconfundível, feito só de peças primitivas.
+-- Nada de asset: esfera, cilindro, bloco e cunha em cores chapadas — o mesmo
+-- vocabulário visual do resto do mapa, só em escala de "dá pra ver de longe".
+
+-- Nuvem fofa: 4 esferas achatadas. Não colide, só decora.
+local function cloud(parent, position, scale, color)
+	local puff = color or Color3.fromRGB(255, 255, 255)
+	for i, offset in ipairs({
+		{ -6, 0, 0, 12 },
+		{ 0, 2, 1, 16 },
+		{ 6, 0, -1, 12 },
+		{ 2, -1, 3, 10 },
+	}) do
+		ball({
+			Name = "CloudPuff" .. i,
+			Size = Vector3.new(offset[4] * scale, offset[4] * 0.62 * scale, offset[4] * scale),
+			Position = position + Vector3.new(offset[1] * scale, offset[2] * scale, offset[3] * scale),
+			Color = puff,
+			Material = Enum.Material.SmoothPlastic,
+			Transparency = 0.06,
+		}, parent)
+	end
+end
+
+-- Solta nuvens em círculo ao redor de um ponto, em alturas diferentes.
+local function cloudRing(parent, center, radius, height, count, scale, color)
+	for i = 1, count do
+		local angle = (i / count) * math.pi * 2
+		local wobble = (i % 3) * 6
+		cloud(
+			parent,
+			center + Vector3.new(math.cos(angle) * radius, height + wobble, math.sin(angle) * radius),
+			scale,
+			color
+		)
+	end
+end
+
+local function cone(parent, position, width, height, color, material)
+	-- cone feito de cilindro invertido não existe no Roblox; empilhamos blocos
+	-- decrescentes. Barato, e a silhueta fica triangular de longe.
+	for tier = 1, 5 do
+		local t = tier / 5
+		local w = width * (1 - t * 0.78)
+		part({
+			Name = "Cone",
+			Size = Vector3.new(w, height / 5 + 0.1, w),
+			Position = position + Vector3.new(0, height * t - height / 10, 0),
+			Color = color,
+			Material = material or Enum.Material.SmoothPlastic,
+		}, parent)
+	end
+end
+
+function World.buildLandmark(biome, parent, base)
+	local accent = biome.colors.accent
+	local accentColor = Color3.fromRGB(accent[1], accent[2], accent[3])
+	local grassColor = Color3.fromRGB(biome.colors.grass[1], biome.colors.grass[2], biome.colors.grass[3])
+	local rockColor = Color3.fromRGB(biome.colors.rock[1], biome.colors.rock[2], biome.colors.rock[3])
+	local id = biome.id
+
+	-- pedestal comum: um morrinho de terra que assenta o marco
+	part({
+		Name = "LandmarkBase",
+		Size = Vector3.new(46, 8, 46),
+		Position = base + Vector3.new(0, 2, 0),
+		Color = grassColor,
+		Material = Enum.Material.Grass,
+	}, parent)
+
+	if id == "meadow" then
+		-- ARVORE MAE: tronco largo com copa de tres bolas gigantes
+		part({
+			Name = "MotherTrunk",
+			Size = Vector3.new(14, 44, 14),
+			Position = base + Vector3.new(0, 30, 0),
+			Color = PALETTE.wood,
+			Material = Enum.Material.Wood,
+		}, parent)
+		for i, offset in ipairs({
+			{ 0, 58, 0, 30 },
+			{ -18, 50, 6, 20 },
+			{ 17, 52, -7, 22 },
+		}) do
+			ball({
+				Name = "MotherCrown" .. i,
+				Size = Vector3.new(offset[4], offset[4] * 0.82, offset[4]),
+				Position = base + Vector3.new(offset[1], offset[2], offset[3]),
+				Color = i == 1 and Color3.fromRGB(96, 200, 84) or Color3.fromRGB(74, 176, 70),
+				Material = Enum.Material.Grass,
+			}, parent)
+		end
+		-- balanço pendurado: criança adora
+		part({
+			Name = "SwingSeat",
+			Size = Vector3.new(9, 1.2, 4),
+			Position = base + Vector3.new(30, 26, 0),
+			Color = PALETTE.woodDark,
+			Material = Enum.Material.WoodPlanks,
+		}, parent)
+		for side = -1, 1, 2 do
+			part({
+				Name = "SwingRope",
+				Size = Vector3.new(0.6, 26, 0.6),
+				Position = base + Vector3.new(30 + side * 3.6, 39, 0),
+				Color = PALETTE.sand,
+				Material = Enum.Material.Fabric,
+			}, parent)
+		end
+	elseif id == "forest" then
+		-- COGUMELO GIGANTE BRILHANTE
+		part({
+			Name = "ShroomStem",
+			Size = Vector3.new(18, 40, 18),
+			Position = base + Vector3.new(0, 28, 0),
+			Color = Color3.fromRGB(255, 246, 232),
+			Material = Enum.Material.SmoothPlastic,
+		}, parent)
+		ball({
+			Name = "ShroomCap",
+			Size = Vector3.new(52, 26, 52),
+			Position = base + Vector3.new(0, 52, 0),
+			Color = Color3.fromRGB(255, 96, 108),
+			Material = Enum.Material.SmoothPlastic,
+		}, parent)
+		-- pintas do chapéu
+		local spots = { { 0, 62, 0 }, { 18, 56, 8 }, { -17, 57, 6 }, { 6, 56, -18 }, { -8, 58, -14 } }
+		for i, spot in ipairs(spots) do
+			ball({
+				Name = "ShroomSpot" .. i,
+				Size = Vector3.new(7, 4, 7),
+				Position = base + Vector3.new(spot[1], spot[2], spot[3]),
+				Color = Color3.fromRGB(255, 255, 245),
+				Material = Enum.Material.SmoothPlastic,
+			}, parent)
+		end
+		local glow = ball({
+			Name = "ShroomGlow",
+			Size = Vector3.new(20, 14, 20),
+			Position = base + Vector3.new(0, 56, 0),
+			Color = Color3.fromRGB(168, 255, 200),
+			Material = Enum.Material.Neon,
+			Transparency = 0.55,
+		}, parent)
+		local light = Instance.new("PointLight")
+		light.Brightness = 2.4
+		light.Range = 90
+		light.Color = Color3.fromRGB(150, 255, 170)
+		light.Parent = glow
+	elseif id == "desert" then
+		-- PIRAMIDE com porta e sol dourado no topo
+		for step = 0, 6 do
+			local width = 60 - step * 7.4
+			part({
+				Name = "PyramidStep",
+				Size = Vector3.new(width, 6, width),
+				Position = base + Vector3.new(0, 8 + step * 6, 0),
+				Color = Color3.fromRGB(240, 206, 140),
+				Material = Enum.Material.Sandstone,
+			}, parent)
+		end
+		part({
+			Name = "PyramidDoor",
+			Size = Vector3.new(14, 18, 2),
+			Position = base + Vector3.new(0, 15, 24),
+			Color = Color3.fromRGB(120, 84, 50),
+			Material = Enum.Material.Wood,
+		}, parent)
+		ball({
+			Name = "SunDisc",
+			Size = Vector3.new(22, 22, 4),
+			Position = base + Vector3.new(0, 64, 0),
+			Color = Color3.fromRGB(255, 214, 70),
+			Material = Enum.Material.Neon,
+		}, parent)
+	elseif id == "ice" then
+		-- CRISTAL DE GELO gigante + flocos suspensos
+		local spike = part({
+			Name = "IceSpike",
+			Size = Vector3.new(20, 70, 20),
+			Position = base + Vector3.new(0, 40, 0),
+			Color = Color3.fromRGB(186, 236, 255),
+			Material = Enum.Material.Ice,
+			Transparency = 0.25,
+		}, parent)
+		spike.CFrame = CFrame.new(spike.Position) * CFrame.Angles(0.1, 0.6, 0.08)
+		for i = 1, 4 do
+			local angle = (i / 4) * math.pi * 2
+			local px = math.cos(angle) * 26
+			local pz = math.sin(angle) * 26
+			local small = part({
+				Name = "IceShard",
+				Size = Vector3.new(9, 34, 9),
+				Position = base + Vector3.new(px, 24, pz),
+				Color = Color3.fromRGB(214, 244, 255),
+				Material = Enum.Material.Ice,
+				Transparency = 0.3,
+			}, parent)
+			small.CFrame = CFrame.new(small.Position) * CFrame.Angles(0.16, angle, -0.2)
+		end
+		cloudRing(parent, base, 44, 66, 5, 1.5, Color3.fromRGB(240, 252, 255))
+	elseif id == "shadow" then
+		-- OBELISCO escuro com runas roxas flutuando
+		part({
+			Name = "Obelisk",
+			Size = Vector3.new(18, 78, 18),
+			Position = base + Vector3.new(0, 43, 0),
+			Color = Color3.fromRGB(52, 44, 78),
+			Material = Enum.Material.Basalt,
+		}, parent)
+		cone(parent, base + Vector3.new(0, 84, 0), 18, 22, Color3.fromRGB(70, 60, 100), Enum.Material.Basalt)
+		for i = 1, 5 do
+			local rune = part({
+				Name = "Rune" .. i,
+				Size = Vector3.new(6, 6, 1.6),
+				Position = base + Vector3.new(0, 22 + i * 11, 9.4),
+				Color = Color3.fromRGB(190, 130, 255),
+				Material = Enum.Material.Neon,
+				CanCollide = false,
+			}, parent)
+			local light = Instance.new("PointLight")
+			light.Brightness = 1.4
+			light.Range = 28
+			light.Color = Color3.fromRGB(190, 130, 255)
+			light.Parent = rune
+		end
+	elseif id == "halloween" then
+		-- ABOBORA GIGANTE com cara esculpida e vela dentro
+		ball({
+			Name = "GreatPumpkin",
+			Size = Vector3.new(70, 54, 70),
+			Position = base + Vector3.new(0, 36, 0),
+			Color = Color3.fromRGB(250, 138, 40),
+			Material = Enum.Material.SmoothPlastic,
+		}, parent)
+		part({
+			Name = "PumpkinStemLandmark",
+			Size = Vector3.new(7, 14, 7),
+			Position = base + Vector3.new(0, 66, 0),
+			Color = Color3.fromRGB(96, 132, 62),
+			Material = Enum.Material.Grass,
+		}, parent)
+		-- olhos triangulares (dois blocos girados formam um X) e boca
+		for side = -1, 1, 2 do
+			local eye = part({
+				Name = "Eye",
+				Size = Vector3.new(10, 10, 2),
+				Position = base + Vector3.new(side * 15, 44, 33),
+				Color = Color3.fromRGB(255, 240, 130),
+				Material = Enum.Material.Neon,
+			}, parent)
+			eye.CFrame = CFrame.new(eye.Position) * CFrame.Angles(0, 0, math.pi / 4)
+		end
+		for i = -2, 2 do
+			part({
+				Name = "MouthTooth",
+				Size = Vector3.new(5, 9, 2),
+				Position = base + Vector3.new(i * 7, 22, 34),
+				Color = Color3.fromRGB(255, 240, 130),
+				Material = Enum.Material.Neon,
+			}, parent)
+		end
+		local fire = ball({
+			Name = "PumpkinFire",
+			Size = Vector3.new(16, 16, 16),
+			Position = base + Vector3.new(0, 28, 0),
+			Color = Color3.fromRGB(255, 170, 60),
+			Material = Enum.Material.Neon,
+			Transparency = 0.35,
+		}, parent)
+		local light = Instance.new("PointLight")
+		light.Brightness = 3.2
+		light.Range = 110
+		light.Color = Color3.fromRGB(255, 150, 60)
+		light.Parent = fire
+	else
+		-- COSMOS: anel de Saturno com planetinha flutuante
+		local ring1 = Instance.new("Part")
+		ring1.Name = "Planet"
+		ring1.Shape = Enum.PartType.Ball
+		ring1.Size = Vector3.new(52, 52, 52)
+		ring1.Position = base + Vector3.new(0, 48, 0)
+		ring1.Color = Color3.fromRGB(150, 120, 230)
+		ring1.Material = Enum.Material.Neon
+		ring1.Anchored = true
+		ring1.CanCollide = false
+		ring1.Parent = parent
+
+		for i = 1, 16 do
+			local angle = (i / 16) * math.pi * 2
+			local ringPart = part({
+				Name = "Ring",
+				Size = Vector3.new(7, 0.8, 4),
+				Position = base + Vector3.new(math.cos(angle) * 42, 48, math.sin(angle) * 42),
+				Color = i % 2 == 0 and Color3.fromRGB(255, 220, 130) or Color3.fromRGB(190, 160, 255),
+				Material = Enum.Material.Neon,
+				CanCollide = false,
+			}, parent)
+			ringPart.CFrame = CFrame.new(ringPart.Position) * CFrame.Angles(0, -angle, 0)
+		end
+
+		for i, spot in ipairs({ { -34, 70, 14 }, { 30, 26, -18 }, { 16, 78, -26 } }) do
+			ball({
+				Name = "Moon" .. i,
+				Size = Vector3.new(9 + i * 2, 9 + i * 2, 9 + i * 2),
+				Position = base + Vector3.new(spot[1], spot[2], spot[3]),
+				Color = Color3.fromRGB(220, 210, 255),
+				Material = Enum.Material.Neon,
+			}, parent)
+		end
+	end
+end
+
+---------------------------------------------------------------------------
+-- ICONE DE PREVIA DO PORTAL
+---------------------------------------------------------------------------
+
+-- Versão em miniatura do marco de cada ilha, flutuando acima do portal no hub.
+-- É a "vitrine" do mundo: quem está na praça vê os 7 destinos sem viajar.
+function World.buildPortalIcon(biome, parent, top)
+	local accent = biome.colors.accent
+	local accentColor = Color3.fromRGB(accent[1], accent[2], accent[3])
+	local id = biome.id
+
+	local function blob(name, offset, size, color, material, transparency)
+		return ball({
+			Name = name,
+			Size = size,
+			Position = top + offset,
+			Color = color,
+			Material = material or Enum.Material.SmoothPlastic,
+			Transparency = transparency or 0,
+		}, parent)
+	end
+
+	if id == "meadow" then
+		part({
+			Name = "IconTrunk",
+			Size = Vector3.new(4, 12, 4),
+			Position = top + Vector3.new(0, 5, 0),
+			Color = PALETTE.wood,
+			Material = Enum.Material.Wood,
+		}, parent)
+		blob(
+			"IconCrown",
+			Vector3.new(0, 13, 0),
+			Vector3.new(13, 11, 13),
+			Color3.fromRGB(96, 200, 84),
+			Enum.Material.Grass
+		)
+		blob(
+			"IconCrown",
+			Vector3.new(-5, 11, 3),
+			Vector3.new(8, 7, 8),
+			Color3.fromRGB(255, 186, 214),
+			Enum.Material.SmoothPlastic
+		)
+	elseif id == "forest" then
+		part({
+			Name = "IconStem",
+			Size = Vector3.new(5, 9, 5),
+			Position = top + Vector3.new(0, 4, 0),
+			Color = Color3.fromRGB(255, 248, 236),
+			Material = Enum.Material.SmoothPlastic,
+		}, parent)
+		blob(
+			"IconCap",
+			Vector3.new(0, 10, 0),
+			Vector3.new(16, 8, 16),
+			Color3.fromRGB(255, 96, 108),
+			Enum.Material.SmoothPlastic
+		)
+		local glow = blob(
+			"IconGlow",
+			Vector3.new(0, 11, 0),
+			Vector3.new(14, 9, 14),
+			Color3.fromRGB(170, 255, 190),
+			Enum.Material.Neon,
+			0.55
+		)
+		local light = Instance.new("PointLight")
+		light.Brightness = 1.6
+		light.Range = 40
+		light.Color = Color3.fromRGB(160, 255, 180)
+		light.Parent = glow
+	elseif id == "desert" then
+		for step = 0, 3 do
+			part({
+				Name = "IconPyramid",
+				Size = Vector3.new(15 - step * 3.2, 3.2, 15 - step * 3.2),
+				Position = top + Vector3.new(0, 2 + step * 3.2, 0),
+				Color = Color3.fromRGB(240, 206, 140),
+				Material = Enum.Material.Sandstone,
+			}, parent)
+		end
+		blob("IconSun", Vector3.new(0, 17, 0), Vector3.new(8, 8, 1.6), Color3.fromRGB(255, 214, 70), Enum.Material.Neon)
+	elseif id == "ice" then
+		local spike = part({
+			Name = "IconIce",
+			Size = Vector3.new(6, 20, 6),
+			Position = top + Vector3.new(0, 11, 0),
+			Color = Color3.fromRGB(186, 236, 255),
+			Material = Enum.Material.Ice,
+			Transparency = 0.25,
+		}, parent)
+		spike.CFrame = CFrame.new(spike.Position) * CFrame.Angles(0.12, 0.5, 0.1)
+		blob(
+			"IconShard",
+			Vector3.new(-7, 6, 2),
+			Vector3.new(4, 12, 4),
+			Color3.fromRGB(214, 244, 255),
+			Enum.Material.Ice,
+			0.3
+		)
+		blob(
+			"IconShard",
+			Vector3.new(6, 5, -3),
+			Vector3.new(3.4, 10, 3.4),
+			Color3.fromRGB(214, 244, 255),
+			Enum.Material.Ice,
+			0.3
+		)
+	elseif id == "shadow" then
+		part({
+			Name = "IconObelisk",
+			Size = Vector3.new(5.4, 21, 5.4),
+			Position = top + Vector3.new(0, 11, 0),
+			Color = Color3.fromRGB(52, 44, 78),
+			Material = Enum.Material.Basalt,
+		}, parent)
+		local rune = part({
+			Name = "IconRune",
+			Size = Vector3.new(2.6, 2.6, 0.8),
+			Position = top + Vector3.new(0, 13, 3),
+			Color = Color3.fromRGB(190, 130, 255),
+			Material = Enum.Material.Neon,
+		}, parent)
+		local light = Instance.new("PointLight")
+		light.Brightness = 1.4
+		light.Range = 34
+		light.Color = Color3.fromRGB(190, 130, 255)
+		light.Parent = rune
+	elseif id == "halloween" then
+		blob(
+			"IconPumpkin",
+			Vector3.new(0, 9, 0),
+			Vector3.new(17, 13, 17),
+			Color3.fromRGB(250, 138, 40),
+			Enum.Material.SmoothPlastic
+		)
+		local eye = part({
+			Name = "IconEye",
+			Size = Vector3.new(2.6, 2.6, 0.8),
+			Position = top + Vector3.new(-2.6, 10.5, 8),
+			Color = Color3.fromRGB(255, 240, 130),
+			Material = Enum.Material.Neon,
+		}, parent)
+		eye.CFrame = CFrame.new(eye.Position) * CFrame.Angles(0, 0, math.pi / 4)
+		local eye2 = part({
+			Name = "IconEye",
+			Size = Vector3.new(2.6, 2.6, 0.8),
+			Position = top + Vector3.new(2.6, 10.5, 8),
+			Color = Color3.fromRGB(255, 240, 130),
+			Material = Enum.Material.Neon,
+		}, parent)
+		eye2.CFrame = CFrame.new(eye2.Position) * CFrame.Angles(0, 0, math.pi / 4)
+	else
+		blob(
+			"IconPlanet",
+			Vector3.new(0, 10, 0),
+			Vector3.new(15, 15, 15),
+			Color3.fromRGB(150, 120, 230),
+			Enum.Material.Neon
+		)
+		for i = 1, 8 do
+			local angle = (i / 8) * math.pi * 2
+			local dot = part({
+				Name = "IconRing",
+				Size = Vector3.new(2.4, 0.4, 1.4),
+				Position = top + Vector3.new(math.cos(angle) * 12, 10, math.sin(angle) * 12),
+				Color = i % 2 == 0 and Color3.fromRGB(255, 220, 130) or Color3.fromRGB(190, 160, 255),
+				Material = Enum.Material.Neon,
+				CanCollide = false,
+			}, parent)
+			dot.CFrame = CFrame.new(dot.Position) * CFrame.Angles(0, -angle, 0)
+		end
+	end
+
+	-- brilho embaixo do ícone: separa do céu
+	local halo =
+		blob("IconHalo", Vector3.new(0, -3, 0), Vector3.new(18, 1.4, 18), accentColor, Enum.Material.Neon, 0.35)
+	halo.Shape = Enum.PartType.Cylinder
+end
+
+---------------------------------------------------------------------------
 -- BIOMAS
 ---------------------------------------------------------------------------
 
@@ -808,16 +1481,16 @@ local function buildPortal(position, look, targetBiome, parent, name)
 	-- base
 	part({
 		Name = "Base",
-		Size = Vector3.new(26, 2.4, 26),
-		Position = position + Vector3.new(0, 1.2, 0),
+		Size = Vector3.new(38, 3, 38),
+		Position = position + Vector3.new(0, 1.5, 0),
 		Color = PALETTE.stone,
 		Material = Enum.Material.Marble,
 	}, model)
 
 	part({
 		Name = "BaseGlow",
-		Size = Vector3.new(22, 0.5, 22),
-		Position = position + Vector3.new(0, 2.6, 0),
+		Size = Vector3.new(33, 0.6, 33),
+		Position = position + Vector3.new(0, 3.3, 0),
 		Color = Color3.fromRGB(accent[1], accent[2], accent[3]),
 		Material = Enum.Material.Neon,
 		CanCollide = false,
@@ -827,16 +1500,16 @@ local function buildPortal(position, look, targetBiome, parent, name)
 	for side = -1, 1, 2 do
 		part({
 			Name = "Pillar",
-			Size = Vector3.new(4.5, 24, 4.5),
-			Position = position + Vector3.new(side * 11, 14, 0),
+			Size = Vector3.new(6, 34, 6),
+			Position = position + Vector3.new(side * 15.5, 19, 0),
 			Color = PALETTE.stone,
 			Material = Enum.Material.Marble,
 		}, model)
 
 		part({
 			Name = "PillarCap",
-			Size = Vector3.new(6.5, 1.6, 6.5),
-			Position = position + Vector3.new(side * 11, 26.4, 0),
+			Size = Vector3.new(8.6, 2, 8.6),
+			Position = position + Vector3.new(side * 15.5, 36.4, 0),
 			Color = Color3.fromRGB(accent[1], accent[2], accent[3]),
 			Material = Enum.Material.Neon,
 			CanCollide = false,
@@ -846,16 +1519,16 @@ local function buildPortal(position, look, targetBiome, parent, name)
 	-- arco
 	part({
 		Name = "Arch",
-		Size = Vector3.new(26.5, 4.2, 4.5),
-		Position = position + Vector3.new(0, 26.4, 0),
+		Size = Vector3.new(37, 5.4, 6),
+		Position = position + Vector3.new(0, 36.4, 0),
 		Color = PALETTE.stone,
 		Material = Enum.Material.Marble,
 	}, model)
 
 	part({
 		Name = "ArchGlow",
-		Size = Vector3.new(24, 0.8, 4.9),
-		Position = position + Vector3.new(0, 28.2, 0),
+		Size = Vector3.new(34, 1, 6.4),
+		Position = position + Vector3.new(0, 38.6, 0),
 		Color = Color3.fromRGB(accent[1], accent[2], accent[3]),
 		Material = Enum.Material.Neon,
 		CanCollide = false,
@@ -864,8 +1537,8 @@ local function buildPortal(position, look, targetBiome, parent, name)
 	-- veu do portal (nao colide: o jogador atravessa andando)
 	local veil = part({
 		Name = "Veil",
-		Size = Vector3.new(21, 22, 0.6),
-		Position = position + Vector3.new(0, 14.4, 0),
+		Size = Vector3.new(29, 30, 0.8),
+		Position = position + Vector3.new(0, 20, 0),
 		Color = Color3.fromRGB(accent[1], accent[2], accent[3]),
 		Material = Enum.Material.Neon,
 		Transparency = 0.45,
@@ -874,14 +1547,14 @@ local function buildPortal(position, look, targetBiome, parent, name)
 
 	local light = Instance.new("PointLight")
 	light.Brightness = 2.2
-	light.Range = 34
+	light.Range = 52
 	light.Color = Color3.fromRGB(accent[1], accent[2], accent[3])
 	light.Parent = veil
 
 	-- detector de clique para teletransporte
 	local detector = Instance.new("ClickDetector")
 	detector.Name = "PortalClick"
-	detector.MaxActivationDistance = 26
+	detector.MaxActivationDistance = 36
 	detector.Parent = veil
 
 	veil:SetAttribute("BiomeId", targetBiome and targetBiome.id or "meadow")
@@ -898,7 +1571,7 @@ local function buildPortal(position, look, targetBiome, parent, name)
 	-- placa com o nome do destino
 	local billboard = Instance.new("BillboardGui")
 	billboard.Size = UDim2.fromScale(22, 6)
-	billboard.StudsOffsetWorldSpace = Vector3.new(0, 32, 0)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, 44, 0)
 	billboard.AlwaysOnTop = true
 	billboard.Parent = veil
 
@@ -912,6 +1585,17 @@ local function buildPortal(position, look, targetBiome, parent, name)
 	label.TextStrokeColor3 = Color3.fromRGB(40, 30, 60)
 	label.Text = targetBiome and (targetBiome.emoji .. " " .. targetBiome.name) or "🏠 HUB"
 	label.Parent = billboard
+
+	-- Prévia do destino: um ícone flutuante grande acima do portal, feito de
+	-- peças. A criança vê o que tem do outro lado antes de entrar, e o hub
+	-- ganha 7 "estátuas" que dá vontade de visitar.
+	if targetBiome then
+		local iconModel = Instance.new("Model")
+		iconModel.Name = "PortalIcon"
+		iconModel.Parent = model
+		local top = position + Vector3.new(0, 56, 0)
+		World.buildPortalIcon(targetBiome, iconModel, top)
+	end
 
 	return model
 end
@@ -1009,6 +1693,368 @@ local function buildEggPedestal(egg, position, parent)
 end
 
 -- Decoração por tema, apoiada na altura real do relevo.
+-- Enfeites que só aquele bioma tem. É aqui que a ilha deixa de ser "grama com
+-- árvore" e vira um lugar com cara própria: flor de cerejeira no vale, cogumelo
+-- na floresta, cacto no deserto, boneco de neve no gelo, lápide no sombrio,
+-- abóbora no halloween e asteroide no cosmos.
+local function themedDecor(biome, cells, home, center, rng)
+	local accent = biome.colors.accent
+	local accentColor = Color3.fromRGB(accent[1], accent[2], accent[3])
+	local id = biome.id
+
+	local function groundAt(angle, radius)
+		local lx = math.cos(angle) * radius
+		local lz = math.sin(angle) * radius
+		return center + Vector3.new(lx, Terrain.heightAtCell(biome, cells, lx, lz), lz)
+	end
+
+	local function meadow()
+		-- cerejeiras cor-de-rosa e bancos de madeira
+		for i = 1, 7 do
+			local angle = rng:NextNumber() * math.pi * 2
+			local radius = biome.radius * (0.42 + rng:NextNumber() * 0.36)
+			local pos = groundAt(angle, radius)
+			local scale = 0.8 + rng:NextNumber() * 0.4
+			part({
+				Name = "CherryTrunk",
+				Size = Vector3.new(3 * scale, 14 * scale, 3 * scale),
+				Position = pos + Vector3.new(0, 7 * scale, 0),
+				Color = Color3.fromRGB(120, 84, 62),
+				Material = Enum.Material.Wood,
+			}, home)
+			for k = 1, 3 do
+				ball({
+					Name = "CherryBloom",
+					Size = Vector3.new((11 - k) * scale, (7 - k * 0.6) * scale, (11 - k) * scale),
+					Position = pos + Vector3.new((k - 2) * 4, (14 + k * 2.4) * scale, (k % 2) * 3),
+					Color = k == 2 and Color3.fromRGB(255, 196, 220) or Color3.fromRGB(255, 168, 200),
+					Material = Enum.Material.SmoothPlastic,
+				}, home)
+			end
+		end
+		for i = 1, 4 do
+			local angle = (i / 4) * math.pi * 2 + 0.4
+			local pos = groundAt(angle, biome.radius * 0.4)
+			part({
+				Name = "Bench",
+				Size = Vector3.new(10, 1.2, 4),
+				Position = pos + Vector3.new(0, 2, 0),
+				Color = PALETTE.wood,
+				Material = Enum.Material.WoodPlanks,
+			}, home)
+			for side = -1, 1, 2 do
+				part({
+					Name = "BenchLeg",
+					Size = Vector3.new(1.4, 2.4, 3.4),
+					Position = pos + Vector3.new(side * 3.6, 0.8, 0),
+					Color = PALETTE.woodDark,
+					Material = Enum.Material.Wood,
+				}, home)
+			end
+		end
+	end
+
+	local function forest()
+		-- cogumelos luminosos e troncos caídos
+		for i = 1, 12 do
+			local angle = rng:NextNumber() * math.pi * 2
+			local radius = biome.radius * (0.3 + rng:NextNumber() * 0.5)
+			local pos = groundAt(angle, radius)
+			local scale = 0.5 + rng:NextNumber() * 0.9
+			part({
+				Name = "ShroomStem",
+				Size = Vector3.new(2.4 * scale, 5 * scale, 2.4 * scale),
+				Position = pos + Vector3.new(0, 2.5 * scale, 0),
+				Color = Color3.fromRGB(255, 248, 236),
+				Material = Enum.Material.SmoothPlastic,
+			}, home)
+			local cap = ball({
+				Name = "ShroomCap",
+				Size = Vector3.new(7 * scale, 3.4 * scale, 7 * scale),
+				Position = pos + Vector3.new(0, 5.4 * scale, 0),
+				Color = i % 3 == 0 and Color3.fromRGB(255, 120, 140) or Color3.fromRGB(180, 140, 255),
+				Material = Enum.Material.Neon,
+				Transparency = 0.15,
+			}, home)
+			if i % 3 == 0 then
+				local glow = Instance.new("PointLight")
+				glow.Brightness = 1.1
+				glow.Range = 22
+				glow.Color = Color3.fromRGB(190, 255, 190)
+				glow.Parent = cap
+			end
+		end
+		for i = 1, 5 do
+			local angle = rng:NextNumber() * math.pi * 2
+			local radius = biome.radius * (0.35 + rng:NextNumber() * 0.45)
+			local pos = groundAt(angle, radius)
+			local log = part({
+				Name = "FallenLog",
+				Size = Vector3.new(4, 4, 18),
+				Position = pos + Vector3.new(0, 2, 0),
+				Color = Color3.fromRGB(96, 72, 52),
+				Material = Enum.Material.Wood,
+			}, home)
+			log.CFrame = CFrame.new(log.Position) * CFrame.Angles(0, rng:NextNumber() * 3.14, 0)
+		end
+	end
+
+	local function desert()
+		-- cactos com braços, e ossadas de pedra
+		for i = 1, 11 do
+			local angle = rng:NextNumber() * math.pi * 2
+			local radius = biome.radius * (0.3 + rng:NextNumber() * 0.5)
+			local pos = groundAt(angle, radius)
+			local scale = 0.7 + rng:NextNumber() * 0.8
+			part({
+				Name = "Cactus",
+				Size = Vector3.new(4 * scale, 14 * scale, 4 * scale),
+				Position = pos + Vector3.new(0, 7 * scale, 0),
+				Color = Color3.fromRGB(96, 168, 96),
+				Material = Enum.Material.Grass,
+			}, home)
+			for side = -1, 1, 2 do
+				part({
+					Name = "CactusArm",
+					Size = Vector3.new(6 * scale, 1.6 * scale, 2.4 * scale),
+					Position = pos + Vector3.new(side * 2.6 * scale, 8 * scale, 0),
+					Color = Color3.fromRGB(96, 168, 96),
+					Material = Enum.Material.Grass,
+				}, home)
+			end
+		end
+		for i = 1, 3 do
+			local angle = (i / 3) * math.pi * 2
+			local pos = groundAt(angle, biome.radius * 0.55)
+			local rib = part({
+				Name = "BoneRib",
+				Size = Vector3.new(14, 1.2, 1.2),
+				Position = pos + Vector3.new(0, 3, 0),
+				Color = Color3.fromRGB(246, 238, 214),
+				Material = Enum.Material.Marble,
+			}, home)
+			rib.CFrame = CFrame.new(rib.Position) * CFrame.Angles(0.3, angle, 0.25)
+		end
+	end
+
+	local function ice()
+		-- boneco de neve e pinheiros pequenos de gelo
+		for i = 1, 3 do
+			local angle = (i / 3) * math.pi * 2 + 0.5
+			local pos = groundAt(angle, biome.radius * 0.42)
+			ball({
+				Name = "SnowBase",
+				Size = Vector3.new(11, 9, 11),
+				Position = pos + Vector3.new(0, 4.5, 0),
+				Color = Color3.fromRGB(252, 254, 255),
+				Material = Enum.Material.Snow,
+			}, home)
+			ball({
+				Name = "SnowBelly",
+				Size = Vector3.new(8, 7, 8),
+				Position = pos + Vector3.new(0, 11.5, 0),
+				Color = Color3.fromRGB(252, 254, 255),
+				Material = Enum.Material.Snow,
+			}, home)
+			ball({
+				Name = "SnowHead",
+				Size = Vector3.new(5.6, 5.4, 5.6),
+				Position = pos + Vector3.new(0, 17, 0),
+				Color = Color3.fromRGB(252, 254, 255),
+				Material = Enum.Material.Snow,
+			}, home)
+			-- cenoura do nariz
+			local nose = part({
+				Name = "SnowNose",
+				Size = Vector3.new(3, 1.2, 1.2),
+				Position = pos + Vector3.new(0, 17, 3),
+				Color = Color3.fromRGB(255, 150, 60),
+				Material = Enum.Material.SmoothPlastic,
+			}, home)
+			nose.CFrame = CFrame.new(nose.Position) * CFrame.Angles(0, 0, math.rad(-8))
+			part({
+				Name = "SnowHat",
+				Size = Vector3.new(4.4, 3.4, 4.4),
+				Position = pos + Vector3.new(0, 20.4, 0),
+				Color = Color3.fromRGB(60, 60, 76),
+				Material = Enum.Material.Fabric,
+			}, home)
+			part({
+				Name = "SnowScarf",
+				Size = Vector3.new(6.8, 1.4, 6.8),
+				Position = pos + Vector3.new(0, 14.6, 0),
+				Color = Color3.fromRGB(240, 90, 96),
+				Material = Enum.Material.Fabric,
+			}, home)
+		end
+		for i = 1, 8 do
+			local angle = rng:NextNumber() * math.pi * 2
+			local radius = biome.radius * (0.32 + rng:NextNumber() * 0.5)
+			local pos = groundAt(angle, radius)
+			local scale = 0.6 + rng:NextNumber() * 0.7
+			part({
+				Name = "IceTreeTrunk",
+				Size = Vector3.new(2.4 * scale, 8 * scale, 2.4 * scale),
+				Position = pos + Vector3.new(0, 4 * scale, 0),
+				Color = Color3.fromRGB(140, 128, 150),
+				Material = Enum.Material.Wood,
+			}, home)
+			for tier = 1, 3 do
+				local w = (7.5 - tier * 1.6) * scale
+				part({
+					Name = "IceTreeLeaf",
+					Size = Vector3.new(w, 4 * scale, w),
+					Position = pos + Vector3.new(0, (6.6 + tier * 2.8) * scale, 0),
+					Color = Color3.fromRGB(232, 248, 255),
+					Material = Enum.Material.Snow,
+				}, home)
+			end
+		end
+	end
+
+	local function shadow()
+		-- lápides tortas e lanternas de alma
+		for i = 1, 10 do
+			local angle = rng:NextNumber() * math.pi * 2
+			local radius = biome.radius * (0.28 + rng:NextNumber() * 0.55)
+			local pos = groundAt(angle, radius)
+			local stone = part({
+				Name = "Grave",
+				Size = Vector3.new(5, 9, 1.6),
+				Position = pos + Vector3.new(0, 4, 0),
+				Color = Color3.fromRGB(88, 84, 110),
+				Material = Enum.Material.Slate,
+			}, home)
+			stone.CFrame = CFrame.new(stone.Position)
+				* CFrame.Angles(0, rng:NextNumber() * 3.14, math.rad(rng:NextNumber() * 14 - 7))
+			ball({
+				Name = "GraveTop",
+				Size = Vector3.new(5, 5, 1.6),
+				Position = pos + Vector3.new(0, 8.4, 0),
+				Color = Color3.fromRGB(88, 84, 110),
+				Material = Enum.Material.Slate,
+			}, home)
+		end
+		for i = 1, 6 do
+			local angle = rng:NextNumber() * math.pi * 2
+			local radius = biome.radius * (0.34 + rng:NextNumber() * 0.4)
+			local pos = groundAt(angle, radius)
+			part({
+				Name = "LanternPost",
+				Size = Vector3.new(1.2, 9, 1.2),
+				Position = pos + Vector3.new(0, 4.5, 0),
+				Color = Color3.fromRGB(48, 42, 62),
+				Material = Enum.Material.Metal,
+			}, home)
+			local flame = ball({
+				Name = "SoulFlame",
+				Size = Vector3.new(3.6, 4.4, 3.6),
+				Position = pos + Vector3.new(0, 10.4, 0),
+				Color = accentColor,
+				Material = Enum.Material.Neon,
+				Transparency = 0.25,
+			}, home)
+			local glow = Instance.new("PointLight")
+			glow.Brightness = 1.6
+			glow.Range = 30
+			glow.Color = accentColor
+			glow.Parent = flame
+		end
+	end
+
+	local function halloween()
+		-- abóboras pequenas e velas flutuantes
+		for i = 1, 14 do
+			local angle = rng:NextNumber() * math.pi * 2
+			local radius = biome.radius * (0.28 + rng:NextNumber() * 0.5)
+			local pos = groundAt(angle, radius)
+			local scale = 0.5 + rng:NextNumber() * 0.8
+			ball({
+				Name = "SmallPumpkin",
+				Size = Vector3.new(7 * scale, 5.4 * scale, 7 * scale),
+				Position = pos + Vector3.new(0, 2.7 * scale, 0),
+				Color = i % 4 == 0 and Color3.fromRGB(255, 190, 70) or Color3.fromRGB(246, 140, 46),
+				Material = Enum.Material.SmoothPlastic,
+			}, home)
+			part({
+				Name = "SmallStem",
+				Size = Vector3.new(1.2 * scale, 2 * scale, 1.2 * scale),
+				Position = pos + Vector3.new(0, 5.6 * scale, 0),
+				Color = Color3.fromRGB(96, 132, 62),
+				Material = Enum.Material.Grass,
+			}, home)
+		end
+		for i = 1, 5 do
+			local angle = rng:NextNumber() * math.pi * 2
+			local radius = biome.radius * (0.4 + rng:NextNumber() * 0.35)
+			local pos = groundAt(angle, radius)
+			local candle = ball({
+				Name = "GhostCandle",
+				Size = Vector3.new(3.2, 5, 3.2),
+				Position = pos + Vector3.new(0, 6, 0),
+				Color = accentColor,
+				Material = Enum.Material.Neon,
+				Transparency = 0.3,
+			}, home)
+			local glow = Instance.new("PointLight")
+			glow.Brightness = 1.8
+			glow.Range = 26
+			glow.Color = accentColor
+			glow.Parent = candle
+		end
+	end
+
+	local function cosmos()
+		-- asteroides girando e estrelas caídas
+		for i = 1, 10 do
+			local angle = rng:NextNumber() * math.pi * 2
+			local radius = biome.radius * (0.3 + rng:NextNumber() * 0.55)
+			local pos = groundAt(angle, radius)
+			local scale = 0.6 + rng:NextNumber() * 1.1
+			local rock = ball({
+				Name = "Asteroid",
+				Size = Vector3.new(6 * scale, 5 * scale, 6.4 * scale),
+				Position = pos + Vector3.new(0, 2 * scale, 0),
+				Color = Color3.fromRGB(92, 84, 130),
+				Material = Enum.Material.Slate,
+			}, home)
+			rock.CFrame = CFrame.new(rock.Position)
+				* CFrame.Angles(rng:NextNumber(), rng:NextNumber(), rng:NextNumber())
+		end
+		for i = 1, 7 do
+			local angle = rng:NextNumber() * math.pi * 2
+			local radius = biome.radius * (0.35 + rng:NextNumber() * 0.45)
+			local pos = groundAt(angle, radius)
+			local star = ball({
+				Name = "FallenStar",
+				Size = Vector3.new(3.6, 3.6, 3.6),
+				Position = pos + Vector3.new(0, 4, 0),
+				Color = Color3.fromRGB(255, 236, 160),
+				Material = Enum.Material.Neon,
+			}, home)
+			local glow = Instance.new("PointLight")
+			glow.Brightness = 1.4
+			glow.Range = 24
+			glow.Color = Color3.fromRGB(255, 236, 160)
+			glow.Parent = star
+		end
+	end
+
+	local themes = {
+		meadow = meadow,
+		forest = forest,
+		desert = desert,
+		ice = ice,
+		shadow = shadow,
+		halloween = halloween,
+		cosmos = cosmos,
+	}
+	local build = themes[id]
+	if build then
+		build()
+	end
+end
+
 local function decorateBiome(biome, cells, home, center)
 	local spec = biome.decor
 	local accent = biome.colors.accent
@@ -1107,6 +2153,8 @@ local function decorateBiome(biome, cells, home, center)
 		flower(center + Vector3.new(x, y, z), home)
 	end
 
+	themedDecor(biome, cells, home, center, rng)
+
 	-- cristais brilhantes (gelo, sombrio, cosmos, deserto)
 	for i = 1, spec.crystals do
 		local angle = rng:NextNumber() * math.pi * 2
@@ -1162,6 +2210,9 @@ function World.buildBiome(biome, portalPosition, parent)
 
 	-- relevo em grade
 	local cells = Terrain.generate(biome)
+	-- Altura do chão no miolo. Serve para assentar ovo, placa, pad e luz: se o
+	-- relevo mudar, tudo acompanha em vez de afundar.
+	local groundY = Terrain.heightAtCell(biome, cells, 0, 0)
 	local cellModel = Instance.new("Model")
 	cellModel.Name = "Terrain"
 	cellModel.Parent = home
@@ -1180,14 +2231,85 @@ function World.buildBiome(biome, portalPosition, parent)
 
 	decorateBiome(biome, cells, home, center)
 
-	-- pedestal do ovo no miolo plano. A altura vem da célula central, não de
-	-- uma constante: se o relevo mudar, o ovo acompanha e não afunda.
-	local groundY = Terrain.heightAtCell(biome, cells, 0, 0)
+	-- LUZ DO BIOMA
+	-- Cada ilha tem a própria luz: sem isso, sombra e ambiente iguais em todo
+	-- lugar e a floresta fica com a cara do deserto. São três coisas:
+	--   1. uma luz central grande que "aquece" a ilha inteira
+	--   2. postes de luz espalhados (visíveis e coloridos, criança adora)
+	--   3. um PointLight na placa do bioma, para ler o nome no escuro
+	local spec = biome.light
+	local ambientColor = Color3.fromRGB(spec.ambience[1], spec.ambience[2], spec.ambience[3])
+	local glowColor = Color3.fromRGB(spec.glow[1], spec.glow[2], spec.glow[3])
+
+	local sun = Instance.new("PointLight")
+	sun.Name = "BiomeLight"
+	sun.Brightness = spec.intensity
+	sun.Range = spec.range
+	sun.Color = ambientColor
+	sun.Shadows = false
+	sun.Parent = part({
+		Name = "LightAnchor",
+		Size = Vector3.new(2, 2, 2),
+		Position = center + Vector3.new(0, groundY + 46, 0),
+		Color = glowColor,
+		Material = Enum.Material.Neon,
+		Transparency = 1,
+		CanCollide = false,
+	}, home)
+
+	-- postes: um anel de luzes na borda da ilha, virados para o centro
+	local postCount = biome.id == "cosmos" and 6 or 8
+	for i = 1, postCount do
+		local angle = (i / postCount) * math.pi * 2
+		local radius = biome.radius * 0.62
+		local lx, lz = math.cos(angle) * radius, math.sin(angle) * radius
+		local gy = Terrain.heightAtCell(biome, cells, lx, lz)
+		local base = Vector3.new(center.X + lx, center.Y + gy, center.Z + lz)
+
+		part({
+			Name = "Post",
+			Size = Vector3.new(1.6, 14, 1.6),
+			Position = base + Vector3.new(0, 7, 0),
+			Color = PALETTE.stoneDark,
+			Material = Enum.Material.Metal,
+		}, home)
+
+		local bulb = ball({
+			Name = "PostBulb",
+			Size = Vector3.new(4.6, 4.6, 4.6),
+			Position = base + Vector3.new(0, 15, 0),
+			Color = glowColor,
+			Material = Enum.Material.Neon,
+			Transparency = 0.1,
+		}, home)
+
+		local bulbLight = Instance.new("PointLight")
+		bulbLight.Brightness = 1.8
+		bulbLight.Range = 46
+		bulbLight.Color = glowColor
+		bulbLight.Parent = bulb
+	end
+
+	-- pedestal do ovo no miolo plano, na altura real do chão
 	local egg = GameConfig.EggById[biome.eggId]
 	local eggSpot = Vector3.new(center.X, center.Y + groundY, center.Z)
 	if egg then
 		buildEggPedestal(egg, eggSpot, home)
 	end
+
+	-- ICONE GIGANTE DO BIOMA
+	-- Peça central que a criança identifica de longe: cada ilha tem um objeto
+	-- grande, na altura, virado para o hub. Serve de ponto de referência ao
+	-- viajar e dá personalidade — antes todas as ilhas eram "grama + árvore".
+	local iconBase = Vector3.new(
+		center.X,
+		center.Y + Terrain.heightAtCell(biome, cells, biome.radius * 0.34, 0),
+		center.Z + biome.radius * 0.02
+	)
+	local iconModel = Instance.new("Model")
+	iconModel.Name = "Landmark"
+	iconModel.Parent = home
+	World.buildLandmark(biome, iconModel, iconBase)
 
 	-- portal de volta para o hub
 	local spawn = Biomes.spawnPoint(biome)
@@ -1228,6 +2350,47 @@ function World.buildBiomes()
 	biomeRoot.Name = "Biomes"
 	biomeRoot.Parent = root
 
+	-- Céu do arquipélago: nuvens altas entre as ilhas. Dão a sensação de
+	-- distância (sem elas o vazio parece fim do mapa) e são o tipo de enfeite
+	-- que criança nota na hora.
+	local skyFolder = Instance.new("Folder")
+	skyFolder.Name = "Sky"
+	skyFolder.Parent = root
+
+	cloudRing(root, Vector3.new(0, 0, 0), 300, 150, 9, 3.2)
+	cloudRing(root, Vector3.new(0, 0, 0), 700, 190, 12, 4.0)
+	cloudRing(root, Vector3.new(0, 0, 0), 1100, 230, 14, 5.0)
+	cloudRing(skyFolder, Vector3.new(0, Biomes.SkyHeight, 0), 170, 60, 6, 2.4, Color3.fromRGB(220, 210, 255))
+
+	-- Ilhas flutuantes de enfeite no caminho entre o hub e os biomas. Não
+	-- colidem e não têm função: existem para o percurso parecer um mundo.
+	local rngIslets = Random.new(4711)
+	for i = 1, 14 do
+		local angle = (i / 14) * math.pi * 2 + 0.3
+		local distance = 300 + rngIslets:NextNumber() * 480
+		local height = -40 + rngIslets:NextNumber() * 120
+		local size = 18 + rngIslets:NextNumber() * 26
+		local x = math.cos(angle) * distance
+		local z = math.sin(angle) * distance
+		local islet = part({
+			Name = "Islet",
+			Size = Vector3.new(size * 2, size * 0.5, size * 2),
+			Position = Vector3.new(x, height - size * 0.2, z),
+			Color = PALETTE.grass,
+			Material = Enum.Material.Grass,
+			CanCollide = false,
+		}, skyFolder)
+		part({
+			Name = "IsletUnder",
+			Size = Vector3.new(size * 1.5, size * 0.9, size * 1.5),
+			Position = Vector3.new(x, height - size * 0.75, z),
+			Color = PALETTE.rockDark,
+			Material = Enum.Material.Slate,
+			CanCollide = false,
+		}, skyFolder)
+		islet.CanQuery = false
+	end
+
 	for _, biome in ipairs(Biomes.List) do
 		local center = Biomes.centerVector(biome)
 
@@ -1240,7 +2403,7 @@ function World.buildBiomes()
 		-- portal do hub
 		local portalPosition = Vector3.new(0, 0, 0)
 		if flat.Magnitude > 1 then
-			portalPosition = flat.Unit * 70
+			portalPosition = flat.Unit * 96
 		end
 		buildPortal(portalPosition, { accent = biome.colors.accent }, biome, root, "PortalTo_" .. biome.id)
 

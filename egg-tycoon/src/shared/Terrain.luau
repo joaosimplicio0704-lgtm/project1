@@ -11,6 +11,9 @@ local Noise = require(script.Parent.Noise)
 local Terrain = {}
 
 Terrain.GridSize = 17
+-- Tamanho da célula é derivado do raio do bioma: a grade SEMPRE cobre a
+-- ilha inteira. Antes era fixo em 14.95 e, quando as ilhas cresceram, sobrava
+-- um anel de ilha sem terreno — chão nenhum, só a base de pedra.
 Terrain.CellSize = 14.95
 Terrain.CellThickness = 3.2
 Terrain.SeaLevel = 0
@@ -65,9 +68,10 @@ end
 function Terrain.generate(biome)
 	local cells = {}
 	local half = math.floor(Terrain.GridSize / 2)
-	local cell = Terrain.CellSize
 	local thickness = Terrain.CellThickness
-	local radiusCells = half * cell
+	-- cobre 96% do raio do bioma; os 4% restantes viram a praia que já existe
+	local radiusCells = biome.radius * 0.96
+	local cell = (radiusCells * 2) / (half * 2 + 1)
 
 	for gx = -half, half do
 		for gz = -half, half do
@@ -124,6 +128,7 @@ function Terrain.generate(biome)
 		end
 	end
 
+	Terrain.lastCellSize = cell
 	return cells
 end
 
@@ -140,7 +145,8 @@ function Terrain.heightAtCell(biome, cells, lx, lz)
 			end
 		end
 	end
-	if best and bestDistance < (Terrain.CellSize * 1.6) ^ 2 then
+	local reach = (Terrain.lastCellSize or Terrain.CellSize) * 1.6
+	if best and bestDistance < reach * reach then
 		return best.y + Terrain.CellThickness / 2
 	end
 	return Terrain.PlateauFloor + Terrain.CellThickness / 2

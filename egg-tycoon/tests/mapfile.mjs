@@ -42,6 +42,27 @@ if (clicks < 20) problems.push(`ClickDetector: ${clicks} (esperado >= 20)`);
 if (scripts < 20) problems.push(`scripts: ${scripts} (esperado >= 20) — o jogo não roda`);
 if (zeroSize > 0) problems.push(`partes com tamanho zero: ${zeroSize}`);
 
+// Iluminação e atmosfera precisam estar NO ARQUIVO, não só no script.
+// Quem abre o .rbxlx no editor tem que ver o mesmo mapa que o Playmostra —
+// se a névoa e o ambiente só existissem em World.build(), o editor ficaria
+// com um mapa sem graça.
+const property = (name) => {
+	const match = xml.match(new RegExp(`name="${name}"[^>]*>([^<]*)<`));
+	return match ? match[1] : null;
+};
+if (property("FogEnd") === null) problems.push("sem nevoeiro (FogEnd) no Lighting");
+if (property("ExposureCompensation") === null) problems.push("sem ExposureCompensation no Lighting");
+if (property("CameraMaxZoomDistance") === null) problems.push("StarterPlayer sem zoom de câmera");
+
+// Pontos de luz por bioma: a ilha precisa acender sozinha
+const lights = count(/<Item class="PointLight"/g);
+if (lights < 60) problems.push(`poucas luzes: ${lights} (esperado >= 60)`);
+
+// Marcos: o ícone gigante de cada ilha
+for (const landmark of ["MotherTrunk", "ShroomStem", "PyramidStep", "IceSpike", "Obelisk", "GreatPumpkin"]) {
+	if (!new RegExp(`>${landmark}<`).test(xml)) problems.push(`marco ausente: ${landmark}`);
+}
+
 const mb = (Buffer.byteLength(xml) / 1024 / 1024).toFixed(1);
 
 if (problems.length) {

@@ -14,8 +14,8 @@ você e renascimento.
 2. Abra o arquivo no **Roblox Studio**
 3. Aperte **Play** (F5)
 
-O arquivo já vem com o **mundo construído dentro**: 5.700 partes, os 7 biomas, os
-portais, os ovos nos pedestais e todos os scripts. Não precisa instalar nada.
+O arquivo já vem com o **mundo construído dentro**: 7.000 partes, os 7 biomas,
+os portais, os ovos nos pedestais e todos os scripts. Não precisa instalar nada.
 Não precisa apertar Play para "gerar" o mapa — ele já está lá, visível no editor.
 
 ---
@@ -33,10 +33,38 @@ hub por portais, e cada um tem sua regra de desbloqueio:
 | ❄️ Picos Congelados | 🔵 Ovo de Gelo (250K) | renascimento 2 | montanhas nevadas (até 45 studs) |
 | 🌑 Vale Sombrio | 🟣 Ovo Sombrio (6M) | renascimento 3 | picos escuros, cristais |
 | 🎃 Ilha Abóbora | 🎃 Ovo de Halloween (25M) | renascimento 4 | abóboras gigantes |
-| 🌌 Nebulosa Cósmica | 🏆 Ovo de 30M Visitas (150M) | renascimento 5 | ilha flutuante a 236 studs |
+| 🌌 Nebulosa Cósmica | 🏆 Ovo de 30M Visitas (150M) | renascimento 5 | ilha flutuante a 300 studs |
 
-O hub tem uma praça com fonte, 5 lojas, portal de renascimento e o anel de
-portais — um para cada mundo, alinhado com a direção real da ilha.
+As ilhas ficam a **520 studs** do centro e a **276 studs** umas das outras — dá para
+ver a próxima do outro lado da água, sem parecer que estão coladas.
+
+### Cada ilha tem a própria cara
+
+Cada bioma tem um **marco gigante** feito de peças — dá para reconhecer de longe:
+
+| Ilha | Marco | Enfeites só dela |
+| --- | --- | --- |
+| Vale Verdejante | Árvore Mãe com balanço | cerejeiras cor-de-rosa, bancos |
+| Floresta Densa | Cogumelo gigante brilhante | cogumelos neon, troncos caídos |
+| Deserto Dourado | Pirâmide com sol dourado | cactos, ossadas |
+| Picos Congelados | Cristal de gelo + nuvens | bonecos de neve, pinheiros |
+| Vale Sombrio | Obelisco com runas | lápides tortas, lanternas de alma |
+| Ilha Abóbora | Abóbora gigante com cara | abóboras pequenas, velas fantasma |
+| Nebulosa Cósmica | Planeta com anel de Saturno | asteroides, estrelas caídas |
+
+### Iluminação
+
+- **Ambiente global** claro (ambiente 150/164/186, sombra suave, névoa a partir de 700) — o mapa parece desenho, não sombra preta
+- **Luz própria por bioma**: cada ilha tem uma luz central grande + 8 postes coloridos. A Floresta é verde, o Deserto é dourado, o Sombrio é roxo, o Cosmos é violeta
+- **126 fontes de luz** no arquivo, todas com cor e alcance definidos
+- O `Lighting` já vem configurado **no arquivo**: abrir no editor mostra o mesmo que o Play
+
+### O hub
+
+Praça com fonte, 5 lojas, portal de renascimento, **estátua do ovo gigante** na
+entrada (girando), **bandeirinhas** cruzando a praça, **balões** em 6 grupos,
+dois anéis de postes de luz, e os **7 portais** — cada um com uma miniatura do
+marco do destino flutuando em cima, para a criança ver onde vai entrar.
 
 **O bloqueio é do servidor.** `Game.handlers.travel` confere o desbloqueio com os
 dados da sessão antes de autorizar. O painel só mostra o cadeado; clicar não
@@ -177,7 +205,7 @@ Roda, em ordem:
 | `npm test` | 77 asserts: drops, preços, slots, fusão, rebirth, biomas |
 | `npm run boot` | servidor completo, 2 jogadores, 10 min, testa viagem entre mundos |
 | `npm run client` | instancia a UI inteira; confere os 7 cartões de mundo |
-| `npm run world` | constrói o mapa: 5.691 partes, 7 biomas, nada enterrado |
+| `npm run world` | constrói o mapa: 7.065 partes, 7 biomas, nada enterrado |
 | `npm run sim` | 8h de um bot jogando |
 | `npm run build` | gera o `.rbxlx` final |
 | `npm run mapfile` | lê o arquivo gerado: partes, biomas, ovos, spawn |
@@ -224,6 +252,12 @@ E os que apareceram ao construir os mundos:
     de um dump gigante. Agora o XML é montado no próprio Lua.
 11. **`Color3uint8` é um inteiro**, não `R G B` separados: errar isso fazia o
     Rojo recusar o arquivo.
+12. **Ilhas a 68 studs uma da outra** — pareciam coladas. Agora 276.
+13. **Terreno com célula fixa de 14.95** — quando as ilhas cresceram, sobrava um
+    anel de ilha sem chão nenhum. Agora o tamanho da célula vem do raio.
+14. **`FogStart` só existia no script**, não no `.rbxlx`: o editor ficava sem
+    névoa. Configuração de atmosfera agora vive no `project.json`.
+15. **Estátua do hub em cima do spawn** — o jogador nascia dentro da pedra.
 
 ---
 

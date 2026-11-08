@@ -500,7 +500,22 @@ for _, child in ipairs(grid:GetChildren()) do
   end
 end
 assert(cards == 7, "painel de mundos com " .. cards .. " cartoes (esperado 7)")
-print("painel de mundos: " .. cards .. " cartoes ok")
+
+-- cada cartao precisa mostrar nome, preco e a descricao do bioma.
+-- Cartao sem texto e o bug classico de "abri o painel e nao tem nada".
+local withText = 0
+for _, child in ipairs(grid:GetChildren()) do
+  if string.sub(child.Name, 1, 6) == "Biome_" then
+    local blurb = child:FindFirstChild("Blurb")
+    local lock = child:FindFirstChild("Lock")
+    assert(blurb, "cartao sem descricao: " .. child.Name)
+    assert(blurb.Text and #blurb.Text > 8, "descricao vazia em " .. child.Name)
+    assert(lock and lock.Text and #lock.Text > 0, "cartao sem status: " .. child.Name)
+    withText = withText + 1
+  end
+end
+assert(withText == 7, "so " .. withText .. " cartoes com texto")
+print("painel de mundos: " .. cards .. " cartoes com descricao ok")
 `;
 
 const SNAPSHOT = String.raw`

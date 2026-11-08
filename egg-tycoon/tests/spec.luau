@@ -340,6 +340,58 @@ check("rotulo livre", Biomes.unlockLabel(Biomes.get("meadow")) == "Livre")
 check("rotulo de ovos", string.find(Biomes.unlockLabel(Biomes.get("forest")), "3") ~= nil)
 check("rotulo de rebirth", string.find(Biomes.unlockLabel(Biomes.get("ice")), "2") ~= nil)
 
+---------------------------------------------------------------------------
+-- DISTANCIA ENTRE AS ILHAS
+---------------------------------------------------------------------------
+-- As ilhas já ficaram a 68 studs uma da outra e pareciam coladas. Este teste
+-- trava o espaçamento mínimo: se alguém aproximar os centros de novo, a suíte
+-- quebra antes de virar mapa.
+
+local closest, closestPair = math.huge, nil
+for i, a in ipairs(Biomes.List) do
+	for j, b in ipairs(Biomes.List) do
+		if j > i and a.id ~= "cosmos" and b.id ~= "cosmos" then
+			local ca, cb = Biomes.centerVector(a), Biomes.centerVector(b)
+			local dx, dz = ca.X - cb.X, ca.Z - cb.Z
+			local gap = math.sqrt(dx * dx + dz * dz) - a.radius - b.radius
+			if gap < closest then
+				closest = gap
+				closestPair = a.id .. "/" .. b.id
+			end
+		end
+	end
+end
+check(
+	"ilhas com pelo menos 200 studs de vao",
+	closest >= 200,
+	string.format("%s: %.0f", tostring(closestPair), closest)
+)
+
+local highest = 0
+for _, b in ipairs(Biomes.List) do
+	if b.radius > highest then
+		highest = b.radius
+	end
+end
+check("todas as ilhas tem raio parecido", highest <= 160, tostring(highest))
+
+-- a luz de cada bioma precisa existir e ser distinta o bastante para se notar
+local lightKeys = {}
+local missingLight = nil
+for _, b in ipairs(Biomes.List) do
+	if not b.light or not b.light.ambience or not b.light.glow then
+		missingLight = b.id
+	end
+	if b.light then
+		local key = table.concat(b.light.ambience, ",")
+		if lightKeys[key] then
+			missingLight = b.id .. " repete a luz de " .. lightKeys[key]
+		end
+		lightKeys[key] = b.id
+	end
+end
+check("todo bioma tem luz propria", missingLight == nil, tostring(missingLight))
+
 print(string.format("\n%d passed, %d failed", passed, failed))
 if failed > 0 then
 	error("testes falharam")

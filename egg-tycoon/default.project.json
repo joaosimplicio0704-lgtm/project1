@@ -23,21 +23,30 @@
       "$className": "Lighting",
       "$properties": {
         "Ambient": [
-          0.47,
-          0.52,
-          0.6
+          0.588,
+          0.643,
+          0.729
         ],
         "OutdoorAmbient": [
-          0.63,
-          0.7,
-          0.78
+          0.769,
+          0.824,
+          0.91
         ],
-        "Brightness": 2.8,
-        "ClockTime": 13.6,
+        "Brightness": 3.1,
+        "ClockTime": 14.2,
         "GeographicLatitude": -15,
         "GlobalShadows": true,
-        "EnvironmentDiffuseScale": 0.5,
-        "EnvironmentSpecularScale": 0.3
+        "EnvironmentDiffuseScale": 0.7,
+        "EnvironmentSpecularScale": 0.25,
+        "ShadowSoftness": 0.75,
+        "ExposureCompensation": 0.35,
+        "FogColor": [
+          0.776,
+          0.863,
+          0.965
+        ],
+        "FogStart": 700,
+        "FogEnd": 3400
       }
     },
     "ReplicatedStorage": {
@@ -59,6 +68,13 @@
         "Client": {
           "$path": "src/client"
         }
+      },
+      "$properties": {
+        "CameraMaxZoomDistance": 220,
+        "CameraMinZoomDistance": 16,
+        "CharacterWalkSpeed": 22,
+        "CharacterJumpPower": 60,
+        "EnableMouseLockOption": false
       }
     }
   }

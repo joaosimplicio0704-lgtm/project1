@@ -65,9 +65,20 @@ for _, inst in ipairs(__root:GetDescendants()) do
 end
 
 __spawn = nil
+__spawnY = nil
 for _, inst in ipairs(__root:GetDescendants()) do
   if inst.ClassName == "SpawnLocation" then
     __spawn = inst.Name
+    __spawnY = inst.Position.Y
+  end
+end
+
+-- O SpawnLocation precisa estar SOBRE a praça, não flutuando nem enterrado.
+-- Se ele ficar no vazio, o jogador cai no oceano ao entrar no jogo.
+__plazaTop = nil
+for _, inst in ipairs(__root:GetChildren()) do
+  if inst.Name == "Plaza" then
+    __plazaTop = inst.Position.Y + inst.Size.Y / 2
   end
 end
 
@@ -99,6 +110,102 @@ for _, model in ipairs(biomeFolder:GetChildren()) do
   end
   __geometry[id] = { ground = groundY, pedestal = pedestalY, egg = eggY }
 end
+
+-- MARCO E LUZ: cada ilha precisa do icone gigante e de luz propria.
+-- Sem o marco a ilha e "grama com arvore" e fica igual as outras; sem luz,
+-- a sombra e o ambiente sao identicos e o tema some.
+__landmarks = {}
+__lights = {}
+for _, model in ipairs(biomeFolder:GetChildren()) do
+  local id = string.gsub(model.Name, "^Biome_", "")
+  local landmark = model:FindFirstChild("Landmark")
+  __landmarks[id] = landmark and #landmark:GetChildren() or 0
+
+  local lightParts = 0
+  for _, inst in ipairs(model:GetDescendants()) do
+    if inst.ClassName == "PointLight" then
+      lightParts = lightParts + 1
+    end
+  end
+  __lights[id] = lightParts
+end
+
+-- DECORACAO TEMATICA: cada ilha precisa de enfeites que só ela tem.
+-- Sem isso tudo vira "grama com árvore" e o tema fica só na cor.
+__themed = {}
+local THEMED_NAMES = {
+  CherryTrunk = "meadow", Bench = "meadow",
+  ShroomStem = "forest", FallenLog = "forest",
+  Cactus = "desert", BoneRib = "desert",
+  SnowBase = "ice", IceTreeTrunk = "ice",
+  Grave = "shadow", SoulFlame = "shadow",
+  SmallPumpkin = "halloween", GhostCandle = "halloween",
+  Asteroid = "cosmos", FallenStar = "cosmos",
+}
+for _, model in ipairs(biomeFolder:GetChildren()) do
+  local id = string.gsub(model.Name, "^Biome_", "")
+  local found = {}
+  for _, inst in ipairs(model:GetDescendants()) do
+    local owner = THEMED_NAMES[inst.Name]
+    if owner then
+      found[inst.Name] = (found[inst.Name] or 0) + 1
+    end
+  end
+  __themed[id] = found
+end
+
+-- PORTAIS DO HUB: nao podem se sobrepor nem sair da praca.
+-- Dois portais colados sao invisiveis no codigo e obvios no jogo.
+__portals = {}
+for _, model in ipairs(__root:GetChildren()) do
+  if string.sub(model.Name, 1, 9) == "PortalTo_" then
+    local veil = model:FindFirstChild("Veil")
+    if veil then
+      __portals[#__portals + 1] = {
+        biome = string.gsub(model.Name, "^PortalTo_", ""),
+        x = veil.Position.X,
+        z = veil.Position.Z,
+      }
+    end
+  end
+end
+
+-- Colisao real: o portal nao pode invadir loja nem outro portal.
+-- (Base do portal sobre a praca e proposital; dois portais no mesmo lugar nao.)
+__portalHits = {}
+for _, model in ipairs(__root:GetChildren()) do
+  if string.sub(model.Name, 1, 9) == "PortalTo_" then
+    local base = model:FindFirstChild("Base")
+    if base then
+      for _, other in ipairs(__root:GetChildren()) do
+        if other ~= model and (string.sub(other.Name, 1, 9) == "PortalTo_" or other:FindFirstChild("ShopSign") or other:FindFirstChild("Sign")) then
+          local ob = other:FindFirstChild("Base") or other:FindFirstChild("Floor")
+          if ob then
+            local d = math.sqrt((base.Position.X - ob.Position.X)^2 + (base.Position.Z - ob.Position.Z)^2)
+            if d < (base.Size.X + ob.Size.X) / 2 then
+              __portalHits[#__portalHits + 1] = model.Name .. " perto de " .. other.Name .. " (" .. math.floor(d) .. ")"
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+-- O spawn nao pode ficar embaixo da estatua: o jogador nasce dentro da pedra.
+__statue = nil
+for _, inst in ipairs(__root:GetDescendants()) do
+  if inst.Name == "StatueBase" then
+    __statue = { x = inst.Position.X, z = inst.Position.Z, sx = inst.Size.X, sz = inst.Size.Z }
+  end
+end
+
+-- ceu: nuvens e ilhotas de enfeite entre as ilhas
+__sky = 0
+local skyFolder = __root:FindFirstChild("Sky")
+if skyFolder then
+  __sky = #skyFolder:GetChildren()
+end
 `,
 );
 run(lua, code, "world");
@@ -118,6 +225,11 @@ if (biomes.length !== 7) problems.push(`biomas: ${biomes.length} (esperado 7)`);
 if (eggs.length !== 7) problems.push(`ovos: ${eggs.length} (esperado 7)`);
 if (eggs.some((e) => e.includes("!semclick"))) problems.push("ovo sem ClickDetector");
 if (!spawn) problems.push("sem SpawnLocation");
+const spawnY = Number(fromLua(lua.globals.get("__spawnY")) ?? 0);
+const plazaTop = Number(fromLua(lua.globals.get("__plazaTop")) ?? 0);
+if (spawn && (spawnY < plazaTop - 0.5 || spawnY > plazaTop + 8)) {
+	problems.push(`SpawnLocation fora do chão da praça (spawn ${spawnY.toFixed(1)}, chão ${plazaTop.toFixed(1)})`);
+}
 if (zero > 0) problems.push(`partes com tamanho zero: ${zero}`);
 
 // geometria: nada enterrado, nada flutuando longe do chão
@@ -135,6 +247,66 @@ for (const [id, spot] of Object.entries(geometry)) {
 	if (egg <= pedestal) problems.push(`${id}: ovo abaixo do pedestal`);
 }
 
+// marco e iluminação
+const landmarks = fromLua(lua.globals.get("__landmarks")) ?? {};
+const lights = fromLua(lua.globals.get("__lights")) ?? {};
+for (const id of Object.keys(landmarks)) {
+	if (Number(landmarks[id]) < 3) problems.push(`${id}: marco ausente ou vazio (${landmarks[id]} peças)`);
+	if (Number(lights[id]) < 4) problems.push(`${id}: pouca luz (${lights[id]} PointLight)`);
+}
+
+const themed = fromLua(lua.globals.get("__themed")) ?? {};
+const themedNames = {
+	meadow: ["CherryTrunk", "Bench"],
+	forest: ["ShroomStem", "FallenLog"],
+	desert: ["Cactus", "BoneRib"],
+	ice: ["SnowBase", "IceTreeTrunk"],
+	shadow: ["Grave", "SoulFlame"],
+	halloween: ["SmallPumpkin", "GhostCandle"],
+	cosmos: ["Asteroid", "FallenStar"],
+};
+for (const [id, names] of Object.entries(themedNames)) {
+	const found = themed[id] ?? {};
+	for (const name of names) {
+		if (Number(found[name] ?? 0) < 2) {
+			problems.push(`${id}: decoração temática "${name}" ausente ou insuficiente`);
+		}
+	}
+}
+
+const portals = fromLua(lua.globals.get("__portals")) ?? [];
+if (portals.length !== 7) problems.push(`portais no hub: ${portals.length} (esperado 7)`);
+let closestPortal = Infinity;
+for (let i = 0; i < portals.length; i += 1) {
+	for (let j = i + 1; j < portals.length; j += 1) {
+		const d = Math.hypot(portals[i].x - portals[j].x, portals[i].z - portals[j].z);
+		if (d < closestPortal) closestPortal = d;
+	}
+}
+if (portals.length > 1 && closestPortal < 40) {
+	problems.push(`portais colados: ${closestPortal.toFixed(0)} studs entre centros`);
+}
+for (const portal of portals) {
+	const radius = Math.hypot(portal.x, portal.z);
+	if (radius > 120) problems.push(`portal ${portal.biome} fora da praça (${radius.toFixed(0)})`);
+}
+
+const portalHits = fromLua(lua.globals.get("__portalHits")) ?? {};
+const hitList = Array.isArray(portalHits) ? portalHits : Object.values(portalHits);
+for (const hit of hitList) problems.push("portal invade espaço: " + hit);
+
+const statue = fromLua(lua.globals.get("__statue"));
+if (statue && spawn) {
+	const spawnZ = 86; // posição do SpawnLocation definida em World.build
+	const dz = Math.abs(spawnZ - Number(statue.z));
+	if (dz < (18 + Number(statue.sz)) / 2) {
+		problems.push(`spawn em cima da estátua (dz=${dz.toFixed(0)})`);
+	}
+}
+
+const sky = Number(fromLua(lua.globals.get("__sky")) ?? 0);
+if (sky < 10) problems.push(`céu vazio: ${sky} enfeites entre as ilhas`);
+
 if (problems.length) {
 	console.error("world FALHOU");
 	for (const problem of problems) console.error("  - " + problem);
@@ -144,3 +316,6 @@ if (problems.length) {
 console.log(`world ok — ${total} instâncias, ${parts} partes, ${biomes.length} biomas`);
 console.log("  biomas: " + biomes.sort().join(", "));
 console.log("  ovos:   " + eggs.sort().join(", "));
+console.log("  marcos: " + Object.entries(landmarks).map(([k, v]) => `${k}=${v}`).join(" "));
+console.log("  luzes:  " + Object.entries(lights).map(([k, v]) => `${k}=${v}`).join(" "));
+console.log(`  ceu:    ${sky} enfeites entre as ilhas`);
