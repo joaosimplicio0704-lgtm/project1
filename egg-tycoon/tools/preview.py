@@ -52,6 +52,7 @@ def parse_rbxlx(path):
         return tuple(num(el.find(t)) for t in tags)
 
     parts = []
+    lighting = {}
 
     def walk(item, ancestors):
         class_name = item.get("class")
@@ -94,13 +95,26 @@ def parse_rbxlx(path):
             if "pos" in info and "size" in info:
                 parts.append(info)
 
+        # Lighting: o render precisa disto para mostrar a luz REAL do jogo.
+        # Sem isso eu ajustava brilho no escuro, porque o render usava fator
+        # fixo e todo valor parecia igual.
+        if class_name == "Lighting":
+            for key in ("Brightness", "ExposureCompensation", "Ambient",
+                        "OutdoorAmbient", "EnvironmentDiffuseScale"):
+                if key in p:
+                    el = p[key][1]
+                    if key in ("Brightness", "ExposureCompensation", "EnvironmentDiffuseScale"):
+                        lighting[key] = num(el)
+                    else:
+                        lighting[key] = vec(el, ("R", "G", "B"))
+
         for child in item.findall("Item"):
             walk(child, ancestors + [name or class_name])
 
     for child in root.findall("Item"):
         walk(child, [])
 
-    return parts
+    return parts, lighting
 
 
 class Camera:
@@ -161,10 +175,35 @@ def shade(color, f):
     return tuple(max(0, min(255, int(c * f))) for c in color)
 
 
+def lighting_gain(lighting):
+    """Fator de brilho derivado do Lighting real do jogo.
+
+    O render usava 1.08 / 0.74 / 0.56 fixos na face de cima, lado e frente.
+    Assim TODO valor de Brightness parecia igual, e ajustar luz virava chute.
+    Aqui o ganho sai de Brightness + ExposureCompensation do build: subir o
+    brilho no World.luau agora ESTOURA o render do mesmo jeito que estoura
+    a tela do jogador.
+    """
+    if not lighting:
+        return 1.0
+    brightness = lighting.get("Brightness", 2.0)
+    exposure = lighting.get("ExposureCompensation", 0.0)
+    # Referência neutra: Brightness 2.0 + Exposure 0.0 = 1.0.
+    #
+    # O ganho é limitado a 1.0 DE PROPÓSITO. A cor da peça já é a cor final:
+    # multiplicar por mais de 1 só serve para estourar para branco, e é
+    # exatamente isso que eu quero detectar no preview. Ganho > 1 existia
+    # antes e fazia toda ilha parecer lavada sem eu conseguir ver a causa.
+    raw = (brightness / 2.0) * (1.0 + max(-0.5, exposure))
+    return max(0.35, min(1.0, raw))
+
+
 def render(parts, out_path, yaw=40, pitch=30, width=1600, height=900, label=None,
-           sky_top=(120, 180, 238), sky_bottom=(212, 236, 252), show_ground=True, zoom=1.0):
+           sky_top=(120, 180, 238), sky_bottom=(212, 236, 252), show_ground=True, zoom=1.0,
+           lighting=None):
     cam = Camera(yaw, pitch).fit(parts, width, height)
     cam.scale *= zoom
+    gain = lighting_gain(lighting)
 
     img = Image.new("RGB", (width, height))
     d = ImageDraw.Draw(img)
@@ -234,9 +273,11 @@ def render(parts, out_path, yaw=40, pitch=30, width=1600, height=900, label=None
         glow = p.get("material") == 288
         alpha = 1.0 - p["transparency"]
 
-        top = shade(base, 1.08 if glow else 1.0)
-        left = shade(base, 0.74 if not glow else 0.95)
-        right = shade(base, 0.56 if not glow else 0.85)
+        # O ganho vem do Lighting do build (ver lighting_gain).
+        # Neon fica de fora: brilha sozinho, não depende do sol.
+        top = shade(base, 1.08 if glow else 1.02 * gain)
+        left = shade(base, 0.86 if glow else 0.74 * gain)
+        right = shade(base, 0.76 if glow else 0.56 * gain)
 
         # topo (4,5,6,7) / esquerda (0,3,7,4) / direita (1,2,6,5)
         if p["shape"] == 0:  # Ball: círculo achatado
@@ -310,7 +351,7 @@ def main():
         print("rode npm run build primeiro", file=sys.stderr)
         return 1
 
-    parts = parse_rbxlx(MAP_FILE)
+    parts, lighting = parse_rbxlx(MAP_FILE)
     print(f"{len(parts)} partes de {os.path.basename(MAP_FILE)}")
 
     if args.all:
@@ -319,23 +360,24 @@ def main():
             if not sub:
                 print(f"  {b}: vazio")
                 continue
-            out = render(sub, os.path.join(OUT_DIR, f"{b}.png"), args.yaw, args.pitch,
+            out = render(sub, os.path.join(OUT_DIR, f"{b}.png"), args.yaw, args.pitch, lighting=lighting,
                          label=f"Biome {b}  ({len(sub)} peças)")
             print("  ", b, "->", os.path.relpath(out, ROOT))
     elif args.biome:
         sub = [p for p in parts if f"Biome_{args.biome}" in p["path"]]
         out = render(sub, os.path.join(OUT_DIR, f"{args.biome}.png"), args.yaw, args.pitch,
-                     label=f"Biome {args.biome}")
+                     label=f"Biome {args.biome}", lighting=lighting)
         print("->", os.path.relpath(out, ROOT))
     elif args.world:
-        out = render(parts, os.path.join(OUT_DIR, "mundo.png"), 22, 34, label="Mundo inteiro")
+        out = render(parts, os.path.join(OUT_DIR, "mundo.png"), 22, 34, label="Mundo inteiro", lighting=lighting)
         print("->", os.path.relpath(out, ROOT))
     else:
         hub = [p for p in parts if "Biomes/" not in p["path"] and "Sky/" not in p["path"]]
         if args.no_ocean:
             hub = [p for p in hub if p["name"] not in ("Ocean", "SeaFloor")]
         out = render(hub, os.path.join(OUT_DIR, "hub.png"), args.yaw, args.pitch,
-                     label="Hub (praça + portais)", show_ground=True, zoom=args.zoom)
+                     label="Hub (praça + portais)", show_ground=True, zoom=args.zoom,
+                     lighting=lighting)
         print("->", os.path.relpath(out, ROOT))
     return 0
 

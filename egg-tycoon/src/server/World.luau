@@ -94,16 +94,21 @@ function World.build()
 	-- O ambiente do Roblox é escuro por padrão: sombra quase preta, e as ilhas
 	-- longe do sol somem. Aqui a luz é lavada de propósito, para o mapa parecer
 	-- um desenho: ambiente alto, sombra suave, névoa leve no horizonte.
-	Lighting.Ambient = Color3.fromRGB(150, 164, 186)
-	Lighting.OutdoorAmbient = Color3.fromRGB(196, 210, 232)
-	Lighting.Brightness = 3.1
+	-- Números vindos do render, não do olho no Studio: o preview lê estes
+	-- valores do build (tools/preview.py, lighting_gain). Com Brightness 3.1
+	-- e Exposure 0.35 a ilha estourava — pedra virava branco puro, grama
+	-- virava neon e perdia todo o matiz. Cartoon é cor saturada e legível,
+	-- não luz forte.
+	Lighting.Ambient = Color3.fromRGB(122, 134, 154)
+	Lighting.OutdoorAmbient = Color3.fromRGB(168, 184, 206)
+	Lighting.Brightness = 2.0
 	Lighting.ClockTime = 14.2
 	Lighting.GeographicLatitude = -15
-	Lighting.EnvironmentDiffuseScale = 0.7
-	Lighting.EnvironmentSpecularScale = 0.25
+	Lighting.EnvironmentDiffuseScale = 0.55
+	Lighting.EnvironmentSpecularScale = 0.2
 	Lighting.GlobalShadows = true
 	Lighting.ShadowSoftness = 0.75
-	Lighting.ExposureCompensation = 0.35
+	Lighting.ExposureCompensation = 0.0
 	Lighting.FogColor = Color3.fromRGB(198, 220, 246)
 	Lighting.FogStart = 700
 	Lighting.FogEnd = 3400
@@ -123,9 +128,9 @@ function World.build()
 
 	local existing = Lighting:FindFirstChildOfClass("Atmosphere")
 	local atmosphere = existing or Instance.new("Atmosphere")
-	atmosphere.Density = 0.28
-	atmosphere.Haze = 0.9
-	atmosphere.Glare = 0.2
+	atmosphere.Density = 0.22
+	atmosphere.Haze = 0.55
+	atmosphere.Glare = 0.08
 	atmosphere.Color = Color3.fromRGB(210, 226, 245)
 	atmosphere.Decay = Color3.fromRGB(130, 150, 175)
 	atmosphere.Parent = Lighting
@@ -381,47 +386,68 @@ end
 ---------------------------------------------------------------------------
 
 -- Árvore low-poly cartoon.
--- Antes: tronco caixote + três BLOCOS empilhados. De longe lia como pilha de
--- caixas, não árvore. O padrão de packs low-poly de verdade é tronco fino +
--- copa de esferas (ou octaedro) em volta, cada uma num tom diferente: a
--- variação de tom é o que dá volume sem precisar de textura.
-local function tree(position, scale, parent)
+--
+-- DOIS defeitos corrigidos aqui:
+--   1. A copa usava a paleta GLOBAL. Resultado: bola verde idêntica no
+--      prado, no deserto e no gelo. Árvore de bioma tem que puxar a cor do
+--      bioma, senão a ilha perde a identidade. `colors` é opcional: sem ele
+--      cai na paleta global (é o caso das árvores do hub).
+--   2. O tronco era um bloco de 3,6x9 — mais largo que alto, lia como
+--      caixote embaixo da copa. Agora são três segmentos afinando para
+--      cima, que é como um tronco lê de longe.
+local function tree(position, scale, parent, colors)
 	local model = Instance.new("Model")
 	model.Name = "Tree"
 	model.Parent = parent
 
-	local trunkH = 15
-	-- tronco levemente cônico: dois blocos, o de baixo mais grosso
-	part({
-		Size = Vector3.new(3.6, trunkH * 0.6, 3.6) * scale,
-		Position = position + Vector3.new(0, trunkH * 0.3 * scale, 0),
-		Color = Style.color.woodDark,
-		Material = Style.flat,
-	}, model)
-	part({
-		Size = Vector3.new(2.8, trunkH * 0.5, 2.8) * scale,
-		Position = position + Vector3.new(0, trunkH * 0.8 * scale, 0),
-		Color = Style.color.wood,
-		Material = Style.flat,
-	}, model)
+	-- `colors` chega como tabela {r, g, b} (é o formato de Biomes.luau),
+	-- não como Color3. Precisa converter antes de misturar.
+	local function toColor(rgb, fallback)
+		if not rgb then
+			return fallback
+		end
+		return Color3.fromRGB(rgb[1], rgb[2], rgb[3])
+	end
 
-	-- copa: 5 esferas em volta de uma central, cada uma num tom
-	local crown = position + Vector3.new(0, trunkH * 1.05 * scale, 0)
+	local leafMain = toColor(colors and colors.grass, Style.color.grass)
+	local leafDark = toColor(colors and colors.grassDark, Style.color.grassDark)
+	-- `accent` NÃO serve de tom de copa: no prado ele é rosa, e a árvore
+	-- ficava com bolas cor-de-rosa. O tom de cima tem que ser o verde
+	-- clareado, que é o que o sol bate.
+	local leafLight = Style.lighten(leafMain, 0.30)
+	local trunkColor = colors and Style.darken(leafDark, 0.32) or Style.color.woodDark
+
+	-- tronco: três segmentos, cada um mais fino que o de baixo
+	local segmentH = 6
+	for i = 1, 3 do
+		local w = 3.4 - (i - 1) * 0.62
+		part({
+			Name = "Trunk",
+			Size = Vector3.new(w, segmentH, w) * scale,
+			Position = position + Vector3.new(0, (segmentH * (i - 0.5)) * scale, 0),
+			Color = i == 1 and trunkColor or Style.lighten(trunkColor, 0.06),
+			Material = Style.flat,
+		}, model)
+	end
+
+	-- copa: 5 esferas em volta de uma central, cada uma num tom.
+	-- A variação de tom é o que dá volume sem precisar de textura.
+	local trunkH = segmentH * 3
+	local crown = position + Vector3.new(0, trunkH * 1.0 * scale, 0)
 	local lobes = {
-		{ 0, 0, 0, 1.0 },
-		{ -1.05, -0.18, 0.15, 0.72 },
-		{ 1.05, -0.14, -0.2, 0.78 },
-		{ 0.18, 0.62, 0.55, 0.62 },
-		{ -0.2, 0.5, -0.62, 0.58 },
+		{ 0, 0, 0, 1.0, leafLight },
+		{ -1.05, -0.18, 0.15, 0.72, leafDark },
+		{ 1.05, -0.14, -0.2, 0.78, leafMain },
+		{ 0.18, 0.62, 0.55, 0.62, leafLight },
+		{ -0.2, 0.5, -0.62, 0.58, leafDark },
 	}
 	for i, lobe in ipairs(lobes) do
 		local d = 11.5 * lobe[4] * scale
-		local tone = i == 1 and Style.color.grassLight or (i % 2 == 0 and Style.color.grass or Style.color.grassDark)
 		ball({
 			Name = "Leaf",
 			Size = Vector3.new(d, d * 0.92, d),
 			Position = crown + Vector3.new(lobe[1] * 9 * scale, lobe[2] * 7 * scale, lobe[3] * 9 * scale),
-			Color = tone,
+			Color = lobe[5],
 			Material = Style.flat,
 		}, model)
 	end
@@ -726,7 +752,7 @@ function World.buildGemShop()
 
 	local light = Instance.new("PointLight")
 	light.Color = Color3.fromRGB(120, 230, 255)
-	light.Brightness = 3
+	light.Brightness = 1.7
 	light.Range = 26
 	light.Parent = gem
 
@@ -926,7 +952,7 @@ function World.buildRebirthPortal()
 
 	local light = Instance.new("PointLight")
 	light.Color = Color3.fromRGB(130, 255, 210)
-	light.Brightness = 4
+	light.Brightness = 2.2
 	light.Range = 40
 	light.Parent = glow
 
@@ -1082,7 +1108,7 @@ function World.buildFestival()
 				Transparency = 0.1,
 			}, model)
 			local light = Instance.new("PointLight")
-			light.Brightness = 2
+			light.Brightness = 1.1
 			light.Range = 60
 			light.Color = ring == 1 and Color3.fromRGB(255, 226, 160) or Color3.fromRGB(160, 220, 255)
 			light.Parent = lamp
@@ -1282,7 +1308,7 @@ function World.buildLandmark(biome, parent, base)
 			Transparency = 0.55,
 		}, parent)
 		local light = Instance.new("PointLight")
-		light.Brightness = 2.4
+		light.Brightness = 1.3
 		light.Range = 90
 		light.Color = Color3.fromRGB(150, 255, 170)
 		light.Parent = glow
@@ -1408,7 +1434,7 @@ function World.buildLandmark(biome, parent, base)
 			Transparency = 0.35,
 		}, parent)
 		local light = Instance.new("PointLight")
-		light.Brightness = 3.2
+		light.Brightness = 1.8
 		light.Range = 110
 		light.Color = Color3.fromRGB(255, 150, 60)
 		light.Parent = fire
@@ -1710,7 +1736,7 @@ local function buildPortal(position, look, targetBiome, parent, name)
 	}, model)
 
 	local light = Instance.new("PointLight")
-	light.Brightness = 2.2
+	light.Brightness = 1.2
 	light.Range = 52
 	light.Color = Color3.fromRGB(accent[1], accent[2], accent[3])
 	light.Parent = veil
@@ -2119,7 +2145,7 @@ local function themedDecor(biome, cells, home, center, rng)
 				Transparency = 0.25,
 			}, home)
 			local glow = Instance.new("PointLight")
-			glow.Brightness = 1.6
+			glow.Brightness = 1.0
 			glow.Range = 30
 			glow.Color = accentColor
 			glow.Parent = flame
@@ -2161,7 +2187,7 @@ local function themedDecor(biome, cells, home, center, rng)
 				Transparency = 0.3,
 			}, home)
 			local glow = Instance.new("PointLight")
-			glow.Brightness = 1.8
+			glow.Brightness = 1.2
 			glow.Range = 26
 			glow.Color = accentColor
 			glow.Parent = candle
@@ -2197,7 +2223,7 @@ local function themedDecor(biome, cells, home, center, rng)
 				Material = Enum.Material.Neon,
 			}, home)
 			local glow = Instance.new("PointLight")
-			glow.Brightness = 1.4
+			glow.Brightness = 0.9
 			glow.Range = 24
 			glow.Color = Color3.fromRGB(255, 236, 160)
 			glow.Parent = star
@@ -2292,7 +2318,7 @@ local function decorateBiome(biome, cells, home, center)
 				}, home)
 			end
 		else
-			tree(center + Vector3.new(x, y, z), scale, home)
+			tree(center + Vector3.new(x, y, z), scale, home, biome.colors)
 		end
 	end
 
@@ -2607,7 +2633,7 @@ function World.buildBiome(biome, portalPosition, parent)
 		}, home)
 
 		local bulbLight = Instance.new("PointLight")
-		bulbLight.Brightness = 1.8
+		bulbLight.Brightness = 0.9
 		bulbLight.Range = 46
 		bulbLight.Color = glowColor
 		bulbLight.Parent = bulb

@@ -40,6 +40,35 @@ walk(__root)
 -- CERCA: conta estacas por ilha e confere que elas BLOQUEIAM.
 -- Cerca que nao colide e decoração: o jogador atravessa e a barreira nao
 -- existe. Aqui a barreira e funcional, nao enfeite.
+-- ARVORE: a copa tem que puxar a cor do bioma.
+-- Antes eram bolas verdes identicas no prado, no deserto e no gelo.
+-- So meadow/shadow/cosmos usam tree(); deserto, gelo, floresta e halloween
+-- tem construtor proprio.
+__treeTones = ""
+
+for _, id in ipairs({ "meadow", "shadow", "cosmos" }) do
+  for _, inst in ipairs(__root:GetDescendants()) do
+    -- a folha fica em Tree/, dentro de Biome_<id>: precisa subir a cadeia.
+    -- Comparar so o pai imediato nao acha nada.
+    local inBiome = false
+    local node = inst.Parent
+    for _ = 1, 4 do
+      if node and string.find(node.Name, "Biome_" .. id, 1, true) then
+        inBiome = true
+        break
+      end
+      node = node and node.Parent
+    end
+    -- So arvore de verdade (Tree/). O Bush do hub tambem tem Leaf,
+    -- e no prado a accent dele e rosa: pegava a peça errada.
+    if inst.Name == "Leaf" and inBiome and inst.Parent and inst.Parent.Name == "Tree" then
+      local c = inst.Color
+      __treeTones = __treeTones .. id .. "=" .. math.floor(c.R * 255) .. "," .. math.floor(c.G * 255) .. "," .. math.floor(c.B * 255) .. " parent=" .. tostring(inst.Parent and inst.Parent.Name) .. " "
+      break
+    end
+  end
+end
+
 __fencePosts = 0
 __fenceSolid = 0
 for _, inst in ipairs(__root:GetDescendants()) do
@@ -266,6 +295,32 @@ if (spawn && (spawnY < plazaTop - 0.5 || spawnY > plazaTop + 8)) {
 	problems.push(`SpawnLocation fora do chão da praça (spawn ${spawnY.toFixed(1)}, chão ${plazaTop.toFixed(1)})`);
 }
 if (zero > 0) problems.push(`partes com tamanho zero: ${zero}`);
+
+// COR DAS ARVORES POR BIOMA
+const tones = String(fromLua(lua.globals.get("__treeTones")) ?? "");
+function parseTone(id) {
+	const m = tones.match(new RegExp(`${id}=(\\d+),(\\d+),(\\d+)`));
+	return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+const toneList = ["meadow", "shadow", "cosmos"].map((id) => [id, parseTone(id)]);
+const missing = toneList.filter(([, t]) => !t).map(([id]) => id);
+if (missing.length > 0) {
+	problems.push(`arvore sem cor por bioma: faltou ${missing.join(", ")} (${tones})`);
+} else {
+	// dois biomas com o mesmo tom = a cor do bioma nao foi aplicada
+	for (let i = 0; i < toneList.length; i++) {
+		for (let j = i + 1; j < toneList.length; j++) {
+			const [ia, a] = toneList[i];
+			const [ib, b] = toneList[j];
+			const d = Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+			if (d < 40) problems.push(`arvores de ${ia} e ${ib} quase iguais: ${a} vs ${b}`);
+		}
+	}
+	const meadow = parseTone("meadow");
+	if (!(meadow[1] > meadow[0] && meadow[1] > meadow[2])) {
+		problems.push(`arvore do prado nao e verde: ${meadow}`);
+	}
+}
 
 // CERCA
 const fencePosts = Number(fromLua(lua.globals.get("__fencePosts")) ?? 0);
