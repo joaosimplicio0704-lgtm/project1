@@ -19,7 +19,7 @@ const lua = await createLua();
 const code = chunk(
 	HOST,
 	SERVICES,
-	sharedModules(["GameConfig", "Format", "Net", "Pets", "Noise", "Biomes", "Terrain"]),
+	sharedModules(["GameConfig", "Format", "Net", "Pets", "Noise", "Biomes", "Terrain", "Style"]),
 	serverModules(["World"]),
 	"__World = World",
 	"__World.build()",
@@ -36,6 +36,37 @@ end
 __root = game:GetService("Workspace"):FindFirstChild("EggTycoon")
 assert(__root, "World.build() nao criou Workspace.EggTycoon")
 walk(__root)
+
+-- CERCA: conta estacas por ilha e confere que elas BLOQUEIAM.
+-- Cerca que nao colide e decoração: o jogador atravessa e a barreira nao
+-- existe. Aqui a barreira e funcional, nao enfeite.
+__fencePosts = 0
+__fenceSolid = 0
+for _, inst in ipairs(__root:GetDescendants()) do
+  if inst.Name == "FencePost" then
+    __fencePosts = __fencePosts + 1
+    if inst.CanCollide ~= false then __fenceSolid = __fenceSolid + 1 end
+  end
+end
+
+-- spawn tem que estar LIVRE: nenhuma estaca a menos de 20 studs
+__spawnClear = true
+__spawnOffender = "nenhuma"
+for _, inst in ipairs(__root:GetDescendants()) do
+  -- So incomoda se estiver na MESMA altura do jogador. A ilha do cosmos
+  -- paira a 212 de altura e a cerca dela passa por cima do spawn: em XZ
+  -- bate, em Y esta 200 studs acima da cabeca. Comparar so XZ dava falso
+  -- positivo.
+  if inst.Name == "FencePost" and math.abs(inst.Position.Y - 5) < 25 then
+    local dx = inst.Position.X - 0
+    local dz = inst.Position.Z - 62
+    local d = math.sqrt(dx*dx + dz*dz)
+    if d < 20 then
+      __spawnClear = false
+      __spawnOffender = inst.Position.X .. "," .. inst.Position.Y .. "," .. inst.Position.Z
+    end
+  end
+end
 
 __biomes = {}
 local biomeFolder = __root:FindFirstChild("Biomes")
@@ -235,6 +266,20 @@ if (spawn && (spawnY < plazaTop - 0.5 || spawnY > plazaTop + 8)) {
 	problems.push(`SpawnLocation fora do chão da praça (spawn ${spawnY.toFixed(1)}, chão ${plazaTop.toFixed(1)})`);
 }
 if (zero > 0) problems.push(`partes com tamanho zero: ${zero}`);
+
+// CERCA
+const fencePosts = Number(fromLua(lua.globals.get("__fencePosts")) ?? 0);
+const fenceSolid = Number(fromLua(lua.globals.get("__fenceSolid")) ?? 0);
+const spawnClear = fromLua(lua.globals.get("__spawnClear"));
+if (fencePosts < 150) {
+	problems.push(`poucas estacas de cerca: ${fencePosts} (esperado 7 ilhas + hub)`);
+}
+if (fenceSolid !== fencePosts) {
+	problems.push(`cerca que nao bloqueia: ${fenceSolid}/${fencePosts} com colisao`);
+}
+if (spawnClear !== true) {
+	problems.push("estaca de cerca em cima do spawn: " + fromLua(lua.globals.get("__spawnOffender")));
+}
 
 // geometria: nada enterrado, nada flutuando longe do chão
 const geometry = fromLua(lua.globals.get("__geometry")) ?? {};
