@@ -621,6 +621,10 @@ function GameConfig.defaultData()
 		selectedEgg = "starter",
 		stats = { taps = 0, hatched = 0, bestRarity = 0, coinsEarned = 0 },
 		questIndex = 1,
+		-- Mina dos pets (ver shared/Mine.luau). `dug` guarda quantas
+		-- viagens cada pet já completou: é o que dá a sensação de "meu pet
+		-- trabalha há um tempo". `best` guarda o melhor minério já achado.
+		mine = { dug = {}, best = "", total = 0 },
 	}
 end
 

@@ -13,6 +13,7 @@ local Format = require(Shared.Format)
 
 local Sessions = require(script.Parent.Sessions)
 local PlayerData = require(script.Parent.PlayerData)
+local MineServer = require(script.Parent.MineServer)
 
 local Game = {}
 
@@ -22,6 +23,7 @@ local rng = Random.new(os.time())
 
 function Game.init(remoteSet)
 	remotes = remoteSet
+	MineServer.init(GameConfig)
 end
 
 ---------------------------------------------------------------------------
@@ -135,6 +137,8 @@ function Game.snapshot(session)
 		eggBought = data.eggBought,
 		rebirthCost = GameConfig.rebirthCost(GameConfig.rate(data), data.rebirths),
 		rate = GameConfig.rate(data),
+		mine = MineServer.snapshot(session.player, data),
+		mineRate = MineServer.rate(session.player, data),
 		biome = data.biome or "meadow",
 		biomes = Biomes.unlockedMap({
 			hatched = data.stats and data.stats.hatched or 0,
@@ -190,6 +194,7 @@ Game.fx = {
 	equip = function() end,
 	upgrade = function() end,
 	rebirth = function() end,
+	mine = function() end,
 }
 
 Game.handlers = {}
@@ -245,6 +250,51 @@ function Game.handlers.hatch(session, payload)
 	return true
 end
 
+-- MINA DOS PETS
+-- Recolhe o minério que os pets trouxeram. Sem uid, recolhe todos os prontos.
+function Game.handlers.collectMine(session, uid)
+	local data = session.data
+	local collected, coins = MineServer.collect(session.player, data, tonumber(uid))
+	if #collected == 0 then
+		return fail(session, "nenhum pet voltou ainda")
+	end
+
+	addCoins(session, coins)
+
+	local best = collected[1].ore
+	for _, entry in ipairs(collected) do
+		if entry.ore.value > best.value then
+			best = entry.ore
+		end
+	end
+
+	remotes.event:FireClient(session.player, Net.EventKind.Mine, {
+		ores = (function()
+			local out = {}
+			for _, entry in ipairs(collected) do
+				out[#out + 1] =
+					{ id = entry.ore.id, name = entry.ore.name, color = entry.ore.color, value = entry.ore.value }
+			end
+			return out
+		end)(),
+		coins = coins,
+		best = { id = best.id, name = best.name, color = best.color },
+	})
+	Game.fx.mine(session, best)
+	Game.pushSnapshot(session)
+	return true
+end
+
+-- Apressa um pet que está na mina.
+function Game.handlers.rushMine(session, uid)
+	local ok, reason = MineServer.rush(session.player, session.data, tonumber(uid))
+	if not ok then
+		return fail(session, reason)
+	end
+	Game.pushSnapshot(session)
+	return true
+end
+
 function Game.handlers.equip(session, uid)
 	local data = session.data
 	uid = tonumber(uid)
@@ -252,12 +302,14 @@ function Game.handlers.equip(session, uid)
 	if not ok then
 		return fail(session, reason)
 	end
+	MineServer.sync(session.player, session.data)
 	Game.fx.equip(session)
 	return true
 end
 
 function Game.handlers.unequip(session, uid)
 	Pets.unequip(session.data, tonumber(uid))
+	MineServer.sync(session.player, session.data)
 	Game.fx.equip(session)
 	return true
 end

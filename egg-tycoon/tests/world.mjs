@@ -19,7 +19,7 @@ const lua = await createLua();
 const code = chunk(
 	HOST,
 	SERVICES,
-	sharedModules(["GameConfig", "Format", "Net", "Pets", "Noise", "Biomes", "Terrain", "Style"]),
+	sharedModules(["GameConfig", "Format", "Net", "Pets", "Noise", "Biomes", "Terrain", "Style", "Mine"]),
 	serverModules(["World"]),
 	"__World = World",
 	"__World.build()",

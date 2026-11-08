@@ -338,6 +338,7 @@ function World.build()
 	World.buildShop()
 	World.buildGemShop()
 	World.buildGoldenCrate()
+	World.buildMine()
 	World.buildFusion()
 	World.buildRebirthPortal()
 	World.buildTradePost()
@@ -395,7 +396,21 @@ end
 --   2. O tronco era um bloco de 3,6x9 — mais largo que alto, lia como
 --      caixote embaixo da copa. Agora são três segmentos afinando para
 --      cima, que é como um tronco lê de longe.
-local function tree(position, scale, parent, colors)
+-- perfis de árvore: sem isto, uma floresta de 54 árvores é a MESMA árvore
+-- 54 vezes. A silhueta é o que diferencia uma árvore da outra de longe, então
+-- variamos altura do tronco, largura da copa e inclinação.
+local TREE_SHAPES = {
+	-- alta e esguia (pinheiro de folha larga)
+	{ trunk = 1.55, spread = 0.78, lean = 0 },
+	-- clássica, redonda
+	{ trunk = 1.0, spread = 1.0, lean = 0 },
+	-- baixa e gorda (árvore velha)
+	{ trunk = 0.72, spread = 1.25, lean = 0 },
+	-- inclinada, como quem cresceu brigando com o vento
+	{ trunk = 1.1, spread = 0.95, lean = 0.16 },
+}
+
+local function tree(position, scale, parent, colors, shapeIndex)
 	local model = Instance.new("Model")
 	model.Name = "Tree"
 	model.Parent = parent
@@ -417,14 +432,21 @@ local function tree(position, scale, parent, colors)
 	local leafLight = Style.lighten(leafMain, 0.30)
 	local trunkColor = colors and Style.darken(leafDark, 0.32) or Style.color.woodDark
 
-	-- tronco: três segmentos, cada um mais fino que o de baixo
-	local segmentH = 6
+	-- perfil da árvore: escolhido por quem chama (ou sorteado), para a
+	-- floresta não ser 54 cópias da mesma silhueta
+	local shape = TREE_SHAPES[shapeIndex or 2] or TREE_SHAPES[2]
+	local spread = shape.spread
+	local lean = shape.lean
+
+	-- tronco: três segmentos, cada um mais fino que o de baixo.
+	-- `lean` desloca cada segmento para o lado: tronco torto, não reto.
+	local segmentH = 6 * shape.trunk
 	for i = 1, 3 do
 		local w = 3.4 - (i - 1) * 0.62
 		part({
 			Name = "Trunk",
 			Size = Vector3.new(w, segmentH, w) * scale,
-			Position = position + Vector3.new(0, (segmentH * (i - 0.5)) * scale, 0),
+			Position = position + Vector3.new(lean * segmentH * (i - 0.5) * scale, (segmentH * (i - 0.5)) * scale, 0),
 			Color = i == 1 and trunkColor or Style.lighten(trunkColor, 0.06),
 			Material = Style.flat,
 		}, model)
@@ -433,7 +455,7 @@ local function tree(position, scale, parent, colors)
 	-- copa: 5 esferas em volta de uma central, cada uma num tom.
 	-- A variação de tom é o que dá volume sem precisar de textura.
 	local trunkH = segmentH * 3
-	local crown = position + Vector3.new(0, trunkH * 1.0 * scale, 0)
+	local crown = position + Vector3.new(lean * trunkH * scale, trunkH * 1.0 * scale, 0)
 	local lobes = {
 		{ 0, 0, 0, 1.0, leafLight },
 		{ -1.05, -0.18, 0.15, 0.72, leafDark },
@@ -442,7 +464,7 @@ local function tree(position, scale, parent, colors)
 		{ -0.2, 0.5, -0.62, 0.58, leafDark },
 	}
 	for i, lobe in ipairs(lobes) do
-		local d = 11.5 * lobe[4] * scale
+		local d = 11.5 * lobe[4] * spread * scale
 		ball({
 			Name = "Leaf",
 			Size = Vector3.new(d, d * 0.92, d),
@@ -763,6 +785,123 @@ end
 ---------------------------------------------------------------------------
 -- CRIAÇÃO DOURADA (o "oven" dourado dos prints)
 ---------------------------------------------------------------------------
+
+---------------------------------------------------------------------------
+-- MINA DOS PETS
+---------------------------------------------------------------------------
+
+-- A mina é o lugar onde o pet TRABALHA (ver server/MineServer.luau).
+-- Visual: um poço de pedra com trilho de madeira saindo dele. O trilho é o
+-- que faz ler "daqui sai minério" sem nenhum texto — a criança vê o carrinho
+-- parado no fim da linha e entende que o pet vai e volta por ali.
+function World.buildMine()
+	local origin = Vector3.new(-96, 0, -62)
+
+	-- laje de pedra
+	part({
+		Size = Vector3.new(34, 1, 30),
+		Position = origin + Vector3.new(0, 1.6, 0),
+		Color = Style.color.rockDark,
+		Material = Style.rock,
+	}, root)
+
+	-- boca do poço: aro de pedra
+	local shaft = ball({
+		Name = "MineShaft",
+		Size = Vector3.new(18, 4, 18),
+		Position = origin + Vector3.new(0, 2.4, 2),
+		Color = Style.color.rockDeep,
+		Material = Style.rock,
+	})
+	shaft.Shape = Enum.PartType.Cylinder
+	shaft.CFrame = CFrame.new(shaft.Position) * CFrame.Angles(0, 0, math.pi / 2)
+
+	-- aro de pedras em volta da boca
+	for i = 1, 10 do
+		local angle = (i / 10) * math.pi * 2
+		ball({
+			Name = "ShaftRock",
+			Size = Vector3.new(3.4, 3, 3.4),
+			Position = origin + Vector3.new(math.cos(angle) * 10, 3, 2 + math.sin(angle) * 10),
+			Color = i % 2 == 0 and Style.color.rock or Style.color.rockDark,
+			Material = Style.rock,
+		})
+	end
+
+	-- dois postes de madeira da mina (a "torre" do poço)
+	for _, side in ipairs({ -1, 1 }) do
+		part({
+			Name = "MinePost",
+			Size = Vector3.new(2.4, 22, 2.4),
+			Position = origin + Vector3.new(side * 9, 12, -6),
+			Color = Style.color.wood,
+			Material = Style.flat,
+		}, root)
+	end
+	part({
+		Name = "MineBeam",
+		Size = Vector3.new(22, 2.4, 2.4),
+		Position = origin + Vector3.new(0, 23, -6),
+		Color = Style.color.woodDark,
+		Material = Style.flat,
+	}, root)
+
+	-- trilho saindo do poço até a plataforma
+	for i = 0, 5 do
+		local z = 10 + i * 5
+		part({
+			Name = "TrackSleeper",
+			Size = Vector3.new(11, 1, 2),
+			Position = origin + Vector3.new(0, 2.2, z),
+			Color = Style.color.woodDark,
+			Material = Style.flat,
+		}, root)
+		for _, side in ipairs({ -1, 1 }) do
+			part({
+				Name = "TrackRail",
+				Size = Vector3.new(1, 1, 5.4),
+				Position = origin + Vector3.new(side * 3.4, 3.1, z),
+				Color = Style.color.rock,
+				Material = Style.flat,
+			}, root)
+		end
+	end
+
+	-- carrinho de minério no fim do trilho
+	local cart = Vector3.new(origin.X, origin.Y + 4.6, origin.Z + 36)
+	part({
+		Name = "MineCart",
+		Size = Vector3.new(9, 5, 7),
+		Position = cart,
+		Color = Style.color.rock,
+		Material = Style.rock,
+	}, root)
+	-- minério brilhando dentro do carrinho
+	ball({
+		Name = "CartOre",
+		Size = Vector3.new(4.6, 3.4, 4.2),
+		Position = cart + Vector3.new(0, 2.6, 0),
+		Color = Style.color.cyan,
+		Material = Style.glow,
+	}, root)
+	for _, side in ipairs({ -1, 1 }) do
+		for _, back in ipairs({ -1, 1 }) do
+			local wheel = ball({
+				Name = "CartWheel",
+				Size = Vector3.new(3.2, 3.2, 1.2),
+				Position = cart + Vector3.new(side * 3.6, -3, back * 2.4),
+				Color = Style.color.black,
+				Material = Style.flat,
+			})
+			wheel.Shape = Enum.PartType.Cylinder
+			wheel.CFrame = CFrame.new(wheel.Position) * CFrame.Angles(0, 0, math.pi / 2)
+		end
+	end
+
+	-- zona clicável em cima da laje: abre o painel da mina
+	local hitbox = makeZone("mine", origin + Vector3.new(0, 8, 6), Vector3.new(30, 16, 26), Style.color.cyan)
+	return hitbox
+end
 
 function World.buildGoldenCrate()
 	local origin = Vector3.new(-96, 0, 62)
@@ -2257,9 +2396,11 @@ local function decorateBiome(biome, cells, home, center)
 	end
 
 	-- anel onde a decoração pode nascer: fora do platô do ovo, dentro da ilha
-	-- 0.86 deixava árvore nascendo no meio da cerca (a cerca fica em 0.92).
-	-- 0.82 garante que a copa mais larga ainda fica por dentro.
-	local placeable = biome.radius * 0.82
+	-- A cerca fica em 0.92 do raio. Aqui a conta desconta o RAIO DA COPA, não
+	-- só um número mágico: o perfil "gordo" tem spread 1.25 e a copa chega a
+	-- ~10 studs, então uma árvore centrada em 0.82 encostava na cerca.
+	-- 0.74 deixa folga para a copa mais larga e mais a escala 1.5.
+	local placeable = biome.radius * 0.74
 	local innerRing = biome.radius * 0.30
 
 	-- árvores (ou pinheiros / abóboras, conforme o tema)
@@ -2318,7 +2459,9 @@ local function decorateBiome(biome, cells, home, center)
 				}, home)
 			end
 		else
-			tree(center + Vector3.new(x, y, z), scale, home, biome.colors)
+			-- sorteia o perfil: 4 silhuetas diferentes na mesma ilha
+			local shape = 1 + math.floor(rng:NextNumber() * #TREE_SHAPES)
+			tree(center + Vector3.new(x, y, z), scale, home, biome.colors, shape)
 		end
 	end
 

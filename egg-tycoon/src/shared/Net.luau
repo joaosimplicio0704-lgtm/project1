@@ -23,6 +23,8 @@ Net.ActionKind = {
 	ClaimQuest = "claimQuest",
 	SetZone = "setZone",
 	Travel = "travel",
+	CollectMine = "collectMine",
+	RushMine = "rushMine",
 }
 
 Net.EventKind = {
@@ -31,6 +33,7 @@ Net.EventKind = {
 	Rebirth = "rebirth",
 	Zone = "zone",
 	Travel = "travel",
+	Mine = "mine",
 }
 
 -- Zonas interativas do mapa (click detector -> abre UI no cliente)
@@ -43,6 +46,7 @@ Net.Zones = {
 	Trade = "trade",
 	Rebirth = "rebirth",
 	Portal = "portal",
+	Mine = "mine",
 }
 
 return Net

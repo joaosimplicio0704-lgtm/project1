@@ -120,6 +120,20 @@ Game.fx.upgrade = function(session, kind, level)
 	Effects.burst(pos + Vector3.new(0, 3, 0), Color3.fromRGB(140, 255, 180), 12, 16, 1.8)
 end
 
+-- MINA: o pet volta com o minério na mão. Sem efeito, a mecânica só mexe
+-- número no painel e quem está olhando o mundo não vê nada acontecer.
+Game.fx.mine = function(session, ore)
+	local character = session.player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root or not ore then
+		return
+	end
+	local color = Color3.fromRGB(ore.color[1], ore.color[2], ore.color[3])
+	local at = root.Position + Vector3.new(0, 3, 0)
+	Effects.burst(at, color, 26, 20, 3.2)
+	Effects.shockwave(at, color, 18, 0.55)
+end
+
 Game.fx.rebirth = function(session, rebirths)
 	local pos = feetPosition(session)
 	if not pos then

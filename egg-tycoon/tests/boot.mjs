@@ -18,7 +18,7 @@ const prepare = (src) =>
 		.filter((line) => !/^local Shared = /.test(line))
 		.filter(
 			(line) =>
-				!/^local (Sessions|PlayerData|World|Remotes|Game|Effects|Net|GameConfig|Pets|Format) = require\(/.test(line),
+				!/^local (Sessions|PlayerData|World|Remotes|Game|Effects|Net|GameConfig|Pets|Format|Mine|MineServer) = require\(/.test(line),
 		)
 		.join("\n");
 
@@ -178,6 +178,16 @@ function Sessions.all() return Sessions.byPlayer end`,
   markDirty = function() end,
   save = function() end,
 }`,
+	mod("Mine", "src/shared/Mine.luau"),
+	`local MineServer = {
+  init = function() end,
+  sync = function() end,
+  forget = function() end,
+  rate = function() return 0 end,
+  snapshot = function() return { trips = {}, ores = {}, best = "", dug = 0, tripSeconds = 7 } end,
+  collect = function() return {}, 0 end,
+  rush = function() return false, "stub" end,
+}`,
 	mod("Game", "src/server/Game.luau"),
 	mod("Effects", "src/server/Effects.luau"),
 	String.raw`
@@ -192,6 +202,7 @@ Game.fx.hatch = function() __fxCalls.hatch += 1 end
 Game.fx.equip = function() __fxCalls.equip += 1 end
 Game.fx.upgrade = function() __fxCalls.upgrade += 1 end
 Game.fx.rebirth = function() __fxCalls.rebirth += 1 end
+Game.fx.mine = function() __fxCalls.mine = (__fxCalls.mine or 0) + 1 end
 
 Game.init(__remoteSet)
 

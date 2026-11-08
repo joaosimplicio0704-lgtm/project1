@@ -404,6 +404,7 @@ const CLIENT_MODULES = [
 	"ShopPanel",
 	"WorldUI",
 	"BiomesPanel",
+	"MinePanel",
 ]
 	.map((n) => moduleCode(n, `src/client/${n}.luau`))
 	.join("\n");
@@ -418,7 +419,7 @@ const INIT_SCRIPT = (() => {
 		.join("\n")
 		.replace(/localscript/gi, "script")
 		// script.Theme etc. -> Theme (é o que o require daria)
-		.replace(/\bscript\.(Theme|State|NetClient|Hud|TapButton|EggPanel|PetsPanel|ShopPanel|Toasts|WorldUI)\b/g, "$1");
+		.replace(/\bscript\.(Theme|State|NetClient|Hud|TapButton|EggPanel|PetsPanel|ShopPanel|Toasts|WorldUI|MinePanel)\b/g, "$1");
 	return `-- ===== init.client.luau =====\n${body}\n`;
 })();
 
@@ -482,7 +483,7 @@ assert(#descendants > 60, "GUI praticamente vazia: " .. #descendants)
 
 -- Os 3 painéis de tela cheia precisam começar escondidos, senão o jogo abre
 -- com Ovos + Pets + Loja empilhados por cima do mapa.
-for _, name in ipairs({ "EggPanel", "PetsPanel", "ShopPanel", "BiomesPanel" }) do
+for _, name in ipairs({ "EggPanel", "PetsPanel", "ShopPanel", "BiomesPanel", "MinePanel" }) do
   local panel = gui:FindFirstChild(name)
   assert(panel, "painel ausente na GUI: " .. name)
   assert(panel.Visible == false, name .. " deveria começar invisível, Visible=" .. tostring(panel.Visible))
