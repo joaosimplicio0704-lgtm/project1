@@ -1,0 +1,5288 @@
+<roblox version="4">
+  <Item class="Lighting" referent="0">
+    <Properties>
+      <string name="Name">Lighting</string>
+      <Color3 name="Ambient">
+        <R>0.47</R>
+        <G>0.52</G>
+        <B>0.6</B>
+      </Color3>
+      <float name="Brightness">2.8</float>
+      <float name="ClockTime">13.6</float>
+      <float name="EnvironmentDiffuseScale">0.5</float>
+      <float name="EnvironmentSpecularScale">0.3</float>
+      <float name="GeographicLatitude">-15</float>
+      <bool name="GlobalShadows">true</bool>
+      <Color3 name="OutdoorAmbient">
+        <R>0.63</R>
+        <G>0.7</G>
+        <B>0.78</B>
+      </Color3>
+    </Properties>
+  </Item>
+  <Item class="ReplicatedStorage" referent="1">
+    <Properties>
+      <string name="Name">ReplicatedStorage</string>
+    </Properties>
+    <Item class="Folder" referent="2">
+      <Properties>
+        <string name="Name">Shared</string>
+      </Properties>
+      <Item class="ModuleScript" referent="3">
+        <Properties>
+          <string name="Name">Format</string>
+          <string name="Source"><![CDATA[-- Format
+-- Numeros grandes e tempo, no estilo dos idle games (1.2K, 3.4M, 5.6B).
+
+local Format = {}
+
+local SUFFIXES = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", "UDc", "DDc" }
+
+function Format.number(value)
+	local n = tonumber(value) or 0
+	local negative = n < 0
+	n = math.abs(n)
+
+	if n < 1000 then
+		if n == math.floor(n) then
+			return (negative and "-" or "") .. tostring(math.floor(n))
+		end
+		return (negative and "-" or "") .. string.format("%.1f", n)
+	end
+
+	local index = math.min(math.floor(math.log10(n) / 3), #SUFFIXES - 1)
+	local scaled = n / (1000 ^ index)
+
+	local text
+	if scaled < 10 then
+		text = string.format("%.2f", scaled)
+	elseif scaled < 100 then
+		text = string.format("%.1f", scaled)
+	else
+		text = string.format("%.0f", scaled)
+	end
+
+	if string.find(text, ".", 1, true) then
+		text = text:gsub("0+$", ""):gsub("%.$", "")
+	end
+
+	return (negative and "-" or "") .. text .. SUFFIXES[index + 1]
+end
+
+function Format.rate(value)
+	return "+" .. Format.number(value) .. "/s"
+end
+
+function Format.time(seconds)
+	if seconds == math.huge then
+		return "∞"
+	end
+	seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+	if seconds < 60 then
+		return seconds .. "s"
+	elseif seconds < 3600 then
+		return string.format("%dm %02ds", seconds // 60, seconds % 60)
+	elseif seconds < 86400 then
+		return string.format("%dh %02dm", seconds // 3600, (seconds % 3600) // 60)
+	end
+	return string.format("%dd", seconds // 86400)
+end
+
+function Format.percent(value)
+	return string.format("%d%%", math.floor(value * 100 + 0.5))
+end
+
+return Format
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="4">
+        <Properties>
+          <string name="Name">GameConfig</string>
+          <string name="Source"><![CDATA[-- GameConfig
+-- Toda a balanceagem: pets, ovos, raridades, upgrades e rebirth.
+-- Modulo puro (sem `game`) pra rodar em teste fora do Roblox.
+
+local GameConfig = {}
+
+GameConfig.DataVersion = 1
+GameConfig.SaveStore = "EggTycoon_Save_v1"
+
+---------------------------------------------------------------------------
+-- RARIDADES
+---------------------------------------------------------------------------
+
+GameConfig.Rarities = {
+	{ id = "common", name = "Comum", color = Color3.fromRGB(190, 200, 215), order = 1 },
+	{ id = "uncommon", name = "Incomum", color = Color3.fromRGB(105, 220, 140), order = 2 },
+	{ id = "rare", name = "Raro", color = Color3.fromRGB(90, 170, 255), order = 3 },
+	{ id = "epic", name = "Épico", color = Color3.fromRGB(190, 120, 255), order = 4 },
+	{ id = "legendary", name = "Lendário", color = Color3.fromRGB(255, 190, 60), order = 5 },
+	{ id = "mythic", name = "Mítico", color = Color3.fromRGB(255, 110, 160), order = 6 },
+	{ id = "secret", name = "Secreto", color = Color3.fromRGB(60, 255, 235), order = 7 },
+}
+
+GameConfig.RarityById = {}
+for _, rarity in ipairs(GameConfig.Rarities) do
+	GameConfig.RarityById[rarity.id] = rarity
+end
+
+function GameConfig.rarity(id)
+	return GameConfig.RarityById[id] or GameConfig.Rarities[1]
+end
+
+---------------------------------------------------------------------------
+-- PETS
+---------------------------------------------------------------------------
+-- income = moedas por segundo quando equipado
+-- Pet e imutavel: instancias ficam em data.pets com um uid proprio.
+
+GameConfig.Pets = {
+	-- Ovo Inicial
+	{
+		id = "chick",
+		name = "Pintinho",
+		emoji = "🐤",
+		rarity = "common",
+		income = 1,
+		color = Color3.fromRGB(255, 225, 120),
+	},
+	{
+		id = "bunny",
+		name = "Coelhinho",
+		emoji = "🐰",
+		rarity = "common",
+		income = 2,
+		color = Color3.fromRGB(245, 240, 235),
+	},
+	{
+		id = "kitten",
+		name = "Gatinho",
+		emoji = "🐱",
+		rarity = "uncommon",
+		income = 4.4,
+		color = Color3.fromRGB(255, 175, 110),
+	},
+	{
+		id = "fox",
+		name = "Raposinha",
+		emoji = "🦊",
+		rarity = "rare",
+		income = 10,
+		color = Color3.fromRGB(255, 140, 70),
+	},
+	{
+		id = "puppy",
+		name = "Cachorrinho Dourado",
+		emoji = "🐶",
+		rarity = "epic",
+		income = 24,
+		color = Color3.fromRGB(255, 205, 60),
+	},
+
+	-- Ovo Verde
+	{
+		id = "frog",
+		name = "Sapinho",
+		emoji = "🐸",
+		rarity = "common",
+		income = 15,
+		color = Color3.fromRGB(120, 210, 100),
+	},
+	{
+		id = "turtle",
+		name = "Tartaruga",
+		emoji = "🐢",
+		rarity = "common",
+		income = 30,
+		color = Color3.fromRGB(110, 190, 130),
+	},
+	{
+		id = "panda",
+		name = "Panda",
+		emoji = "🐼",
+		rarity = "uncommon",
+		income = 66,
+		color = Color3.fromRGB(240, 240, 240),
+	},
+	{
+		id = "parrot",
+		name = "Papagaio",
+		emoji = "🦜",
+		rarity = "rare",
+		income = 150,
+		color = Color3.fromRGB(120, 230, 120),
+	},
+	{
+		id = "bear",
+		name = "Ursinho",
+		emoji = "🧸",
+		rarity = "epic",
+		income = 360,
+		color = Color3.fromRGB(200, 155, 110),
+	},
+
+	-- Ovo Dourado
+	{
+		id = "hamster",
+		name = "Hamster",
+		emoji = "🐹",
+		rarity = "common",
+		income = 250,
+		color = Color3.fromRGB(255, 200, 140),
+	},
+	{
+		id = "lion",
+		name = "Leãozinho",
+		emoji = "🦁",
+		rarity = "common",
+		income = 500,
+		color = Color3.fromRGB(255, 190, 90),
+	},
+	{
+		id = "seal",
+		name = "Foquinha",
+		emoji = "🦭",
+		rarity = "uncommon",
+		income = 1100,
+		color = Color3.fromRGB(190, 215, 235),
+	},
+	{
+		id = "owl",
+		name = "Coruja",
+		emoji = "🦉",
+		rarity = "rare",
+		income = 2500,
+		color = Color3.fromRGB(200, 175, 140),
+	},
+	{
+		id = "goldenpup",
+		name = "Filhote Dourado",
+		emoji = "🐕",
+		rarity = "legendary",
+		income = 6000,
+		color = Color3.fromRGB(255, 205, 60),
+	},
+
+	-- Ovo de Gelo
+	{
+		id = "penguin",
+		name = "Pinguim",
+		emoji = "🐧",
+		rarity = "common",
+		income = 4000,
+		color = Color3.fromRGB(70, 90, 120),
+	},
+	{
+		id = "icewolf",
+		name = "Lobo de Gelo",
+		emoji = "🐺",
+		rarity = "common",
+		income = 8000,
+		color = Color3.fromRGB(150, 220, 255),
+	},
+	{
+		id = "yeti",
+		name = "Yeti",
+		emoji = "❄️",
+		rarity = "uncommon",
+		income = 17600,
+		color = Color3.fromRGB(220, 240, 255),
+	},
+	{
+		id = "snowfox",
+		name = "Raposa da Neve",
+		emoji = "🦊",
+		rarity = "rare",
+		income = 40000,
+		color = Color3.fromRGB(200, 230, 255),
+	},
+	{
+		id = "frost",
+		name = "Dragão de Gelo",
+		emoji = "🐲",
+		rarity = "legendary",
+		income = 96000,
+		color = Color3.fromRGB(120, 200, 255),
+	},
+
+	-- Ovo Sombrio
+	{
+		id = "bat",
+		name = "Morceguinho",
+		emoji = "🦇",
+		rarity = "common",
+		income = 65000,
+		color = Color3.fromRGB(110, 105, 140),
+	},
+	{
+		id = "spider",
+		name = "Aranha",
+		emoji = "🕷️",
+		rarity = "common",
+		income = 130000,
+		color = Color3.fromRGB(90, 80, 100),
+	},
+	{
+		id = "ghost",
+		name = "Fantasma",
+		emoji = "👻",
+		rarity = "uncommon",
+		income = 286000,
+		color = Color3.fromRGB(230, 240, 255),
+	},
+	{
+		id = "demon",
+		name = "Demoninho",
+		emoji = "😈",
+		rarity = "rare",
+		income = 650000,
+		color = Color3.fromRGB(220, 80, 90),
+	},
+	{
+		id = "reaper",
+		name = "Ceifador",
+		emoji = "💀",
+		rarity = "mythic",
+		income = 1560000,
+		color = Color3.fromRGB(160, 170, 200),
+	},
+
+	-- Ovo de 30M
+	{
+		id = "dragon",
+		name = "Dragãozinho",
+		emoji = "🐲",
+		rarity = "common",
+		income = 1000000,
+		color = Color3.fromRGB(90, 200, 130),
+	},
+	{
+		id = "unicorn",
+		name = "Unicórnio",
+		emoji = "🦄",
+		rarity = "common",
+		income = 2000000,
+		color = Color3.fromRGB(255, 180, 240),
+	},
+	{
+		id = "phoenix",
+		name = "Fênix",
+		emoji = "🔥",
+		rarity = "uncommon",
+		income = 4400000,
+		color = Color3.fromRGB(255, 140, 60),
+	},
+	{
+		id = "galaxy",
+		name = "Gatinho Galáxia",
+		emoji = "🌌",
+		rarity = "rare",
+		income = 10000000,
+		color = Color3.fromRGB(130, 110, 255),
+	},
+	{
+		id = "voidcat",
+		name = "Gato do Vazio",
+		emoji = "🕳️",
+		rarity = "mythic",
+		income = 24000000,
+		color = Color3.fromRGB(80, 40, 140),
+	},
+
+	-- Secretos (qualquer ovo, chance mínima)
+	{
+		id = "rainbowcat",
+		name = "Gato Arco-Íris",
+		emoji = "🌈",
+		rarity = "secret",
+		income = 250000000,
+		color = Color3.fromRGB(255, 120, 220),
+		secret = true,
+	},
+	{
+		id = "cosmicdog",
+		name = "Cão Cósmico",
+		emoji = "✨",
+		rarity = "secret",
+		income = 400000000,
+		color = Color3.fromRGB(140, 200, 255),
+		secret = true,
+	},
+}
+
+GameConfig.PetById = {}
+for _, pet in ipairs(GameConfig.Pets) do
+	GameConfig.PetById[pet.id] = pet
+end
+
+function GameConfig.pet(id)
+	return GameConfig.PetById[id]
+end
+
+---------------------------------------------------------------------------
+-- OVOS
+---------------------------------------------------------------------------
+-- cost em moedas. weight = peso relativo dentro do ovo.
+
+GameConfig.Eggs = {
+	{
+		id = "starter",
+		name = "Ovo Inicial",
+		emoji = "🥚",
+		cost = 30,
+		color = Color3.fromRGB(255, 240, 200),
+		spot = Color3.fromRGB(215, 175, 120),
+		drops = { chick = 450, bunny = 300, kitten = 175, fox = 70, puppy = 5 },
+	},
+	{
+		id = "green",
+		name = "Ovo Verde",
+		emoji = "🟢",
+		cost = 600,
+		color = Color3.fromRGB(180, 240, 175),
+		spot = Color3.fromRGB(90, 170, 90),
+		drops = { frog = 450, turtle = 300, panda = 175, parrot = 70, bear = 5 },
+	},
+	{
+		id = "golden",
+		name = "Criação Dourada",
+		emoji = "🟡",
+		cost = 12000,
+		color = Color3.fromRGB(255, 220, 110),
+		spot = Color3.fromRGB(230, 160, 40),
+		drops = { hamster = 450, lion = 300, seal = 175, owl = 70, goldenpup = 5 },
+	},
+	{
+		id = "ice",
+		name = "Ovo de Gelo",
+		emoji = "🔵",
+		cost = 250000,
+		color = Color3.fromRGB(200, 240, 255),
+		spot = Color3.fromRGB(110, 190, 245),
+		drops = { penguin = 450, icewolf = 300, yeti = 175, snowfox = 70, frost = 5 },
+	},
+	{
+		id = "shadow",
+		name = "Ovo Sombrio",
+		emoji = "🟣",
+		cost = 6000000,
+		color = Color3.fromRGB(150, 120, 200),
+		spot = Color3.fromRGB(70, 50, 110),
+		drops = { bat = 450, spider = 300, ghost = 175, demon = 70, reaper = 5 },
+	},
+	{
+		id = "halloween",
+		name = "Ovo de Halloween",
+		emoji = "🎃",
+		cost = 25000000,
+		color = Color3.fromRGB(255, 150, 60),
+		spot = Color3.fromRGB(120, 60, 30),
+		event = true,
+		drops = { bat = 450, spider = 300, ghost = 175, demon = 70, reaper = 5 },
+	},
+	{
+		id = "visits",
+		name = "Ovo de 30M Visitas",
+		emoji = "🏆",
+		cost = 150000000,
+		color = Color3.fromRGB(255, 200, 240),
+		spot = Color3.fromRGB(200, 110, 200),
+		drops = { dragon = 450, unicorn = 300, phoenix = 175, galaxy = 70, voidcat = 5 },
+	},
+}
+
+GameConfig.EggById = {}
+for _, egg in ipairs(GameConfig.Eggs) do
+	GameConfig.EggById[egg.id] = egg
+end
+
+function GameConfig.egg(id)
+	return GameConfig.EggById[id]
+end
+
+-- Chance de pet secreto por ovo (fora da tabela de drops)
+GameConfig.SecretChance = 1 / 500
+
+-- Preço do ovo sobe a cada compra e reseta no rebirth.
+-- É o que impede a renda de crescer sem custo (o erro clássico de idle game).
+GameConfig.EggPriceGrowth = 1.18
+
+function GameConfig.eggPrice(eggId, boughtCount)
+	local egg = GameConfig.egg(eggId)
+	if not egg then
+		return 0
+	end
+	return math.floor(egg.cost * (GameConfig.EggPriceGrowth ^ (boughtCount or 0)))
+end
+
+local SECRETS = {}
+for _, pet in ipairs(GameConfig.Pets) do
+	if pet.secret then
+		SECRETS[#SECRETS + 1] = pet
+	end
+end
+
+-- roll: numero em [0,1). Retorna a definicao do pet.
+function GameConfig.rollPet(eggId, roll, secretRoll, secretChance)
+	local egg = GameConfig.egg(eggId)
+	if not egg then
+		return nil
+	end
+
+	if secretRoll and secretRoll < (secretChance or GameConfig.SecretChance) then
+		local index = math.floor(roll * #SECRETS) % #SECRETS + 1
+		return SECRETS[index]
+	end
+
+	local total = 0
+	for _, weight in pairs(egg.drops) do
+		total += weight
+	end
+
+	local pointer = roll * total
+	for petId, weight in pairs(egg.drops) do
+		pointer -= weight
+		if pointer <= 0 then
+			return GameConfig.pet(petId)
+		end
+	end
+
+	-- hash map nao garante ordem; fallback deterministico
+	local first = next(egg.drops)
+	return GameConfig.pet(first)
+end
+
+---------------------------------------------------------------------------
+-- UPGRADES DE MOEDA
+---------------------------------------------------------------------------
+
+GameConfig.Upgrades = {
+	tap = { name = "Força do Toque", baseCost = 200, growth = 1.75, maxTier = 30, step = 1, base = 1 },
+	-- 3 -> 15 slots na moeda, 15 -> 19 com gemas. Com 9 slots a renda trava
+	-- por horas (medido na simulação), então esse upgrade precisa ir mais longe.
+	slots = { name = "Espaço de Pet", baseCost = 400, growth = 6.2, maxTier = 12, step = 1, base = 3 },
+	mult = { name = "Multiplicador", baseCost = 500000, growth = 3.2, maxTier = 20, step = 0.15, base = 1 },
+}
+
+function GameConfig.upgradeCost(kind, tier)
+	local u = GameConfig.Upgrades[kind]
+	if not u or tier >= u.maxTier then
+		return nil
+	end
+	return math.floor(u.baseCost * (u.growth ^ tier))
+end
+
+---------------------------------------------------------------------------
+-- MELHORIAS DE GEMAS (permanentes, nao resetam)
+---------------------------------------------------------------------------
+
+GameConfig.GemUpgrades = {
+	gemsIncome = { name = "Renda de Pets", baseCost = 3, costStep = 2, step = 0.12, maxRank = 25 },
+	gemsLuck = { name = "Sorte", baseCost = 4, costStep = 3, step = 0.1, maxRank = 20 },
+	gemsTap = { name = "Toque", baseCost = 2, costStep = 1, step = 0.2, maxRank = 20 },
+	gemsSlots = { name = "Espaço Extra", baseCost = 8, costStep = 8, step = 1, maxRank = 4 },
+}
+
+function GameConfig.gemCost(kind, rank)
+	local u = GameConfig.GemUpgrades[kind]
+	if not u or rank >= u.maxRank then
+		return nil
+	end
+	return u.baseCost + u.costStep * rank
+end
+
+---------------------------------------------------------------------------
+-- REBIRTH (Rensamentos)
+---------------------------------------------------------------------------
+
+GameConfig.Rebirth = {
+	Max = 25,
+	CrystalBase = 4,
+	CrystalStep = 3,
+	MultiplierPerRebirth = 0.3,
+	-- Custo = 600s de renda, limitado por um teto que CRESCE a cada rebirth.
+	-- Teto fixo = spam infinito (medido: 4 rebirths em 13s).
+	-- Sem teto = custo acompanha a renda pra sempre e nunca renasce (6h+).
+	SecondsOfIncome = 600,
+	MinCost = 100000,
+	CapBase = 5e8,
+	CapGrowth = 6,
+}
+
+function GameConfig.rebirthCost(rate, rebirths)
+	local cfg = GameConfig.Rebirth
+	local cap = cfg.CapBase * (cfg.CapGrowth ^ (rebirths or 0))
+	local raw = (rate or 0) * cfg.SecondsOfIncome
+	return math.clamp(raw, cfg.MinCost, cap)
+end
+
+function GameConfig.rebirthCrystals(rebirths)
+	return GameConfig.Rebirth.CrystalBase + GameConfig.Rebirth.CrystalStep * rebirths
+end
+
+function GameConfig.rebirthMultiplier(rebirths)
+	return 1 + GameConfig.Rebirth.MultiplierPerRebirth * rebirths
+end
+
+---------------------------------------------------------------------------
+-- DERIVADOS
+---------------------------------------------------------------------------
+
+function GameConfig.petSlots(data)
+	local base = GameConfig.Upgrades.slots.base
+		+ GameConfig.Upgrades.slots.step * (data.upgrades and data.upgrades.slots or 0)
+	local gems = GameConfig.GemUpgrades.gemsSlots.step * (data.gemUpgrades and data.gemUpgrades.gemsSlots or 0)
+	return base + gems
+end
+
+function GameConfig.tapPower(data)
+	local base = GameConfig.Upgrades.tap.base
+		+ GameConfig.Upgrades.tap.step * (data.upgrades and data.upgrades.tap or 0)
+	local gems = 1 + GameConfig.GemUpgrades.gemsTap.step * (data.gemUpgrades and data.gemUpgrades.gemsTap or 0)
+	return base * gems * GameConfig.rebirthMultiplier(data.rebirths or 0)
+end
+
+function GameConfig.incomeMultiplier(data)
+	local m = GameConfig.Upgrades.mult.base
+		+ GameConfig.Upgrades.mult.step * (data.upgrades and data.upgrades.mult or 0)
+	local gems = 1 + GameConfig.GemUpgrades.gemsIncome.step * (data.gemUpgrades and data.gemUpgrades.gemsIncome or 0)
+	return m * gems * GameConfig.rebirthMultiplier(data.rebirths or 0)
+end
+
+function GameConfig.luck(data)
+	local gems = 1 + GameConfig.GemUpgrades.gemsLuck.step * (data.gemUpgrades and data.gemUpgrades.gemsLuck or 0)
+	return gems
+end
+
+-- Ritmo total: renda passiva + toques estimados (3/s)
+function GameConfig.rate(data)
+	return GameConfig.equippedIncome(data) + GameConfig.tapPower(data) * 3
+end
+
+-- Soma a renda dos pets equipados (com multiplicadores)
+function GameConfig.equippedIncome(data)
+	local total = 0
+	for _, uid in ipairs(data.equipped or {}) do
+		for _, instance in ipairs(data.pets or {}) do
+			if instance.uid == uid then
+				local pet = GameConfig.pet(instance.petId)
+				if pet then
+					total += pet.income * (instance.golden and 1.5 or 1)
+				end
+				break
+			end
+		end
+	end
+	return total * GameConfig.incomeMultiplier(data)
+end
+
+---------------------------------------------------------------------------
+-- TAP VALUE e PROGRESSAO DE OVOS
+---------------------------------------------------------------------------
+
+-- Quanto tempo (s) para comprar o proximo ovo, no ritmo atual
+function GameConfig.secondsToAfford(eggId, data)
+	local egg = GameConfig.egg(eggId)
+	if not egg then
+		return 0
+	end
+	local passive = GameConfig.equippedIncome(data)
+	local tap = GameConfig.tapPower(data)
+	local coins = (data.coins or 0)
+	local remaining = math.max(0, egg.cost - coins)
+	if remaining <= 0 then
+		return 0
+	end
+	local tapRate = tap * 3 -- ~3 toques/s
+	local rate = passive + tapRate
+	if rate <= 0 then
+		return math.huge
+	end
+	return remaining / rate
+end
+
+---------------------------------------------------------------------------
+-- SAVE DEFAULT
+---------------------------------------------------------------------------
+
+function GameConfig.defaultData()
+	return {
+		version = GameConfig.DataVersion,
+		coins = 0,
+		gems = 0,
+		crystals = 0,
+		rebirths = 0,
+		pets = {}, -- { uid, petId, golden, level }
+		equipped = {},
+		upgrades = { tap = 0, slots = 0, mult = 0 },
+		gemUpgrades = { gemsIncome = 0, gemsLuck = 0, gemsTap = 0, gemsSlots = 0 },
+		nextUid = 1,
+		eggBought = {},
+		selectedEgg = "starter",
+		stats = { taps = 0, hatched = 0, bestRarity = 0, coinsEarned = 0 },
+		questIndex = 1,
+	}
+end
+
+---------------------------------------------------------------------------
+-- QUESTS (a barra "PRÓXIMO!" do topo)
+---------------------------------------------------------------------------
+
+GameConfig.Quests = {
+	{ id = "tap10", text = "Toque 10 vezes", kind = "taps", target = 10, reward = 25 },
+	{ id = "hatch1", text = "Abra seu primeiro ovo!", kind = "hatched", target = 1, reward = 50 },
+	{ id = "equip1", text = "Equipe um pet", kind = "equipped", target = 1, reward = 100 },
+	{ id = "tap100", text = "Toque 100 vezes", kind = "taps", target = 100, reward = 250 },
+	{ id = "hatch5", text = "Abra 5 ovos", kind = "hatched", target = 5, reward = 1000 },
+	{ id = "coins10k", text = "Junte 10K moedas", kind = "coinsEarned", target = 10000, reward = 5000 },
+	{ id = "hatch25", text = "Abra 25 ovos", kind = "hatched", target = 25, reward = 25000 },
+}
+
+function GameConfig.questProgress(data, quest)
+	if quest.kind == "taps" then
+		return data.stats.taps
+	elseif quest.kind == "hatched" then
+		return data.stats.hatched
+	elseif quest.kind == "equipped" then
+		return #data.equipped
+	end
+	return data.stats.coinsEarned
+end
+
+return GameConfig
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="5">
+        <Properties>
+          <string name="Name">Net</string>
+          <string name="Source"><![CDATA[-- Net
+-- Contrato de rede entre servidor e cliente.
+
+local Net = {}
+
+Net.FolderName = "Remotes"
+Net.State = "State"
+Net.Action = "Action"
+Net.Event = "Event"
+
+Net.ActionKind = {
+	Tap = "tap",
+	Hatch = "hatch",
+	Equip = "equip",
+	Unequip = "unequip",
+	SelectEgg = "selectEgg",
+	BuyUpgrade = "buyUpgrade",
+	BuyGemUpgrade = "buyGemUpgrade",
+	Rebirth = "rebirth",
+	Golden = "golden",
+	Fuse = "fuse",
+	SellPet = "sellPet",
+	ClaimQuest = "claimQuest",
+	SetZone = "setZone",
+}
+
+Net.EventKind = {
+	Toast = "toast",
+	Hatch = "hatch",
+	Rebirth = "rebirth",
+	Zone = "zone",
+}
+
+-- Zonas interativas do mapa (click detector -> abre UI no cliente)
+Net.Zones = {
+	Eggs = "eggs",
+	Shop = "shop",
+	GemShop = "gemshop",
+	Golden = "golden",
+	Fusion = "fusion",
+	Trade = "trade",
+	Rebirth = "rebirth",
+}
+
+return Net
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="6">
+        <Properties>
+          <string name="Name">Pets</string>
+          <string name="Source"><![CDATA[-- Pets
+-- Estado dos pets de UM jogador: inventário, equipar, renda passiva, fusão.
+-- Puro: não conhece `game`, recebe data e devolve resultados.
+
+local GameConfig = require(script.Parent.GameConfig)
+
+local Pets = {}
+
+local MAX_EQUIPPED = 99
+
+function Pets.new(data)
+	return data
+end
+
+function Pets.find(data, uid)
+	for index, instance in ipairs(data.pets) do
+		if instance.uid == uid then
+			return instance, index
+		end
+	end
+	return nil
+end
+
+function Pets.isEquipped(data, uid)
+	for _, id in ipairs(data.equipped) do
+		if id == uid then
+			return true
+		end
+	end
+	return false
+end
+
+-- Adiciona um pet novo. Retorna a instância criada.
+function Pets.add(data, petId, golden)
+	local pet = GameConfig.pet(petId)
+	if not pet then
+		return nil
+	end
+
+	local instance = {
+		uid = data.nextUid,
+		petId = petId,
+		golden = golden or false,
+	}
+	data.nextUid += 1
+	table.insert(data.pets, instance)
+
+	-- raridade maxima já obtida (para a UI mostrar progresso)
+	local order = GameConfig.rarity(pet.rarity).order
+	if order > (data.stats.bestRarity or 0) then
+		data.stats.bestRarity = order
+	end
+	data.stats.hatched += 1
+
+	return instance
+end
+
+-- Equipa se houver slot livre. Retorna ok, motivo.
+function Pets.equip(data, uid)
+	local instance = Pets.find(data, uid)
+	if not instance then
+		return false, "pet não encontrado"
+	end
+	if Pets.isEquipped(data, uid) then
+		return false, "já equipado"
+	end
+	if #data.equipped >= GameConfig.petSlots(data) then
+		return false, "sem espaço — compre mais slots"
+	end
+	table.insert(data.equipped, uid)
+	return true
+end
+
+function Pets.unequip(data, uid)
+	for index, id in ipairs(data.equipped) do
+		if id == uid then
+			table.remove(data.equipped, index)
+			return true
+		end
+	end
+	return false
+end
+
+-- Valor efetivo de um pet (renda com bônus dourado)
+local function petValue(instance)
+	local pet = GameConfig.pet(instance.petId)
+	if not pet then
+		return 0
+	end
+	return pet.income * (instance.golden and 1.5 or 1)
+end
+Pets.value = petValue
+
+-- Equipa o MELHOR conjunto possível: monta a lista do zero e não só preenche
+-- slot vazio. Sem isso, o jogador fica preso com os primeiros pets para sempre.
+function Pets.autoEquip(data)
+	local slots = GameConfig.petSlots(data)
+	local ranked = {}
+	for _, instance in ipairs(data.pets) do
+		if petValue(instance) > 0 then
+			ranked[#ranked + 1] = instance
+		end
+	end
+	table.sort(ranked, function(a, b)
+		return petValue(a) > petValue(b)
+	end)
+
+	local equipped = {}
+	for index = 1, math.min(slots, #ranked) do
+		equipped[index] = ranked[index].uid
+	end
+	data.equipped = equipped
+end
+
+-- Auto-venda: pets piores que o pior equipado viram moedas.
+-- Retorna quantos foram vendidos e quanto rendeu.
+function Pets.sellWorseThanEquipped(data)
+	if #data.pets == 0 then
+		return 0, 0
+	end
+
+	local weakest = math.huge
+	for _, uid in ipairs(data.equipped) do
+		local instance = Pets.find(data, uid)
+		if instance then
+			weakest = math.min(weakest, petValue(instance))
+		end
+	end
+	if weakest == math.huge then
+		return 0, 0
+	end
+
+	local count, total = 0, 0
+	for index = #data.pets, 1, -1 do
+		local instance = data.pets[index]
+		if not Pets.isEquipped(data, instance.uid) and petValue(instance) < weakest then
+			total += Pets.sellValue(instance)
+			table.remove(data.pets, index)
+			count += 1
+		end
+	end
+
+	data.coins += total
+	data.stats.coinsEarned += total
+	return count, total
+end
+
+function Pets.income(data)
+	return GameConfig.equippedIncome(data)
+end
+
+-- Vende um pet por moedas (proporcional à renda).
+function Pets.sellValue(instance)
+	local pet = GameConfig.pet(instance.petId)
+	if not pet then
+		return 0
+	end
+	return math.floor(pet.income * 120 * (instance.golden and 1.5 or 1))
+end
+
+function Pets.sell(data, uid)
+	local instance, index = Pets.find(data, uid)
+	if not instance then
+		return false, "pet não encontrado"
+	end
+	local value = Pets.sellValue(instance)
+	Pets.unequip(data, uid)
+	table.remove(data.pets, index)
+	data.coins += value
+	data.stats.coinsEarned += value
+	return true, value
+end
+
+-- Fusão: junta 3 pets do mesmo raro+ e devolve 1 do próximo tier.
+-- Retorna ok, petResultante | motivo
+function Pets.fuse(data, uids)
+	if #uids ~= 3 then
+		return false, "precisa de 3 pets"
+	end
+
+	local targetId, targetGolden
+	local rarityOrder = -1
+
+	for _, uid in ipairs(uids) do
+		local instance = Pets.find(data, uid)
+		if not instance then
+			return false, "pet não encontrado"
+		end
+		local pet = GameConfig.pet(instance.petId)
+		if not pet then
+			return false, "pet inválido"
+		end
+		local order = GameConfig.rarity(pet.rarity).order
+		if order < 3 then
+			return false, "só pets Raro+ podem ser fundidos"
+		end
+		if targetId then
+			if pet.id ~= targetId then
+				return false, "os 3 pets precisam ser iguais"
+			end
+		else
+			targetId = pet.id
+			targetGolden = instance.golden
+			rarityOrder = order
+		end
+	end
+
+	-- Fusão: escolhe o pet de menor renda com raridade ESTRITAMENTE acima.
+	-- Sempre existe um tier acima, então a fusão nunca morre num pet de topo de ovo.
+	local base = GameConfig.pet(targetId)
+	local upgrade
+	local bestIncome = math.huge
+	for _, pet in ipairs(GameConfig.Pets) do
+		if not pet.secret and GameConfig.rarity(pet.rarity).order > rarityOrder then
+			if pet.income < bestIncome then
+				bestIncome = pet.income
+				upgrade = pet
+			end
+		end
+	end
+
+	-- segurança extra: se o resultado for pior que a base, não funde
+	if upgrade and upgrade.income <= base.income then
+		upgrade = nil
+	end
+
+	if not upgrade then
+		return false, "não há tier acima para fundir"
+	end
+
+	-- consome os 3
+	for _, uid in ipairs(uids) do
+		local _, index = Pets.find(data, uid)
+		if index then
+			Pets.unequip(data, uid)
+			table.remove(data.pets, index)
+		end
+	end
+
+	local created = Pets.add(data, upgrade.id, targetGolden)
+	return true, created
+end
+
+-- Capacidade total de pets no inventário
+Pets.MAX_STORAGE = 200
+
+function Pets.storageFull(data)
+	return #data.pets >= Pets.MAX_STORAGE
+end
+
+return Pets
+]]></string>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="ServerScriptService" referent="7">
+    <Properties>
+      <string name="Name">ServerScriptService</string>
+    </Properties>
+    <Item class="Script" referent="8">
+      <Properties>
+        <string name="Name">Server</string>
+        <token name="RunContext">0</token>
+        <string name="Source"><![CDATA[-- init.server
+-- Bootstrap do servidor: mundo -> remotes -> sessoes -> loop.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.GameConfig)
+local Net = require(Shared.Net)
+
+local World = require(script.World)
+local Remotes = require(script.Remotes)
+local PlayerData = require(script.PlayerData)
+local Sessions = require(script.Sessions)
+local Game = require(script.Game)
+
+World.build()
+local remotes = Remotes.setup()
+Game.init(remotes)
+PlayerData.start()
+Game.start()
+
+---------------------------------------------------------------------------
+-- SESSAO
+---------------------------------------------------------------------------
+
+local function startSession(player)
+	local data = PlayerData.load(player.UserId)
+	local session = {
+		player = player,
+		data = data,
+		dirty = false,
+		tapWindow = {},
+		lastSnapshot = 0,
+		pendingToast = nil,
+	}
+	Sessions.byPlayer[player] = session
+
+	-- auto-equipa o melhor em slot livre ao entrar
+	require(Shared.Pets).autoEquip(data)
+
+	local character = player.Character or player.CharacterAdded:Wait()
+	local root = character and character:WaitForChild("HumanoidRootPart", 10)
+	if root and World.spawnCFrame then
+		root.CFrame = World.spawnCFrame()
+	end
+end
+
+local function endSession(player)
+	local session = Sessions.get(player)
+	if not session then
+		return
+	end
+	Sessions.byPlayer[player] = nil
+	PlayerData.release(player.UserId)
+end
+
+Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function()
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if root and World.spawnCFrame then
+			task.wait(0.2)
+			root.CFrame = World.spawnCFrame()
+		end
+	end)
+	task.spawn(startSession, player)
+end)
+
+Players.PlayerRemoving:Connect(endSession)
+for _, player in ipairs(Players:GetPlayers()) do
+	task.spawn(startSession, player)
+end
+
+---------------------------------------------------------------------------
+-- ACOES
+---------------------------------------------------------------------------
+
+local A = Net.ActionKind
+
+remotes.action.OnServerEvent:Connect(function(player, kind, payload)
+	local session = Sessions.get(player)
+	if not session then
+		return
+	end
+
+	local ok, err = Game.handle(session, kind, payload)
+	if not ok and err then
+		remotes.event:FireClient(player, Net.EventKind.Toast, { text = err, kind = "error" })
+	end
+end)
+
+print(string.format("[EggTycoon] Servidor pronto · %d pets · %d ovos", #GameConfig.Pets, #GameConfig.Eggs))
+]]></string>
+      </Properties>
+      <Item class="ModuleScript" referent="9">
+        <Properties>
+          <string name="Name">Game</string>
+          <string name="Source"><![CDATA[-- Game
+-- Lógica central do servidor: tick de renda, ações do jogador, rebirth.
+-- Não desenha nada, não conhece GUI.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.GameConfig)
+local Net = require(Shared.Net)
+local Pets = require(Shared.Pets)
+local Format = require(Shared.Format)
+
+local Sessions = require(script.Parent.Sessions)
+local PlayerData = require(script.Parent.PlayerData)
+
+local Game = {}
+
+local TICK = 0.25
+local remotes
+local rng = Random.new(os.time())
+
+function Game.init(remoteSet)
+	remotes = remoteSet
+end
+
+---------------------------------------------------------------------------
+-- HELPERS
+---------------------------------------------------------------------------
+
+local function toast(session, text, kind)
+	remotes.event:FireClient(session.player, Net.EventKind.Toast, { text = text, kind = kind or "info" })
+end
+
+local function addCoins(session, amount)
+	local data = session.data
+	data.coins += amount
+	data.stats.coinsEarned += amount
+end
+
+local function addGems(session, amount)
+	session.data.gems += amount
+end
+
+local function bumpQuest(session)
+	-- avança quests automaticamente quando o objetivo é atingido
+	local data = session.data
+	while true do
+		local quest = GameConfig.Quests[data.questIndex]
+		if not quest then
+			break
+		end
+		if GameConfig.questProgress(data, quest) < quest.target then
+			break
+		end
+		data.questIndex += 1
+		addCoins(session, quest.reward)
+		toast(session, "✅ " .. quest.text .. "  +🪙" .. string.format("%d", quest.reward), "success")
+	end
+end
+
+Game.toast = toast
+Game.addCoins = addCoins
+Game.bumpQuest = bumpQuest
+
+---------------------------------------------------------------------------
+-- TICK
+---------------------------------------------------------------------------
+
+function Game.tick(dt)
+	for player, session in pairs(Sessions.all()) do
+		if player.Parent == Players then
+			local data = session.data
+			local income = Pets.income(data)
+			if income > 0 then
+				addCoins(session, income * dt)
+			end
+			bumpQuest(session)
+		end
+	end
+end
+
+function Game.start()
+	task.spawn(function()
+		local last = os.clock()
+		while true do
+			task.wait(TICK)
+			local now = os.clock()
+			local dt = math.min(now - last, 2)
+			last = now
+			Game.tick(dt)
+			for player, session in pairs(Sessions.all()) do
+				if player.Parent == Players then
+					Game.pushSnapshot(session)
+				end
+			end
+		end
+	end)
+
+	-- save periódico
+	task.spawn(function()
+		while true do
+			task.wait(30)
+			for player, session in pairs(Sessions.all()) do
+				if player.Parent == Players then
+					PlayerData.markDirty(player.UserId)
+				end
+			end
+		end
+	end)
+end
+
+---------------------------------------------------------------------------
+-- SNAPSHOT
+---------------------------------------------------------------------------
+
+function Game.snapshot(session)
+	local data = session.data
+	return {
+		coins = data.coins,
+		gems = data.gems,
+		crystals = data.crystals,
+		rebirths = data.rebirths,
+		pets = data.pets,
+		equipped = data.equipped,
+		upgrades = data.upgrades,
+		gemUpgrades = data.gemUpgrades,
+		selectedEgg = data.selectedEgg,
+		stats = data.stats,
+		questIndex = data.questIndex,
+		income = Pets.income(data),
+		tapPower = GameConfig.tapPower(data),
+		slots = GameConfig.petSlots(data),
+		luck = GameConfig.luck(data),
+		eggBought = data.eggBought,
+		rebirthCost = GameConfig.rebirthCost(GameConfig.rate(data), data.rebirths),
+		rate = GameConfig.rate(data),
+	}
+end
+
+function Game.pushSnapshot(session)
+	remotes.state:FireClient(session.player, Game.snapshot(session))
+end
+
+-- snapshot de estado estático (pets, ovos) — enviado uma vez ao entrar
+function Game.staticState()
+	local eggs = {}
+	for _, egg in ipairs(GameConfig.Eggs) do
+		eggs[#eggs + 1] = {
+			id = egg.id,
+			name = egg.name,
+			emoji = egg.emoji,
+			cost = egg.cost,
+			rarities = egg.drops,
+		}
+	end
+	return {
+		eggs = eggs,
+		pets = GameConfig.Pets,
+		rarities = GameConfig.Rarities,
+		upgrades = GameConfig.Upgrades,
+		gemUpgrades = GameConfig.GemUpgrades,
+		rebirth = GameConfig.Rebirth,
+		quests = GameConfig.Quests,
+	}
+end
+
+---------------------------------------------------------------------------
+-- AÇÕES
+---------------------------------------------------------------------------
+
+local function fail(session, message)
+	toast(session, message, "error")
+	return false, message
+end
+
+Game.handlers = {}
+
+function Game.handlers.tap(session, payload)
+	local data = session.data
+	local count = math.clamp(tonumber(payload) or 1, 1, 10)
+	addCoins(session, GameConfig.tapPower(data) * count)
+	data.stats.taps += count
+	bumpQuest(session)
+	return true
+end
+
+function Game.handlers.hatch(session, payload)
+	local data = session.data
+	local egg = GameConfig.egg(data.selectedEgg)
+	if not egg then
+		return fail(session, "ovo inválido")
+	end
+	local bought = data.eggBought[egg.id] or 0
+	local price = GameConfig.eggPrice(egg.id, bought)
+	if data.coins < price then
+		return fail(session, "faltam moedas")
+	end
+	if Pets.storageFull(data) then
+		return fail(session, "inventário cheio — venda alguns pets")
+	end
+	data.coins -= price
+	data.eggBought[egg.id] = bought + 1
+
+	local pet =
+		GameConfig.rollPet(egg.id, rng:NextNumber(), rng:NextNumber(), GameConfig.SecretChance / GameConfig.luck(data))
+	if not pet then
+		return fail(session, "erro ao abrir ovo")
+	end
+	local instance = Pets.add(data, pet.id, false)
+
+	-- auto-venda: descarta o que é pior que o pior equipado (inventário não trava)
+	local soldCount, soldValue = Pets.sellWorseThanEquipped(data)
+	Pets.autoEquip(data)
+	if soldCount > 0 then
+		toast(session, string.format("🪙 %d pets auto-vendidos · +%s", soldCount, Format.number(soldValue)), "info")
+	end
+
+	bumpQuest(session)
+	remotes.event:FireClient(
+		session.player,
+		Net.EventKind.Hatch,
+		{ petId = pet.id, uid = instance.uid, rarity = pet.rarity }
+	)
+	return true
+end
+
+function Game.handlers.equip(session, uid)
+	local data = session.data
+	uid = tonumber(uid)
+	local ok, reason = Pets.equip(data, uid)
+	if not ok then
+		return fail(session, reason)
+	end
+	return true
+end
+
+function Game.handlers.unequip(session, uid)
+	Pets.unequip(session.data, tonumber(uid))
+	return true
+end
+
+function Game.handlers.selectEgg(session, eggId)
+	local egg = GameConfig.egg(eggId)
+	if not egg then
+		return fail(session, "ovo inválido")
+	end
+	session.data.selectedEgg = eggId
+	return true
+end
+
+function Game.handlers.buyUpgrade(session, kind)
+	local data = session.data
+	local tier = data.upgrades[kind]
+	if tier == nil then
+		return fail(session, "upgrade inválido")
+	end
+	local cost = GameConfig.upgradeCost(kind, tier)
+	if not cost then
+		return fail(session, "nível máximo")
+	end
+	if data.coins < cost then
+		return fail(session, "faltam moedas")
+	end
+	data.coins -= cost
+	data.upgrades[kind] = tier + 1
+	bumpQuest(session)
+	return true
+end
+
+function Game.handlers.buyGemUpgrade(session, kind)
+	local data = session.data
+	local rank = data.gemUpgrades[kind]
+	if rank == nil then
+		return fail(session, "melhoria inválida")
+	end
+	local cost = GameConfig.gemCost(kind, rank)
+	if not cost then
+		return fail(session, "rank máximo")
+	end
+	if data.gems < cost then
+		return fail(session, "faltam gemas")
+	end
+	data.gems -= cost
+	data.gemUpgrades[kind] = rank + 1
+	return true
+end
+
+function Game.handlers.rebirth(session)
+	local data = session.data
+	if data.rebirths >= GameConfig.Rebirth.Max then
+		return fail(session, "rebirth máximo")
+	end
+	local cost = GameConfig.rebirthCost(GameConfig.rate(data), data.rebirths)
+	if data.coins < cost then
+		return fail(session, "faltam " .. Format.number(cost) .. " moedas")
+	end
+
+	local crystals = GameConfig.rebirthCrystals(data.rebirths)
+	local fresh = GameConfig.defaultData()
+	fresh.rebirths = data.rebirths + 1
+	fresh.crystals = data.crystals + crystals
+	fresh.gems = data.gems
+	fresh.gemUpgrades = data.gemUpgrades
+	fresh.questIndex = data.questIndex
+	fresh.selectedEgg = data.selectedEgg
+	fresh.stats = data.stats
+	fresh.nextUid = data.nextUid
+	-- a coleção de pets é permanente: só moedas, upgrades e ovos comprados resetam
+	fresh.pets = data.pets
+	fresh.equipped = data.equipped
+	fresh.eggBought = {}
+
+	for key, value in pairs(fresh) do
+		data[key] = value
+	end
+
+	Pets.autoEquip(data)
+	remotes.event:FireClient(session.player, Net.EventKind.Rebirth, { rebirths = data.rebirths, crystals = crystals })
+	return true
+end
+
+function Game.handlers.sellPet(session, uid)
+	local ok, value = Pets.sell(session.data, tonumber(uid))
+	if not ok then
+		return fail(session, value)
+	end
+	toast(session, "🪙 +" .. Format.number(value), "success")
+	return true
+end
+
+function Game.handlers.fuse(session, uids)
+	if type(uids) ~= "table" then
+		return fail(session, "seleção inválida")
+	end
+	local ok, result = Pets.fuse(session.data, uids)
+	if not ok then
+		return fail(session, result)
+	end
+	toast(session, "✨ " .. GameConfig.pet(result.petId).name, "success")
+	return true
+end
+
+function Game.handlers.setZone(session, zone)
+	-- o servidor informa ao cliente qual UI abrir; usado pelo mundo
+	return true
+end
+
+Game.handlers.claimQuest = function(session)
+	bumpQuest(session)
+	return true
+end
+
+-- golden pet event: converte um pet aleatório em dourado
+function Game.handlers.golden(session)
+	local data = session.data
+	local pool = {}
+	for _, instance in ipairs(data.pets) do
+		if not instance.golden then
+			pool[#pool + 1] = instance
+		end
+	end
+	if #pool == 0 then
+		return fail(session, "nenhum pet para dourar")
+	end
+	if data.coins < 50000 then
+		return fail(session, "faltam 50K moedas")
+	end
+	data.coins -= 50000
+	local target = pool[rng:NextInteger(1, #pool)]
+	target.golden = true
+	toast(session, "🌟 " .. GameConfig.pet(target.petId).name .. " ficou dourado!", "success")
+	return true
+end
+
+function Game.handle(session, kind, payload)
+	local handler = Game.handlers[kind]
+	if not handler then
+		return false, "ação desconhecida"
+	end
+	local ok, reason = handler(session, payload)
+	if ok == nil then
+		-- handler antigo sem retorno explicito: trata como sucesso, nunca nil
+		return true
+	end
+	return ok, reason
+end
+
+return Game
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="10">
+        <Properties>
+          <string name="Name">PlayerData</string>
+          <string name="Source"><![CDATA[-- PlayerData
+-- Persistencia com DataStoreService + fallback em memoria (Studio sem API).
+-- Toda escrita passa por aqui, com retry e BindToClose.
+
+local DataStoreService = game:GetService("DataStoreService")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GameConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GameConfig"))
+
+local PlayerData = {}
+
+local store
+do
+	local ok, result = pcall(function()
+		return DataStoreService:GetDataStore(GameConfig.SaveStore)
+	end)
+	if ok then
+		store = result
+	else
+		warn("[PlayerData] DataStore indisponivel, salvando apenas em memoria:", result)
+	end
+end
+
+local cache = {} -- [userId] = data
+local dirty = {} -- [userId] = true
+
+local function reconcile(defaults, saved)
+	for key, value in pairs(defaults) do
+		if type(value) == "table" then
+			if type(saved[key]) ~= "table" then
+				saved[key] = {}
+			end
+			reconcile(value, saved[key])
+		elseif saved[key] == nil or type(saved[key]) ~= type(value) then
+			saved[key] = value
+		end
+	end
+	return saved
+end
+
+local function key(userId)
+	return "u_" .. tostring(userId)
+end
+
+local function read(userId)
+	if not store then
+		return nil
+	end
+	local ok, result = pcall(function()
+		return store:GetAsync(key(userId))
+	end)
+	if ok then
+		return result
+	end
+	warn("[PlayerData] GetAsync falhou:", result)
+	return nil
+end
+
+local function write(userId, data)
+	if not store then
+		return true
+	end
+	for attempt = 1, 4 do
+		local ok, err = pcall(function()
+			store:SetAsync(key(userId), data)
+		end)
+		if ok then
+			return true
+		end
+		warn(string.format("[PlayerData] SetAsync tentativa %d falhou: %s", attempt, tostring(err)))
+		task.wait(1 + attempt)
+	end
+	return false
+end
+
+function PlayerData.load(userId)
+	if cache[userId] then
+		return cache[userId]
+	end
+
+	local saved = read(userId)
+	local data = reconcile(GameConfig.defaultData(), type(saved) == "table" and saved or {})
+	cache[userId] = data
+	return data
+end
+
+function PlayerData.get(userId)
+	return cache[userId]
+end
+
+function PlayerData.markDirty(userId)
+	dirty[userId] = true
+end
+
+function PlayerData.save(userId)
+	local data = cache[userId]
+	if not data then
+		return
+	end
+	if write(userId, data) then
+		dirty[userId] = nil
+	end
+end
+
+function PlayerData.release(userId)
+	PlayerData.save(userId)
+	cache[userId] = nil
+	dirty[userId] = nil
+end
+
+function PlayerData.start()
+	task.spawn(function()
+		while true do
+			task.wait(90)
+			for userId in pairs(dirty) do
+				PlayerData.save(userId)
+			end
+		end
+	end)
+
+	game:BindToClose(function()
+		if RunService:IsStudio() then
+			return
+		end
+		for userId in pairs(cache) do
+			PlayerData.save(userId)
+		end
+	end)
+end
+
+return PlayerData
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="11">
+        <Properties>
+          <string name="Name">Remotes</string>
+          <string name="Source"><![CDATA[-- Remotes
+-- Cria/lê os RemoteEvents. Servidor cria, cliente espera.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Net = require(Shared.Net)
+
+local Remotes = {}
+
+local function ensure(className, name, parent)
+	local instance = parent:FindFirstChild(name)
+	if not instance then
+		instance = Instance.new(className)
+		instance.Name = name
+		instance.Parent = parent
+	end
+	return instance
+end
+
+function Remotes.setup()
+	local folder = ReplicatedStorage:FindFirstChild(Net.FolderName)
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = Net.FolderName
+		folder.Parent = ReplicatedStorage
+	end
+	return {
+		folder = folder,
+		state = ensure("RemoteEvent", Net.State, folder),
+		action = ensure("RemoteEvent", Net.Action, folder),
+		event = ensure("RemoteEvent", Net.Event, folder),
+	}
+end
+
+return Remotes
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="12">
+        <Properties>
+          <string name="Name">Sessions</string>
+          <string name="Source"><![CDATA[-- Sessions
+-- Uma sessao por jogador. Fonte unica de verdade no servidor.
+
+local Sessions = {}
+
+Sessions.byPlayer = {} -- [Player] = { data, farm, base }
+
+function Sessions.get(player)
+	return Sessions.byPlayer[player]
+end
+
+function Sessions.data(player)
+	local session = Sessions.byPlayer[player]
+	return session and session.data
+end
+
+function Sessions.farm(player)
+	local session = Sessions.byPlayer[player]
+	return session and session.farm
+end
+
+function Sessions.all()
+	return Sessions.byPlayer
+end
+
+return Sessions
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="13">
+        <Properties>
+          <string name="Name">World</string>
+          <string name="Source"><![CDATA[-- World
+-- Mapa cartoon low-poly construído em código, no estilo dos tycoons de ovo:
+-- palco central, ilhas de ovo, lojas, portal de rebirth e a fonte.
+-- Nada de asset externo: tudo Instance.new com cores chapadas.
+
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local Net = require(ReplicatedStorage.Shared.Net)
+
+local World = {}
+
+local PALETTE = {
+	grass = Color3.fromRGB(104, 196, 90),
+	grassDark = Color3.fromRGB(76, 160, 70),
+	path = Color3.fromRGB(238, 196, 141),
+	pathEdge = Color3.fromRGB(214, 166, 110),
+	wood = Color3.fromRGB(150, 100, 62),
+	woodDark = Color3.fromRGB(110, 72, 44),
+	rock = Color3.fromRGB(178, 190, 205),
+	rockDark = Color3.fromRGB(140, 155, 175),
+	water = Color3.fromRGB(90, 205, 235),
+	sand = Color3.fromRGB(240, 226, 190),
+	flower = Color3.fromRGB(255, 150, 190),
+	stem = Color3.fromRGB(70, 150, 65),
+	white = Color3.fromRGB(250, 250, 250),
+	gold = Color3.fromRGB(255, 190, 50),
+	goldDark = Color3.fromRGB(230, 150, 30),
+	purple = Color3.fromRGB(150, 110, 220),
+	purpleDark = Color3.fromRGB(105, 70, 175),
+	pink = Color3.fromRGB(255, 170, 210),
+	blue = Color3.fromRGB(90, 150, 240),
+}
+
+World.palette = PALETTE
+
+local function part(props, parent)
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = true
+	p.Material = props.material or Enum.Material.SmoothPlastic
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	for key, value in pairs(props) do
+		if key ~= "material" then
+			p[key] = value
+		end
+	end
+	p.Parent = parent
+	return p
+end
+
+local function ball(props, parent)
+	local p = part(props, parent)
+	p.Shape = Enum.PartType.Ball
+	p.CanCollide = false
+	return p
+end
+
+local function wedge(props, parent)
+	local p = Instance.new("WedgePart")
+	p.Anchored = true
+	for key, value in pairs(props) do
+		p[key] = value
+	end
+	p.Parent = parent
+	return p
+end
+
+---------------------------------------------------------------------------
+-- INFRA
+---------------------------------------------------------------------------
+
+local root
+
+function World.build()
+	Lighting.Ambient = Color3.fromRGB(120, 132, 150)
+	Lighting.OutdoorAmbient = Color3.fromRGB(160, 178, 200)
+	Lighting.Brightness = 2.8
+	Lighting.ClockTime = 13.6
+	Lighting.GeographicLatitude = -15
+	Lighting.EnvironmentDiffuseScale = 0.5
+	Lighting.EnvironmentSpecularScale = 0.3
+	Lighting.GlobalShadows = true
+	Lighting.ShadowSoftness = 0.6
+
+	local existing = Lighting:FindFirstChildOfClass("Atmosphere")
+	local atmosphere = existing or Instance.new("Atmosphere")
+	atmosphere.Density = 0.28
+	atmosphere.Haze = 0.9
+	atmosphere.Glare = 0.2
+	atmosphere.Color = Color3.fromRGB(210, 226, 245)
+	atmosphere.Decay = Color3.fromRGB(130, 150, 175)
+	atmosphere.Parent = Lighting
+
+	local old = Workspace:FindFirstChild("EggTycoon")
+	if old then
+		old:Destroy()
+	end
+	root = Instance.new("Folder")
+	root.Name = "EggTycoon"
+	root.Parent = Workspace
+
+	-- agua de fundo + ilha principal em degrade de grama
+	part({
+		Name = "Ocean",
+		Size = Vector3.new(3000, 4, 3000),
+		Position = Vector3.new(0, -8, 0),
+		Color = PALETTE.water,
+		Material = Enum.Material.Water,
+		Transparency = 0.15,
+		CanCollide = false,
+	}, root)
+
+	-- praça central em tijolinho claro
+	part({
+		Name = "Plaza",
+		Size = Vector3.new(150, 3, 150),
+		Position = Vector3.new(0, 0.5, 0),
+		Color = PALETTE.path,
+		Material = Enum.Material.Brick,
+	}, root)
+
+	-- ilha de grama ao redor (grande, quadrada, com borda de terra)
+	part({
+		Name = "Island",
+		Size = Vector3.new(340, 8, 340),
+		Position = Vector3.new(0, -3.5, 0),
+		Color = PALETTE.grass,
+		Material = Enum.Material.Grass,
+	}, root)
+
+	local dirtRing = part({
+		Name = "DirtRing",
+		Size = Vector3.new(348, 6, 348),
+		Position = Vector3.new(0, -6, 0),
+		Color = Color3.fromRGB(170, 110, 70),
+		Material = Enum.Material.Ground,
+	}, root)
+	dirtRing.CanCollide = false
+
+	-- canteiros de grama alta na borda (silhueta cartoon)
+	local rng = Random.new(31)
+	for i = 1, 26 do
+		local angle = (i / 26) * math.pi * 2
+		local radius = 178 + rng:NextNumber() * 16
+		local x = math.cos(angle) * radius
+		local z = math.sin(angle) * radius
+		local h = 8 + rng:NextNumber() * 10
+		part({
+			Size = Vector3.new(16 + rng:NextNumber() * 10, h, 16 + rng:NextNumber() * 10),
+			Position = Vector3.new(x, -1 + h / 2, z),
+			Color = i % 2 == 0 and PALETTE.grass or PALETTE.grassDark,
+			Material = Enum.Material.Grass,
+		}, root)
+	end
+
+	World.buildTrees()
+	World.buildFountain()
+	World.buildEggStands()
+	World.buildShop()
+	World.buildGemShop()
+	World.buildGoldenCrate()
+	World.buildFusion()
+	World.buildRebirthPortal()
+	World.buildTradePost()
+	World.buildHalloween()
+
+	-- SpawnLocation: sem isso o Roblox joga o jogador no vazio/default do template
+	local spawnPad = part({
+		Name = "SpawnLocation",
+		Size = Vector3.new(18, 1, 18),
+		Position = Vector3.new(0, 3.2, 62),
+		Color = PALETTE.path,
+		Material = Enum.Material.Brick,
+	}, root)
+
+	local spawn = Instance.new("SpawnLocation")
+	spawn.Name = "Spawn"
+	spawn.Size = Vector3.new(16, 0.4, 16)
+	spawn.Position = Vector3.new(0, 3.9, 62)
+	spawn.Anchored = true
+	spawn.CanCollide = false
+	spawn.Transparency = 1
+	spawn.Duration = 0
+	spawn.Neutral = true
+	spawn.Parent = root
+
+	-- anel neon marcando o spawn
+	part({
+		Name = "SpawnRing",
+		Size = Vector3.new(17, 0.25, 17),
+		Position = Vector3.new(0, 3.75, 62),
+		Color = Color3.fromRGB(96, 240, 235),
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+	}, root)
+
+	World.spawnPoint = Vector3.new(0, 5, 62)
+end
+
+function World.spawnCFrame()
+	return CFrame.new(World.spawnPoint or Vector3.new(0, 5, 60)) * CFrame.Angles(0, math.pi, 0)
+end
+
+---------------------------------------------------------------------------
+-- DECORACAO
+---------------------------------------------------------------------------
+
+local function tree(position, scale, parent)
+	local model = Instance.new("Model")
+	model.Name = "Tree"
+	model.Parent = parent
+
+	part({
+		Size = Vector3.new(4, 14, 4) * scale,
+		Position = position + Vector3.new(0, 6 * scale, 0),
+		Color = PALETTE.woodDark,
+		Material = Enum.Material.Wood,
+	}, model)
+
+	for i, offset in ipairs({ Vector3.new(0, 15, 0), Vector3.new(0, 20, 0), Vector3.new(0, 24, 0) }) do
+		local size = (10 - i * 2) * scale
+		part({
+			Size = Vector3.new(size, size * 0.9, size),
+			Position = position + offset * scale,
+			Color = i == 3 and Color3.fromRGB(92, 186, 96) or PALETTE.grass,
+			Material = Enum.Material.Grass,
+		}, model)
+	end
+	return model
+end
+
+local function flower(position, parent)
+	local model = Instance.new("Model")
+	model.Name = "Flower"
+	model.Parent = parent
+
+	part({
+		Size = Vector3.new(0.5, 3, 0.5),
+		Position = position + Vector3.new(0, 1.5, 0),
+		Color = PALETTE.stem,
+		Material = Enum.Material.Grass,
+		CanCollide = false,
+	}, model)
+
+	ball({
+		Size = Vector3.new(2.4, 2.4, 2.4),
+		Position = position + Vector3.new(0, 3.4, 0),
+		Color = PALETTE.flower,
+		Material = Enum.Material.SmoothPlastic,
+	}, model)
+	return model
+end
+
+function World.buildTrees()
+	local rng = Random.new(77)
+	for i = 1, 22 do
+		local angle = rng:NextNumber() * math.pi * 2
+		local radius = 100 + rng:NextNumber() * 62
+		local x, z = math.cos(angle) * radius, math.sin(angle) * radius
+		tree(Vector3.new(x, 0, z), 1 + rng:NextNumber() * 0.55, root)
+	end
+
+	for i = 1, 40 do
+		local angle = rng:NextNumber() * math.pi * 2
+		local radius = 88 + rng:NextNumber() * 70
+		flower(Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius), root)
+	end
+end
+
+---------------------------------------------------------------------------
+-- FONTE CENTRAL
+---------------------------------------------------------------------------
+
+function World.buildFountain()
+	local model = Instance.new("Model")
+	model.Name = "Fountain"
+	model.Parent = root
+
+	part({
+		Size = Vector3.new(30, 2, 30),
+		Position = Vector3.new(0, 1.6, 0),
+		Color = PALETTE.white,
+		Material = Enum.Material.Marble,
+	}, model)
+
+	part({
+		Size = Vector3.new(26, 1.2, 26),
+		Position = Vector3.new(0, 2.5, 0),
+		Color = PALETTE.water,
+		Material = Enum.Material.Water,
+		Transparency = 0.2,
+		CanCollide = false,
+	}, model)
+
+	for i = 1, 2 do
+		local size = 26 - i * 7
+		part({
+			Size = Vector3.new(size, 1.4, size),
+			Position = Vector3.new(0, 3 + i * 3.4, 0),
+			Color = PALETTE.white,
+			Material = Enum.Material.Marble,
+			CanCollide = false,
+		}, model)
+		part({
+			Size = Vector3.new(size - 3, 1, size - 3),
+			Position = Vector3.new(0, 3.4 + i * 3.4, 0),
+			Color = PALETTE.water,
+			Material = Enum.Material.Water,
+			Transparency = 0.25,
+			CanCollide = false,
+		}, model)
+	end
+
+	-- bichinho dourado no topo
+	ball({
+		Size = Vector3.new(7, 7, 7),
+		Position = Vector3.new(0, 15, 0),
+		Color = PALETTE.gold,
+		Material = Enum.Material.Neon,
+	}, model)
+
+	ball({
+		Size = Vector3.new(4.5, 4.5, 4.5),
+		Position = Vector3.new(0, 19.5, 0),
+		Color = PALETTE.gold,
+		Material = Enum.Material.Neon,
+	}, model)
+end
+
+---------------------------------------------------------------------------
+-- UI DE MUNDO (placa + click detector)
+---------------------------------------------------------------------------
+
+local function makeSign(position, text, color, parent)
+	local board = part({
+		Name = "Sign_" .. text,
+		Size = Vector3.new(16, 6, 0.8),
+		Position = position,
+		Color = PALETTE.wood,
+		Material = Enum.Material.WoodPlanks,
+		CanCollide = false,
+	}, parent)
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Front
+	gui.CanvasSize = Vector2.new(400, 150)
+	gui.LightInfluence = 0.2
+	gui.Parent = board
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+	label.TextStrokeTransparency = 0.35
+	label.TextStrokeColor3 = Color3.fromRGB(60, 40, 20)
+	label.Text = text
+	label.Parent = gui
+
+	return board
+end
+
+local zoneBindings = {}
+
+local function makeZone(name, position, size, color)
+	local hitbox = part({
+		Name = "Zone_" .. name,
+		Size = size,
+		Position = position,
+		Color = color or PALETTE.pink,
+		Material = Enum.Material.Neon,
+		Transparency = 0.72,
+		CanCollide = false,
+		CanQuery = true,
+	}, root)
+
+	local detector = Instance.new("ClickDetector")
+	detector.MaxActivationDistance = 32
+	detector.CursorIcon = "rbxasset://textures/GunCursor.png"
+	detector.Parent = hitbox
+
+	zoneBindings[name] = { part = hitbox, detector = detector, color = color }
+	return hitbox
+end
+
+function World.getZoneBindings()
+	return zoneBindings
+end
+
+---------------------------------------------------------------------------
+-- OVOS
+---------------------------------------------------------------------------
+
+function World.buildEggStands()
+	-- plataforma de pedra clara onde ficam os ovos
+	part({
+		Size = Vector3.new(96, 2, 40),
+		Position = Vector3.new(0, 2.4, 40),
+		Color = PALETTE.sand,
+		Material = Enum.Material.Sandstone,
+	}, root)
+
+	local eggCount = #GameConfig.Eggs
+	local spacing = 14
+	local startX = -((eggCount - 1) * spacing) / 2
+
+	for index, egg in ipairs(GameConfig.Eggs) do
+		local x = startX + (index - 1) * spacing
+		local base = Vector3.new(x, 4.6, 40)
+
+		-- pedestal
+		part({
+			Size = Vector3.new(9, 3.2, 9),
+			Position = base,
+			Color = PALETTE.white,
+			Material = Enum.Material.Marble,
+		}, root)
+
+		part({
+			Size = Vector3.new(7.4, 0.8, 7.4),
+			Position = base + Vector3.new(0, 2, 0),
+			Color = PALETTE.gold,
+			Material = Enum.Material.Neon,
+		}, root)
+
+		-- ovo (esfera escalada em Y)
+		local eggPart = ball({
+			Name = "Egg_" .. egg.id,
+			Size = Vector3.new(7, 9.6, 7),
+			Position = base + Vector3.new(0, 7.2, 0),
+			Color = egg.color,
+			Material = Enum.Material.SmoothPlastic,
+		}, root)
+		eggPart:SetAttribute("EggId", egg.id)
+
+		-- pintinhas
+		local rng = Random.new(index * 13)
+		for i = 1, 7 do
+			local theta = rng:NextNumber() * math.pi * 2
+			local phi = math.acos(2 * rng:NextNumber() - 1)
+			local radius = 3.55
+			local offset = Vector3.new(
+				math.sin(phi) * math.cos(theta) * radius,
+				math.cos(phi) * radius * 1.35,
+				math.sin(phi) * math.sin(theta) * radius
+			)
+			ball({
+				Size = Vector3.new(1.6, 1.6, 1.6),
+				Position = eggPart.Position + offset,
+				Color = egg.spot,
+				Material = Enum.Material.SmoothPlastic,
+			}, root)
+		end
+
+		local billboard = Instance.new("BillboardGui")
+		billboard.Size = UDim2.fromScale(12, 5)
+		billboard.StudsOffsetWorldSpace = Vector3.new(0, 8.5, 0)
+		billboard.AlwaysOnTop = true
+		billboard.Adornee = eggPart
+		billboard.Parent = eggPart
+
+		local name = Instance.new("TextLabel")
+		name.Size = UDim2.fromScale(1, 0.55)
+		name.BackgroundTransparency = 1
+		name.Font = Enum.Font.FredokaOne
+		name.TextScaled = true
+		name.TextColor3 = Color3.fromRGB(255, 255, 255)
+		name.TextStrokeTransparency = 0
+		name.TextStrokeColor3 = Color3.fromRGB(80, 60, 90)
+		name.Text = egg.name
+		name.Parent = billboard
+
+		local cost = Instance.new("TextLabel")
+		cost.Size = UDim2.fromScale(1, 0.4)
+		cost.Position = UDim2.fromScale(0, 0.58)
+		cost.BackgroundTransparency = 1
+		cost.Font = Enum.Font.FredokaOne
+		cost.TextScaled = true
+		cost.TextColor3 = PALETTE.gold
+		cost.TextStrokeTransparency = 0
+		cost.TextStrokeColor3 = Color3.fromRGB(80, 50, 10)
+		cost.Text = "🪙 " .. require(ReplicatedStorage.Shared.Format).number(egg.cost)
+		cost.Parent = billboard
+
+		local detector = Instance.new("ClickDetector")
+		detector.MaxActivationDistance = 22
+		detector.Parent = eggPart
+		detector.Name = "EggClick"
+
+		zoneBindings["egg_" .. egg.id] = { part = eggPart, detector = detector, eggId = egg.id }
+	end
+
+	-- letreiro "Ovos"
+	makeSign(Vector3.new(0, 22, 40), "OVOS", Color3.fromRGB(255, 255, 255), root)
+
+	-- plataforma vazia pra escalar visualmente
+	part({
+		Size = Vector3.new(96, 1, 12),
+		Position = Vector3.new(0, 3.4, 22),
+		Color = PALETTE.pathEdge,
+		Material = Enum.Material.Brick,
+		CanCollide = false,
+	}, root)
+end
+
+---------------------------------------------------------------------------
+-- LOJAS
+---------------------------------------------------------------------------
+
+function World.buildShop()
+	local origin = Vector3.new(-64, 0, -10)
+
+	part({
+		Size = Vector3.new(28, 1, 24),
+		Position = origin + Vector3.new(0, 1.6, 0),
+		Color = PALETTE.pathEdge,
+		Material = Enum.Material.Brick,
+	}, root)
+
+	-- parede de madeira
+	part({
+		Size = Vector3.new(26, 18, 2),
+		Position = origin + Vector3.new(0, 10, -8),
+		Color = PALETTE.wood,
+		Material = Enum.Material.WoodPlanks,
+	}, root)
+
+	-- telhado azul
+	local roof = part({
+		Size = Vector3.new(30, 2, 20),
+		Position = origin + Vector3.new(0, 20, -2),
+		Color = PALETTE.blue,
+		Material = Enum.Material.Slate,
+	}, root)
+	roof.CFrame = CFrame.new(roof.Position) * CFrame.Angles(math.rad(-18), 0, 0)
+
+	-- vitrine
+	part({
+		Size = Vector3.new(18, 9, 1),
+		Position = origin + Vector3.new(0, 8, -7),
+		Color = Color3.fromRGB(255, 240, 200),
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+	}, root)
+
+	-- balcão
+	part({
+		Size = Vector3.new(22, 4, 5),
+		Position = origin + Vector3.new(0, 4, -3),
+		Color = PALETTE.woodDark,
+		Material = Enum.Material.WoodPlanks,
+	}, root)
+
+	for i = -2, 2 do
+		ball({
+			Size = Vector3.new(3.4, 3.4, 3.4),
+			Position = origin + Vector3.new(i * 4, 7.5, -3),
+			Color = i % 2 == 0 and PALETTE.gold or PALETTE.pink,
+			Material = Enum.Material.Neon,
+		}, root)
+	end
+
+	makeZone(Net.Zones.Shop, origin + Vector3.new(0, 4, 4), Vector3.new(24, 1, 14), Color3.fromRGB(120, 220, 255))
+	makeSign(origin + Vector3.new(0, 25, -7), "LOJA", Color3.fromRGB(255, 255, 255), root)
+end
+
+function World.buildGemShop()
+	local origin = Vector3.new(64, 0, -10)
+
+	part({
+		Size = Vector3.new(28, 1, 24),
+		Position = origin + Vector3.new(0, 1.6, 0),
+		Color = PALETTE.pathEdge,
+		Material = Enum.Material.Brick,
+	}, root)
+
+	part({
+		Size = Vector3.new(26, 18, 2),
+		Position = origin + Vector3.new(0, 10, -8),
+		Color = PALETTE.white,
+		Material = Enum.Material.SmoothPlastic,
+	}, root)
+
+	local roof = part({
+		Size = Vector3.new(30, 2, 20),
+		Position = origin + Vector3.new(0, 20, -2),
+		Color = PALETTE.purple,
+		Material = Enum.Material.Slate,
+	}, root)
+	roof.CFrame = CFrame.new(roof.Position) * CFrame.Angles(math.rad(-18), 0, 0)
+
+	-- gema gigante na frente
+	local gem = part({
+		Size = Vector3.new(7, 9, 7),
+		Position = origin + Vector3.new(0, 9, -1),
+		Color = Color3.fromRGB(90, 220, 255),
+		Material = Enum.Material.Neon,
+	}, root)
+	gem.CFrame = CFrame.new(gem.Position) * CFrame.Angles(0, math.rad(45), 0)
+
+	local light = Instance.new("PointLight")
+	light.Color = Color3.fromRGB(120, 230, 255)
+	light.Brightness = 3
+	light.Range = 26
+	light.Parent = gem
+
+	makeZone(Net.Zones.GemShop, origin + Vector3.new(0, 4, 4), Vector3.new(24, 1, 14), Color3.fromRGB(200, 150, 255))
+	makeSign(origin + Vector3.new(0, 25, -7), "MELHORIAS DE GEMAS", Color3.fromRGB(230, 200, 255), root)
+end
+
+---------------------------------------------------------------------------
+-- CRIAÇÃO DOURADA (o "oven" dourado dos prints)
+---------------------------------------------------------------------------
+
+function World.buildGoldenCrate()
+	local origin = Vector3.new(-58, 0, 40)
+
+	part({
+		Size = Vector3.new(26, 1, 22),
+		Position = origin + Vector3.new(0, 1.6, 0),
+		Color = PALETTE.gold,
+		Material = Enum.Material.Neon,
+	}, root)
+
+	-- dois "fornos" brancos com painel azul
+	for i, offset in ipairs({ Vector3.new(-6, 0, 0), Vector3.new(6, 0, 0) }) do
+		local body = part({
+			Size = Vector3.new(9, 12, 8),
+			Position = origin + offset + Vector3.new(0, 8, 0),
+			Color = PALETTE.white,
+			Material = Enum.Material.SmoothPlastic,
+		}, root)
+
+		part({
+			Size = Vector3.new(5.5, 4.5, 0.6),
+			Position = body.Position + Vector3.new(0, 0.5, -4.2),
+			Color = Color3.fromRGB(90, 200, 245),
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+		}, root)
+
+		part({
+			Size = Vector3.new(9.4, 1.2, 8.4),
+			Position = body.Position + Vector3.new(0, 6.6, 0),
+			Color = PALETTE.gold,
+			Material = Enum.Material.Neon,
+			CanCollide = false,
+		}, root)
+
+		ball({
+			Size = Vector3.new(1.6, 1.6, 1.6),
+			Position = body.Position + Vector3.new(0, 8.2, 0),
+			Color = PALETTE.gold,
+			Material = Enum.Material.Neon,
+		}, root)
+	end
+
+	part({
+		Size = Vector3.new(14, 1, 14),
+		Position = origin + Vector3.new(0, 3.2, 9),
+		Color = PALETTE.gold,
+		Material = Enum.Material.Neon,
+		Shape = Enum.PartType.Cylinder,
+		Transparency = 0.15,
+		CanCollide = false,
+	}, root)
+
+	makeZone(Net.Zones.Golden, origin + Vector3.new(0, 4, 10), Vector3.new(16, 1, 16), PALETTE.gold)
+	makeSign(origin + Vector3.new(0, 20, -1), "CRIAÇÃO DOURADA", PALETTE.gold, root)
+end
+
+---------------------------------------------------------------------------
+-- FUSÃO SECRETA
+---------------------------------------------------------------------------
+
+function World.buildFusion()
+	local origin = Vector3.new(58, 0, 40)
+
+	part({
+		Size = Vector3.new(26, 1, 22),
+		Position = origin + Vector3.new(0, 1.6, 0),
+		Color = PALETTE.purpleDark,
+		Material = Enum.Material.Marble,
+	}, root)
+
+	-- tubos rosa neon
+	for i, offset in ipairs({ Vector3.new(-8, 0, -3), Vector3.new(0, 0, -5), Vector3.new(8, 0, -3) }) do
+		local height = i == 2 and 14 or 11
+		part({
+			Size = Vector3.new(5, height, 5),
+			Position = origin + offset + Vector3.new(0, height / 2 + 2, 0),
+			Color = PALETTE.pink,
+			Material = Enum.Material.Neon,
+			Transparency = 0.15,
+		}, root)
+
+		part({
+			Size = Vector3.new(6, 1.2, 6),
+			Position = origin + offset + Vector3.new(0, height + 2.4, 0),
+			Color = PALETTE.white,
+			Material = Enum.Material.SmoothPlastic,
+		}, root)
+	end
+
+	part({
+		Size = Vector3.new(12, 1, 10),
+		Position = origin + Vector3.new(0, 3.2, 8),
+		Color = PALETTE.pink,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+	}, root)
+
+	makeZone(Net.Zones.Fusion, origin + Vector3.new(0, 4, 9), Vector3.new(16, 1, 16), PALETTE.pink)
+	makeSign(origin + Vector3.new(0, 22, -4), "FUSÃO SECRETA", Color3.fromRGB(255, 220, 245), root)
+end
+
+---------------------------------------------------------------------------
+-- LOJA DE HALLOWEEN
+---------------------------------------------------------------------------
+
+function World.buildHalloween()
+	local origin = Vector3.new(-100, 0, 92)
+
+	part({
+		Size = Vector3.new(30, 1, 22),
+		Position = origin + Vector3.new(0, 1.6, 0),
+		Color = Color3.fromRGB(255, 140, 60),
+		Material = Enum.Material.Neon,
+	}, root)
+
+	part({
+		Size = Vector3.new(28, 2, 22),
+		Position = origin + Vector3.new(0, 16, 0),
+		Color = Color3.fromRGB(110, 70, 180),
+		Material = Enum.Material.Slate,
+	}, root)
+
+	for i = -2, 2 do
+		part({
+			Size = Vector3.new(3, 14, 3),
+			Position = origin + Vector3.new(i * 6, 8, -9),
+			Color = PALETTE.woodDark,
+			Material = Enum.Material.Wood,
+		}, root)
+	end
+
+	part({
+		Size = Vector3.new(28, 8, 1),
+		Position = origin + Vector3.new(0, 10, -9),
+		Color = Color3.fromRGB(60, 40, 90),
+		Material = Enum.Material.SmoothPlastic,
+	}, root)
+
+	ball({
+		Size = Vector3.new(5, 5, 5),
+		Position = origin + Vector3.new(-6, 12, -8),
+		Color = Color3.fromRGB(255, 130, 40),
+		Material = Enum.Material.Neon,
+	}, root)
+
+	-- zona de compra do ovo de halloween (usa o mesmo fluxo de ovo)
+	makeZone("egg_halloween", origin + Vector3.new(0, 4, 7), Vector3.new(18, 1, 14), Color3.fromRGB(255, 150, 60))
+	zoneBindings["egg_halloween"].eggId = "halloween"
+	makeSign(origin + Vector3.new(0, 22, -9), "LOJA DE HALLOWEEN", Color3.fromRGB(255, 200, 120), root)
+end
+
+---------------------------------------------------------------------------
+-- PORTAL DE REBIRTH
+---------------------------------------------------------------------------
+
+function World.buildRebirthPortal()
+	local origin = Vector3.new(0, 0, -72)
+
+	-- escadaria
+	for i = 1, 6 do
+		part({
+			Size = Vector3.new(24, 1.6, 5),
+			Position = origin + Vector3.new(0, i * 1.4, 20 - i * 4.4),
+			Color = PALETTE.wood,
+			Material = Enum.Material.WoodPlanks,
+		}, root)
+	end
+
+	-- portal
+	local frame = part({
+		Size = Vector3.new(26, 30, 3),
+		Position = origin + Vector3.new(0, 18, -4),
+		Color = PALETTE.woodDark,
+		Material = Enum.Material.Wood,
+	}, root)
+
+	local glow = part({
+		Size = Vector3.new(20, 24, 1),
+		Position = origin + Vector3.new(0, 18, -2.4),
+		Color = Color3.fromRGB(120, 240, 200),
+		Material = Enum.Material.Neon,
+		Transparency = 0.25,
+		CanCollide = false,
+	}, root)
+
+	local light = Instance.new("PointLight")
+	light.Color = Color3.fromRGB(130, 255, 210)
+	light.Brightness = 4
+	light.Range = 40
+	light.Parent = glow
+
+	frame:SetAttribute("Portal", true)
+
+	makeZone(Net.Zones.Rebirth, origin + Vector3.new(0, 5, 12), Vector3.new(22, 1, 14), Color3.fromRGB(120, 240, 200))
+	makeSign(origin + Vector3.new(0, 38, -4), "RENASCIMENTO", Color3.fromRGB(150, 255, 215), root)
+end
+
+---------------------------------------------------------------------------
+-- POSTO DE TROCA (placeholder de trade)
+---------------------------------------------------------------------------
+
+function World.buildTradePost()
+	local origin = Vector3.new(110, 0, 40)
+
+	part({
+		Size = Vector3.new(20, 1, 18),
+		Position = origin + Vector3.new(0, 1.6, 0),
+		Color = PALETTE.pathEdge,
+		Material = Enum.Material.Brick,
+	}, root)
+
+	part({
+		Size = Vector3.new(10, 12, 10),
+		Position = origin + Vector3.new(0, 8, 0),
+		Color = Color3.fromRGB(255, 120, 90),
+		Material = Enum.Material.SmoothPlastic,
+	}, root)
+
+	part({
+		Size = Vector3.new(12, 2, 12),
+		Position = origin + Vector3.new(0, 15, 0),
+		Color = PALETTE.white,
+		Material = Enum.Material.SmoothPlastic,
+	}, root)
+
+	makeZone(Net.Zones.Trade, origin + Vector3.new(0, 4, 9), Vector3.new(16, 1, 12), Color3.fromRGB(255, 150, 120))
+	makeSign(origin + Vector3.new(0, 20, 0), "TROCA", Color3.fromRGB(255, 200, 180), root)
+end
+
+return World
+]]></string>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="SoundService" referent="14">
+    <Properties>
+      <string name="Name">SoundService</string>
+      <token name="AmbientReverb">20</token>
+      <bool name="RespectFilteringEnabled">true</bool>
+    </Properties>
+  </Item>
+  <Item class="StarterPlayer" referent="15">
+    <Properties>
+      <string name="Name">StarterPlayer</string>
+    </Properties>
+    <Item class="StarterPlayerScripts" referent="16">
+      <Properties>
+        <string name="Name">StarterPlayerScripts</string>
+      </Properties>
+      <Item class="LocalScript" referent="17">
+        <Properties>
+          <string name="Name">Client</string>
+          <string name="Source"><![CDATA[-- init.client
+-- Monta a UI inteira e liga a rede. Nenhuma regra de jogo aqui.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Net = require(Shared.Net)
+local Format = require(Shared.Format)
+
+local Theme = require(script.Theme)
+local State = require(script.State)
+local NetClient = require(script.NetClient)
+local Hud = require(script.Hud)
+local TapButton = require(script.TapButton)
+local EggPanel = require(script.EggPanel)
+local PetsPanel = require(script.PetsPanel)
+local ShopPanel = require(script.ShopPanel)
+local Toasts = require(script.Toasts)
+local WorldUI = require(script.WorldUI)
+
+---------------------------------------------------------------------------
+-- GUI RAIZ
+---------------------------------------------------------------------------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "EggTycoonGui"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+gui.DisplayOrder = 20
+gui.Parent = playerGui
+
+Toasts.init(gui)
+
+---------------------------------------------------------------------------
+-- PAINEIS
+---------------------------------------------------------------------------
+
+EggPanel.build(gui)
+PetsPanel.build(gui)
+ShopPanel.build(gui)
+
+local function closeAll()
+	EggPanel.hide()
+	PetsPanel.hide()
+	ShopPanel.hide()
+end
+
+local function openEggs(eggId)
+	PetsPanel.hide()
+	ShopPanel.hide()
+	if eggId then
+		EggPanel.select(eggId)
+	end
+	EggPanel.show()
+end
+
+Hud.build(gui, {
+	shop = function()
+		closeAll()
+		ShopPanel.show("coins")
+	end,
+	trade = function()
+		closeAll()
+		PetsPanel.show()
+	end,
+	settings = function()
+		Toasts.push("⚙️ em breve", "info")
+	end,
+	ranks = function()
+		local snapshot = State.snapshot
+		if snapshot then
+			Toasts.push(string.format("🏆 Rebirths: %d · Pets: %d", snapshot.rebirths, #snapshot.pets), "info")
+		end
+	end,
+})
+
+TapButton.build(gui, function()
+	NetClient.action(Net.ActionKind.Tap, 1)
+	local snapshot = State.snapshot
+	TapButton.showReward(snapshot and snapshot.tapPower or 1)
+end)
+
+---------------------------------------------------------------------------
+-- BOTÕES EXTRAS (OVOS / PETS / REBIRTH) no canto superior esquerdo
+---------------------------------------------------------------------------
+
+local topLeft = Instance.new("Frame")
+topLeft.BackgroundTransparency = 1
+topLeft.Size = UDim2.fromOffset(430, 62)
+topLeft.Position = UDim2.fromOffset(18, 16)
+topLeft.Parent = gui
+Theme.list(topLeft, {
+	direction = Enum.FillDirection.Horizontal,
+	padding = 10,
+	hAlign = Enum.HorizontalAlignment.Left,
+})
+
+local function toolbarButton(text, icon, color, order, onClick)
+	local btn = Theme.button(topLeft, {
+		text = icon .. "  " .. text,
+		size = UDim2.fromOffset(136, 56),
+		color = color,
+		textSize = 19,
+		layoutOrder = order,
+		radius = 28,
+	})
+	btn.MouseButton1Click:Connect(onClick)
+	return btn
+end
+
+toolbarButton("Ovos", "🥚", Color3.fromRGB(255, 196, 90), 1, function()
+	openEggs()
+end)
+
+toolbarButton("Pets", "🐾", Color3.fromRGB(160, 210, 255), 2, function()
+	closeAll()
+	PetsPanel.show()
+end)
+
+toolbarButton("Rebirth", "♻️", Color3.fromRGB(150, 235, 190), 3, function()
+	local snapshot = State.snapshot
+	if not snapshot then
+		return
+	end
+	if snapshot.coins >= snapshot.rebirthCost then
+		NetClient.action(Net.ActionKind.Rebirth)
+	else
+		Toasts.push("Ainda não dá pra renascer 💪", "error")
+	end
+end)
+
+---------------------------------------------------------------------------
+-- MUNDO
+---------------------------------------------------------------------------
+
+WorldUI.build({
+	selectEgg = function(eggId)
+		-- o servidor precisa saber qual ovo foi escolhido, senão o hatch
+		-- sempre usa o selectedEgg antigo
+		NetClient.action(Net.ActionKind.SelectEgg, eggId)
+		openEggs(eggId)
+	end,
+	zone = function(zone)
+		if zone == Net.Zones.Shop then
+			closeAll()
+			ShopPanel.show("coins")
+		elseif zone == Net.Zones.GemShop then
+			closeAll()
+			ShopPanel.show("gems")
+		elseif zone == Net.Zones.Golden then
+			NetClient.action(Net.ActionKind.Golden)
+		elseif zone == Net.Zones.Fusion then
+			closeAll()
+			PetsPanel.show()
+		elseif zone == Net.Zones.Rebirth then
+			local snapshot = State.snapshot
+			if snapshot then
+				local cost = snapshot.rebirthCost
+				if snapshot.coins >= cost then
+					NetClient.action(Net.ActionKind.Rebirth)
+				else
+					Toasts.push("Faltam " .. Format.number(cost - snapshot.coins) .. " moedas", "error")
+				end
+			end
+		elseif zone == Net.Zones.Trade then
+			closeAll()
+			PetsPanel.show()
+		elseif zone == "egg_halloween" then
+			openEggs()
+		end
+	end,
+})
+
+---------------------------------------------------------------------------
+-- REDE
+---------------------------------------------------------------------------
+
+NetClient.state.OnClientEvent:Connect(function(snapshot)
+	State.set(snapshot)
+	WorldUI.syncPets(snapshot)
+	if EggPanel and EggPanel.refresh then
+		EggPanel.refresh()
+	end
+end)
+
+NetClient.on(function(kind, payload)
+	if kind == Net.EventKind.Toast then
+		Toasts.push(payload.text, payload.kind)
+	elseif kind == Net.EventKind.Hatch then
+		EggPanel.onHatch(payload)
+	elseif kind == Net.EventKind.Rebirth then
+		Toasts.push(string.format("♻️ Rebirth %d! +%d 💎", payload.rebirths, payload.crystals), "success")
+	elseif kind == Net.EventKind.Zone then
+		-- servidor abrindo UI remotamente
+	end
+end)
+
+---------------------------------------------------------------------------
+-- LOOP
+---------------------------------------------------------------------------
+
+local last = os.clock()
+RunService.RenderStepped:Connect(function()
+	local now = os.clock()
+	local dt = math.min(now - last, 0.2)
+	last = now
+	WorldUI.stepPets(dt)
+end)
+
+---------------------------------------------------------------------------
+-- ATAJOS
+---------------------------------------------------------------------------
+
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then
+		return
+	end
+	local key = input.KeyCode
+
+	if key == Enum.KeyCode.E then
+		openEggs()
+	elseif key == Enum.KeyCode.P then
+		closeAll()
+		PetsPanel.show()
+	elseif key == Enum.KeyCode.B then
+		closeAll()
+		ShopPanel.show("coins")
+	elseif key == Enum.KeyCode.G then
+		closeAll()
+		ShopPanel.show("gems")
+	elseif key == Enum.KeyCode.Escape then
+		closeAll()
+	end
+end)
+
+task.delay(1.5, function()
+	Toasts.push("👆 Toque pra ganhar  ·  🥚 abra ovos  ·  🐾 equipe pets", "info")
+end)
+
+print("[EggTycoon] Cliente pronto ·", player.Name)
+]]></string>
+        </Properties>
+        <Item class="ModuleScript" referent="18">
+          <Properties>
+            <string name="Name">EggPanel</string>
+            <string name="Source"><![CDATA[-- EggPanel
+-- Painel de ovos: lista de ovos, botão ABRIR, e a animação de chocar
+-- (ovo balançando -> estilhaços -> pet aparecendo), igual aos prints.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.GameConfig)
+local Format = require(Shared.Format)
+local Net = require(Shared.Net)
+
+local Theme = require(script.Parent.Theme)
+local State = require(script.Parent.State)
+local NetClient = require(script.Parent.NetClient)
+
+local EggPanel = {}
+
+local refs = {}
+local gui
+local selected = "starter"
+local hatching = false
+
+---------------------------------------------------------------------------
+-- CARD DE OVO
+---------------------------------------------------------------------------
+
+local function eggCard(parent, egg, order)
+	local card = Instance.new("TextButton")
+	card.Name = "EggCard_" .. egg.id
+	card.Size = UDim2.fromOffset(268, 96)
+	card.BackgroundColor3 = Theme.white
+	card.BorderSizePixel = 0
+	card.AutoButtonColor = false
+	card.Text = ""
+	card.LayoutOrder = order
+	card.Parent = parent
+	Theme.corner(card, 20)
+	local stroke = Theme.stroke(card, Color3.fromRGB(225, 210, 190), 3)
+
+	local iconFrame = Instance.new("Frame")
+	iconFrame.Size = UDim2.fromOffset(64, 64)
+	iconFrame.Position = UDim2.fromOffset(12, 16)
+	iconFrame.BackgroundColor3 = egg.color
+	iconFrame.BorderSizePixel = 0
+	iconFrame.ZIndex = 2
+	iconFrame.Parent = card
+	Theme.corner(iconFrame, 32)
+	Theme.stroke(iconFrame, Theme.outline, 3)
+
+	Theme.label(iconFrame, {
+		text = egg.emoji,
+		size = UDim2.fromScale(1, 1),
+		textSize = 34,
+		strokeTransparency = 1,
+		zIndex = 3,
+	})
+
+	Theme.label(card, {
+		text = egg.name,
+		size = UDim2.new(1, -96, 0, 26),
+		position = UDim2.fromOffset(86, 12),
+		xAlign = Enum.TextXAlignment.Left,
+		textSize = 20,
+		color = Theme.textDark,
+		strokeTransparency = 1,
+		zIndex = 3,
+	})
+
+	local cost = Theme.label(card, {
+		text = "🪙 " .. Format.number(egg.cost),
+		size = UDim2.new(1, -96, 0, 22),
+		position = UDim2.fromOffset(86, 36),
+		xAlign = Enum.TextXAlignment.Left,
+		textSize = 18,
+		color = Color3.fromRGB(230, 160, 30),
+		strokeTransparency = 1,
+		zIndex = 3,
+	})
+
+	local statusLabel = Theme.label(card, {
+		text = "",
+		size = UDim2.new(1, -96, 0, 18),
+		position = UDim2.fromOffset(86, 60),
+		xAlign = Enum.TextXAlignment.Left,
+		textSize = 14,
+		color = Color3.fromRGB(150, 150, 160),
+		strokeTransparency = 1,
+		zIndex = 3,
+	})
+
+	card.MouseButton1Click:Connect(function()
+		EggPanel.select(egg.id)
+	end)
+
+	return {
+		card = card,
+		stroke = stroke,
+		cost = cost,
+		status = statusLabel,
+		egg = egg,
+	}
+end
+
+---------------------------------------------------------------------------
+-- ANIMAÇÃO DE CHOCAR
+---------------------------------------------------------------------------
+
+local function playHatchAnimation(petId, rarityId)
+	local overlay = Instance.new("Frame")
+	overlay.Name = "HatchOverlay"
+	overlay.Size = UDim2.fromScale(1, 1)
+	overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	overlay.BackgroundTransparency = 0.55
+	overlay.BorderSizePixel = 0
+	overlay.ZIndex = 40
+	overlay.Parent = gui
+
+	local rarity = GameConfig.rarity(rarityId)
+	local pet = GameConfig.pet(petId)
+
+	local eggFrame = Instance.new("Frame")
+	eggFrame.Size = UDim2.fromOffset(180, 220)
+	eggFrame.Position = UDim2.fromScale(0.5, 0.5)
+	eggFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	eggFrame.BackgroundColor3 = Color3.fromRGB(255, 245, 220)
+	eggFrame.BorderSizePixel = 0
+	eggFrame.ZIndex = 41
+	eggFrame.Parent = overlay
+	Theme.corner(eggFrame, 90)
+	Theme.stroke(eggFrame, Theme.outline, 5)
+
+	local eggEmoji = Theme.label(eggFrame, {
+		text = "🥚",
+		size = UDim2.fromScale(1, 1),
+		textSize = 110,
+		strokeTransparency = 1,
+		zIndex = 42,
+	})
+
+	local scale = Instance.new("UIScale")
+	scale.Parent = eggFrame
+
+	-- balançar
+	local wobble = 0
+	local wobbleConnection
+	wobbleConnection = game:GetService("RunService").RenderStepped:Connect(function(dt)
+		wobble += dt * 18
+		eggFrame.Rotation = math.sin(wobble) * 12
+	end)
+
+	task.delay(1.1, function()
+		if wobbleConnection then
+			wobbleConnection:Disconnect()
+		end
+		eggFrame.Rotation = 0
+		eggEmoji.Text = "💥"
+
+		TweenService:Create(scale, TweenInfo.new(0.25), { Scale = 1.6 }):Play()
+		task.wait(0.12)
+		eggEmoji.Text = pet.emoji
+		eggFrame.BackgroundColor3 = rarity.color
+		TweenService:Create(scale, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Scale = 1,
+		}):Play()
+
+		-- flash dourado se lendário+
+		if GameConfig.rarity(rarityId).order >= 5 then
+			local flash = Instance.new("Frame")
+			flash.Size = UDim2.fromScale(1, 1)
+			flash.BackgroundColor3 = rarity.color
+			flash.BackgroundTransparency = 0.5
+			flash.BorderSizePixel = 0
+			flash.ZIndex = 43
+			flash.Parent = overlay
+			TweenService:Create(flash, TweenInfo.new(0.7), { BackgroundTransparency = 1 }):Play()
+			task.delay(0.8, function()
+				flash:Destroy()
+			end)
+		end
+	end)
+
+	task.delay(1.7, function()
+		local name = Theme.label(overlay, {
+			text = pet.name,
+			size = UDim2.fromOffset(600, 70),
+			position = UDim2.fromScale(0.5, 0.28),
+			anchor = Vector2.new(0.5, 0.5),
+			textSize = 52,
+			color = rarity.color,
+			strokeTransparency = 0,
+			strokeColor = Theme.outline,
+			zIndex = 44,
+		})
+		local rarityLabel = Theme.label(overlay, {
+			text = rarity.name:upper() .. "!",
+			size = UDim2.fromOffset(600, 40),
+			position = UDim2.fromScale(0.5, 0.34),
+			anchor = Vector2.new(0.5, 0.5),
+			textSize = 26,
+			color = Color3.fromRGB(255, 255, 255),
+			strokeTransparency = 0.2,
+			zIndex = 44,
+		})
+		TweenService:Create(name, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Position = UDim2.fromScale(0.5, 0.24),
+		}):Play()
+		rarityLabel.TextTransparency = 0
+
+		task.delay(1.6, function()
+			TweenService:Create(overlay, TweenInfo.new(0.3), { BackgroundTransparency = 1 }):Play()
+			TweenService:Create(name, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+			TweenService:Create(rarityLabel, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+			TweenService:Create(eggFrame, TweenInfo.new(0.3), { BackgroundTransparency = 1 }):Play()
+			TweenService:Create(eggEmoji, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+			task.wait(0.35)
+			overlay:Destroy()
+			EggPanel.setHatching(false)
+		end)
+	end)
+end
+
+---------------------------------------------------------------------------
+-- PAINEL
+---------------------------------------------------------------------------
+
+function EggPanel.build(parentGui)
+	gui = parentGui
+
+	local root = Theme.panel(gui, {
+		name = "EggPanel",
+		size = UDim2.fromOffset(600, 560),
+		position = UDim2.new(0.5, 0, 0.5, 0),
+		color = Theme.white,
+		radius = 30,
+		zIndex = 25,
+	})
+	root.Visible = false
+	refs.root = root
+
+	-- cabeçalho com título estilo "Ovos"
+	local header = Instance.new("Frame")
+	header.Size = UDim2.new(1, 0, 0, 78)
+	header.BackgroundColor3 = Color3.fromRGB(255, 196, 90)
+	header.BorderSizePixel = 0
+	header.ZIndex = 26
+	header.Parent = root
+	Theme.corner(header, 28)
+
+	local title = Theme.label(root, {
+		text = "OVOS",
+		size = UDim2.new(1, 0, 0, 60),
+		position = UDim2.fromOffset(0, 8),
+		textSize = 44,
+		color = Color3.fromRGB(255, 255, 255),
+		strokeTransparency = 0,
+		strokeColor = Color3.fromRGB(190, 120, 30),
+		zIndex = 27,
+	})
+
+	local close = Theme.button(root, {
+		text = "✕",
+		size = UDim2.fromOffset(52, 52),
+		position = UDim2.new(1, -18, 0, 14),
+		anchor = Vector2.new(1, 0),
+		color = Theme.red,
+		textSize = 26,
+		radius = 26,
+		shadow = false,
+		zIndex = 30,
+	})
+	close.MouseButton1Click:Connect(function()
+		EggPanel.hide()
+	end)
+
+	-- lista com scroll
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Size = UDim2.new(1, -40, 1, -216)
+	scroll.Position = UDim2.fromOffset(20, 88)
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel = 0
+	scroll.ScrollBarThickness = 5
+	scroll.ScrollBarImageColor3 = Color3.fromRGB(220, 180, 130)
+	scroll.CanvasSize = UDim2.fromOffset(0, 0)
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroll.ZIndex = 26
+	scroll.Parent = root
+	Theme.list(scroll, { padding = 8 })
+
+	refs.cards = {}
+	for index, egg in ipairs(GameConfig.Eggs) do
+		refs.cards[egg.id] = eggCard(scroll, egg, index)
+	end
+
+	-- rodapé: botão gigante ABRIR
+	local footer = Instance.new("Frame")
+	footer.Size = UDim2.new(1, -40, 0, 104)
+	footer.Position = UDim2.new(0, 20, 1, -114)
+	footer.BackgroundTransparency = 1
+	footer.ZIndex = 26
+	footer.Parent = root
+
+	local openButton = Theme.button(footer, {
+		text = "ABRIR OVO",
+		size = UDim2.new(1, 0, 0, 82),
+		position = UDim2.new(0, 0, 0, 10),
+		color = Theme.green,
+		textSize = 34,
+		radius = 41,
+		zIndex = 27,
+	})
+	Theme.gradient(openButton, Color3.fromRGB(190, 245, 140), Color3.fromRGB(90, 190, 80))
+	refs.openButton = openButton
+
+	openButton.MouseButton1Click:Connect(function()
+		if hatching then
+			return
+		end
+		local egg = GameConfig.egg(selected)
+		local snapshot = State.snapshot
+		if not egg or not snapshot then
+			return
+		end
+		local bought = snapshot.eggBought and snapshot.eggBought[egg.id] or 0
+		if snapshot.coins < GameConfig.eggPrice(egg.id, bought) then
+			EggPanel.flashError()
+			return
+		end
+		EggPanel.setHatching(true)
+		NetClient.action(Net.ActionKind.Hatch)
+		-- se o servidor não responder (sem moedas etc.), destrava em 2s
+		task.delay(2, function()
+			if hatching then
+				EggPanel.setHatching(false)
+			end
+		end)
+	end)
+
+	Theme.makeDraggable(root, header)
+
+	return root
+end
+
+function EggPanel.select(eggId)
+	selected = eggId
+	EggPanel.refresh()
+end
+
+function EggPanel.refresh()
+	if not State.snapshot then
+		return
+	end
+	local snapshot = State.snapshot
+	for eggId, cardRef in pairs(refs.cards) do
+		local egg = cardRef.egg
+		local isSelected = eggId == selected
+		cardRef.stroke.Color = isSelected and Color3.fromRGB(120, 205, 110) or Color3.fromRGB(225, 210, 190)
+		cardRef.stroke.Thickness = isSelected and 5 or 3
+
+		local bought = snapshot.eggBought and snapshot.eggBought[eggId] or 0
+		local price = GameConfig.eggPrice(eggId, bought)
+		cardRef.cost.Text = "🪙 " .. Format.number(price)
+		if snapshot.coins >= price then
+			cardRef.status.Text = "disponível"
+			cardRef.status.TextColor3 = Color3.fromRGB(110, 180, 90)
+		else
+			cardRef.status.Text = "faltam " .. Format.number(price - snapshot.coins)
+			cardRef.status.TextColor3 = Color3.fromRGB(200, 130, 130)
+		end
+	end
+
+	local egg = GameConfig.egg(selected)
+	if refs.openButton and egg then
+		local bought = snapshot.eggBought and snapshot.eggBought[egg.id] or 0
+		refs.openButton.Text = "ABRIR "
+			.. egg.name:upper()
+			.. "  ·  🪙 "
+			.. Format.number(GameConfig.eggPrice(egg.id, bought))
+	end
+end
+
+function EggPanel.flashError()
+	if not refs.root then
+		return
+	end
+	local original = refs.root.BackgroundColor3
+	refs.root.BackgroundColor3 = Color3.fromRGB(255, 190, 190)
+	task.delay(0.15, function()
+		if refs.root then
+			refs.root.BackgroundColor3 = original
+		end
+	end)
+end
+
+function EggPanel.setHatching(value)
+	hatching = value
+	if refs.openButton then
+		refs.openButton.Text = value and "CHOCANDO..." or refs.openButton.Text
+	end
+end
+
+function EggPanel.show()
+	refs.root.Visible = true
+	EggPanel.refresh()
+end
+
+function EggPanel.hide()
+	refs.root.Visible = false
+end
+
+function EggPanel.toggle()
+	if refs.root.Visible then
+		EggPanel.hide()
+	else
+		EggPanel.show()
+	end
+end
+
+function EggPanel.onHatch(payload)
+	EggPanel.setHatching(true)
+	local overlay = gui:FindFirstChild("HatchOverlay")
+	if overlay then
+		overlay:Destroy()
+	end
+	playHatchAnimation(payload.petId, payload.rarity)
+end
+
+return EggPanel
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="19">
+          <Properties>
+            <string name="Name">Hud</string>
+            <string name="Source"><![CDATA[-- Hud
+-- Canto inferior esquerdo: renascimentos, moedas (+renda/s), gemas.
+-- Topo: barra "PRÓXIMO!" com o objetivo atual. Botões Loja / Troca na esquerda.
+-- Exatamente o layout dos prints.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Format = require(Shared.Format)
+local GameConfig = require(Shared.GameConfig)
+
+local Theme = require(script.Parent.Theme)
+local State = require(script.Parent.State)
+
+local Hud = {}
+
+local refs = {}
+
+---------------------------------------------------------------------------
+-- LINHA DE STAT (ícone + número + label)
+---------------------------------------------------------------------------
+
+local function statRow(parent, config)
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.fromOffset(230, 52)
+	row.Parent = parent
+
+	local shadow = Instance.new("TextLabel")
+	shadow.BackgroundTransparency = 1
+	shadow.Size = UDim2.fromOffset(52, 52)
+	shadow.Font = Enum.Font.FredokaOne
+	shadow.TextScaled = true
+	shadow.Text = config.icon
+	shadow.TextColor3 = Color3.fromRGB(40, 30, 20)
+	shadow.TextTransparency = 0.65
+	shadow.Position = UDim2.fromOffset(3, 3)
+	shadow.ZIndex = 2
+	shadow.Parent = row
+
+	local icon = Instance.new("TextLabel")
+	icon.BackgroundTransparency = 1
+	icon.Size = UDim2.fromOffset(52, 52)
+	icon.Font = Enum.Font.FredokaOne
+	icon.TextScaled = true
+	icon.Text = config.icon
+	icon.ZIndex = 3
+	icon.Parent = row
+
+	local value = Theme.label(row, {
+		text = "0",
+		size = UDim2.fromOffset(140, 34),
+		position = UDim2.fromOffset(58, 0),
+		xAlign = Enum.TextXAlignment.Left,
+		textSize = 30,
+		strokeTransparency = 0.15,
+		strokeColor = Theme.outline,
+		zIndex = 3,
+	})
+	value.Name = config.name .. "_Value"
+
+	local label = Theme.label(row, {
+		text = config.label,
+		size = UDim2.fromOffset(140, 20),
+		position = UDim2.fromOffset(62, 26),
+		xAlign = Enum.TextXAlignment.Left,
+		textSize = 15,
+		color = Color3.fromRGB(255, 255, 255),
+		strokeTransparency = 0.2,
+		zIndex = 3,
+	})
+
+	refs[config.name] = value
+	refs[config.name .. "_Label"] = label
+	return { row = row, value = value, label = label, icon = icon, shadow = shadow }
+end
+
+---------------------------------------------------------------------------
+-- BARRA DE MISSÃO (topo)
+---------------------------------------------------------------------------
+
+local function questBar(parent)
+	local bar = Theme.panel(parent, {
+		name = "QuestBar",
+		size = UDim2.fromOffset(560, 96),
+		position = UDim2.new(0.5, 0, 0, 16),
+		anchor = Vector2.new(0.5, 0),
+		color = Theme.white,
+		radius = 22,
+		zIndex = 5,
+	})
+	Theme.stroke(bar, Color3.fromRGB(150, 195, 235), 4)
+
+	local title = Theme.label(bar, {
+		text = "PRÓXIMO!",
+		size = UDim2.fromOffset(200, 26),
+		position = UDim2.fromOffset(28, 8),
+		xAlign = Enum.TextXAlignment.Left,
+		textSize = 22,
+		color = Color3.fromRGB(240, 170, 40),
+		strokeTransparency = 0.3,
+		strokeColor = Color3.fromRGB(120, 70, 20),
+		zIndex = 6,
+	})
+
+	local icon = Theme.label(bar, {
+		text = "🥚",
+		size = UDim2.fromOffset(66, 66),
+		position = UDim2.fromOffset(24, 26),
+		textSize = 52,
+		strokeTransparency = 1,
+		zIndex = 6,
+	})
+
+	local text = Theme.label(bar, {
+		text = "Abra seu primeiro ovo!",
+		size = UDim2.new(1, -140, 0, 40),
+		position = UDim2.fromOffset(100, 26),
+		xAlign = Enum.TextXAlignment.Left,
+		textSize = 28,
+		color = Color3.fromRGB(60, 110, 180),
+		strokeTransparency = 1,
+		zIndex = 6,
+	})
+
+	local track = Instance.new("Frame")
+	track.Size = UDim2.new(1, -64, 0, 12)
+	track.Position = UDim2.fromOffset(32, 72)
+	track.BackgroundColor3 = Color3.fromRGB(225, 235, 245)
+	track.BorderSizePixel = 0
+	track.ZIndex = 6
+	track.Parent = bar
+	Theme.corner(track, 6)
+
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.fromScale(0, 1)
+	fill.BackgroundColor3 = Color3.fromRGB(120, 205, 110)
+	fill.BorderSizePixel = 0
+	fill.ZIndex = 7
+	fill.Parent = track
+	Theme.corner(fill, 6)
+
+	refs.questText = text
+	refs.questFill = fill
+	refs.questIcon = icon
+	refs.questTitle = title
+	return bar
+end
+
+---------------------------------------------------------------------------
+-- BOTÕES LATERAIS
+---------------------------------------------------------------------------
+
+local function sideButton(parent, text, icon, color, order, onClick)
+	local holder = Instance.new("Frame")
+	holder.BackgroundTransparency = 1
+	holder.Size = UDim2.fromOffset(120, 120)
+	holder.Position = UDim2.fromOffset(20, 0)
+	holder.LayoutOrder = order
+	holder.Parent = parent
+
+	local shadow = Instance.new("Frame")
+	shadow.Size = UDim2.fromOffset(112, 112)
+	shadow.Position = UDim2.fromOffset(4, 8)
+	shadow.BackgroundColor3 = Theme.shadow
+	shadow.BackgroundTransparency = 0.6
+	shadow.BorderSizePixel = 0
+	shadow.ZIndex = 3
+	shadow.Parent = holder
+	Theme.corner(shadow, 24)
+
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.fromOffset(112, 112)
+	button.BackgroundColor3 = color
+	button.BorderSizePixel = 0
+	button.AutoButtonColor = false
+	button.Text = ""
+	button.ZIndex = 4
+	button.Parent = holder
+	Theme.corner(button, 24)
+	Theme.stroke(button, Theme.outline, 4)
+	Theme.gradient(button, Color3.new(1, 1, 1), Color3.fromRGB(215, 215, 215))
+
+	local iconLabel = Theme.label(button, {
+		text = icon,
+		size = UDim2.fromScale(1, 0.66),
+		position = UDim2.fromScale(0, 0.02),
+		textSize = 52,
+		strokeTransparency = 1,
+		zIndex = 5,
+	})
+
+	Theme.label(button, {
+		text = text,
+		size = UDim2.fromScale(1, 0.3),
+		position = UDim2.fromScale(0, 0.66),
+		textSize = 22,
+		strokeTransparency = 0.1,
+		zIndex = 5,
+	})
+
+	local scale = Instance.new("UIScale")
+	scale.Parent = button
+	button.MouseButton1Down:Connect(function()
+		scale.Scale = 0.92
+	end)
+	button.MouseButton1Up:Connect(function()
+		scale.Scale = 1
+	end)
+	button.MouseLeave:Connect(function()
+		scale.Scale = 1
+	end)
+
+	button.MouseButton1Click:Connect(onClick)
+	return button, iconLabel
+end
+
+---------------------------------------------------------------------------
+-- BUILD
+---------------------------------------------------------------------------
+
+function Hud.build(gui, callbacks)
+	-- STATS (inferior esquerdo)
+	local statsHolder = Instance.new("Frame")
+	statsHolder.BackgroundTransparency = 1
+	statsHolder.Size = UDim2.fromOffset(250, 190)
+	statsHolder.Position = UDim2.new(0, 18, 1, -18)
+	statsHolder.AnchorPoint = Vector2.new(0, 1)
+	statsHolder.Parent = gui
+	Theme.list(statsHolder, { padding = 2, hAlign = Enum.HorizontalAlignment.Left })
+
+	statRow(statsHolder, { name = "Rebirths", icon = "♻️", label = "Rensamentos" })
+	statRow(statsHolder, { name = "Coins", icon = "🪙", label = "+0/s" })
+	statRow(statsHolder, { name = "Gems", icon = "💎", label = "Gemas" })
+
+	-- BOTÕES LATERAIS (esquerda, meio)
+	local sideHolder = Instance.new("Frame")
+	sideHolder.BackgroundTransparency = 1
+	sideHolder.Size = UDim2.fromOffset(130, 260)
+	sideHolder.Position = UDim2.new(0, 16, 0.5, -130)
+	sideHolder.Parent = gui
+	Theme.list(sideHolder, { padding = 12, hAlign = Enum.HorizontalAlignment.Left })
+
+	refs.shopButton = sideButton(sideHolder, "Loja", "🧺", Theme.red, 1, function()
+		if callbacks and callbacks.shop then
+			callbacks.shop()
+		end
+	end)
+	refs.tradeButton = sideButton(sideHolder, "Troca", "🔀", Color3.fromRGB(255, 150, 60), 2, function()
+		if callbacks and callbacks.trade then
+			callbacks.trade()
+		end
+	end)
+
+	-- MISSÃO (topo)
+	questBar(gui)
+
+	-- DEBUG/INFO do canto superior direito (config e som)
+	local topRight = Instance.new("Frame")
+	topRight.BackgroundTransparency = 1
+	topRight.Size = UDim2.fromOffset(180, 52)
+	topRight.Position = UDim2.new(1, -18, 0, 16)
+	topRight.AnchorPoint = Vector2.new(1, 0)
+	topRight.Parent = gui
+	local layout = Theme.list(topRight, {
+		direction = Enum.FillDirection.Horizontal,
+		padding = 10,
+		hAlign = Enum.HorizontalAlignment.Right,
+	})
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+	local function circleButton(icon, order, onClick)
+		local btn = Theme.button(topRight, {
+			text = icon,
+			size = UDim2.fromOffset(52, 52),
+			color = Color3.fromRGB(120, 200, 255),
+			textSize = 26,
+			layoutOrder = order,
+			radius = 26,
+			shadow = false,
+		})
+		btn.MouseButton1Click:Connect(onClick)
+		return btn
+	end
+
+	circleButton("⚙️", 1, function()
+		if callbacks and callbacks.settings then
+			callbacks.settings()
+		end
+	end)
+	circleButton("🏆", 2, function()
+		if callbacks and callbacks.ranks then
+			callbacks.ranks()
+		end
+	end)
+
+	-- assinatura de update
+	local last = {}
+
+	State.subscribe(function(snapshot)
+		local Format_number = Format.number
+
+		if last.coins ~= math.floor(snapshot.coins) then
+			refs.Coins.Text = Format_number(snapshot.coins)
+			last.coins = math.floor(snapshot.coins)
+		end
+		if last.income ~= math.floor(snapshot.income * 10) then
+			refs.Coins_Label.Text = "+" .. Format_number(snapshot.income) .. "/s"
+			last.income = math.floor(snapshot.income * 10)
+		end
+		if last.gems ~= snapshot.gems then
+			refs.Gems.Text = Format_number(snapshot.gems)
+			last.gems = snapshot.gems
+		end
+		if last.rebirths ~= snapshot.rebirths then
+			refs.Rebirths.Text = tostring(snapshot.rebirths)
+			last.rebirths = snapshot.rebirths
+		end
+
+		local quest = GameConfig.Quests[snapshot.questIndex]
+		if quest then
+			local progress = GameConfig.questProgress(snapshot, quest)
+			refs.questText.Text = quest.text
+			refs.questFill.Size = UDim2.fromScale(math.clamp(progress / quest.target, 0, 1), 1)
+			refs.questTitle.Text = "PRÓXIMO!"
+			refs.questTitle.TextColor3 = Color3.fromRGB(240, 170, 40)
+		else
+			refs.questText.Text = "Você completou tudo! 🏆"
+			refs.questFill.Size = UDim2.fromScale(1, 1)
+			refs.questTitle.Text = "COMPLETO!"
+			refs.questTitle.TextColor3 = Color3.fromRGB(120, 200, 110)
+		end
+	end)
+
+	return refs
+end
+
+return Hud
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="20">
+          <Properties>
+            <string name="Name">NetClient</string>
+            <string name="Source"><![CDATA[-- NetClient
+-- Fio de rede do cliente.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Net = require(Shared.Net)
+
+local NetClient = {}
+
+local folder = ReplicatedStorage:WaitForChild(Net.FolderName)
+local state = folder:WaitForChild(Net.State)
+local action = folder:WaitForChild(Net.Action)
+local event = folder:WaitForChild(Net.Event)
+
+NetClient.state = state
+NetClient.event = event
+
+function NetClient.action(kind, payload)
+	action:FireServer(kind, payload)
+end
+
+function NetClient.on(callback)
+	return event.OnClientEvent:Connect(callback)
+end
+
+return NetClient
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="21">
+          <Properties>
+            <string name="Name">PetsPanel</string>
+            <string name="Source"><![CDATA[-- PetsPanel
+-- Inventário em grade: equipar, vender, e a fusão dos 3 selecionados.
+-- Clique no pet = equipar/desequipar. Segurar = modo venda.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.GameConfig)
+local Format = require(Shared.Format)
+local Net = require(Shared.Net)
+
+local Theme = require(script.Parent.Theme)
+local State = require(script.Parent.State)
+local NetClient = require(script.Parent.NetClient)
+
+local PetsPanel = {}
+
+local refs = { cards = {} }
+local gui
+local fuseMode = false
+local fuseSelection = {}
+local sellMode = false
+
+local CARD = 92
+local PER_ROW = 6
+
+local function sortedPets(snapshot)
+	local list = {}
+	for _, instance in ipairs(snapshot.pets or {}) do
+		table.insert(list, instance)
+	end
+	table.sort(list, function(a, b)
+		local petA = GameConfig.pet(a.petId)
+		local petB = GameConfig.pet(b.petId)
+		if not petA or not petB then
+			return false
+		end
+		local ra = GameConfig.rarity(petA.rarity).order
+		local rb = GameConfig.rarity(petB.rarity).order
+		if ra ~= rb then
+			return ra > rb
+		end
+		return petA.income > petB.income
+	end)
+	return list
+end
+
+local function isEquipped(snapshot, uid)
+	for _, id in ipairs(snapshot.equipped or {}) do
+		if id == uid then
+			return true
+		end
+	end
+	return false
+end
+
+local function inFuse(uid)
+	for _, id in ipairs(fuseSelection) do
+		if id == uid then
+			return true
+		end
+	end
+	return false
+end
+
+---------------------------------------------------------------------------
+-- CARD
+---------------------------------------------------------------------------
+
+local function buildCard(parent, instance)
+	local pet = GameConfig.pet(instance.petId)
+	if not pet then
+		return nil
+	end
+	local rarity = GameConfig.rarity(pet.rarity)
+
+	local card = Instance.new("TextButton")
+	card.Size = UDim2.fromOffset(CARD, CARD + 22)
+	card.BackgroundColor3 = Color3.fromRGB(255, 252, 246)
+	card.BorderSizePixel = 0
+	card.AutoButtonColor = false
+	card.Text = ""
+	card.ClipsDescendants = false
+	card.Parent = parent
+	Theme.corner(card, 18)
+	local stroke = Theme.stroke(card, rarity.color, 4)
+
+	local iconHolder = Instance.new("Frame")
+	iconHolder.Size = UDim2.fromOffset(CARD - 20, CARD - 20)
+	iconHolder.Position = UDim2.fromOffset(10, 8)
+	iconHolder.BackgroundColor3 = pet.color
+	iconHolder.BorderSizePixel = 0
+	iconHolder.ZIndex = 2
+	iconHolder.Parent = card
+	Theme.corner(iconHolder, math.floor((CARD - 20) / 2))
+	Theme.stroke(iconHolder, Theme.outline, 2)
+
+	Theme.label(iconHolder, {
+		text = pet.emoji,
+		size = UDim2.fromScale(1, 1),
+		textSize = 44,
+		strokeTransparency = 1,
+		zIndex = 3,
+	})
+
+	local name = Theme.label(card, {
+		text = pet.name,
+		size = UDim2.new(1, -8, 0, 18),
+		position = UDim2.fromOffset(4, CARD - 10),
+		textSize = 13,
+		color = Theme.textDark,
+		strokeTransparency = 1,
+		zIndex = 3,
+	})
+
+	local income = Theme.label(card, {
+		text = "🪙 " .. Format.number(pet.income * (instance.golden and 1.5 or 1)),
+		size = UDim2.new(1, -8, 0, 16),
+		position = UDim2.fromOffset(4, CARD + 4),
+		textSize = 13,
+		color = Color3.fromRGB(220, 150, 30),
+		strokeTransparency = 1,
+		zIndex = 3,
+	})
+
+	-- selo EQUIPADO
+	local badge = Theme.label(card, {
+		text = "✓",
+		size = UDim2.fromOffset(26, 26),
+		position = UDim2.new(1, -6, 0, -6),
+		anchor = Vector2.new(1, 0),
+		textSize = 18,
+		color = Color3.fromRGB(255, 255, 255),
+		strokeTransparency = 1,
+		zIndex = 6,
+	})
+	local badgeBg = Instance.new("Frame")
+	badgeBg.Size = UDim2.fromOffset(26, 26)
+	badgeBg.Position = UDim2.new(1, -6, 0, -6)
+	badgeBg.AnchorPoint = Vector2.new(1, 0)
+	badgeBg.BackgroundColor3 = Color3.fromRGB(110, 205, 110)
+	badgeBg.BorderSizePixel = 0
+	badgeBg.ZIndex = 5
+	badgeBg.Visible = false
+	badgeBg.Parent = card
+	Theme.corner(badgeBg, 13)
+	Theme.stroke(badgeBg, Theme.outline, 2)
+	badge.Parent = badgeBg
+	badge.Position = UDim2.fromScale(0.5, 0.5)
+	badge.AnchorPoint = Vector2.new(0.5, 0.5)
+	badge.Size = UDim2.fromScale(1, 1)
+
+	if instance.golden then
+		local glow = Instance.new("UIStroke")
+		glow.Color = Color3.fromRGB(255, 210, 80)
+		glow.Thickness = 5
+		glow.Transparency = 0.2
+		glow.Parent = card
+	end
+
+	card.MouseButton1Click:Connect(function()
+		if fuseMode then
+			local found = nil
+			for index, id in ipairs(fuseSelection) do
+				if id == instance.uid then
+					found = index
+					break
+				end
+			end
+			if found then
+				table.remove(fuseSelection, found)
+			elseif #fuseSelection < 3 then
+				table.insert(fuseSelection, instance.uid)
+			end
+			PetsPanel.refresh()
+			return
+		end
+
+		if sellMode then
+			PetsPanel.confirmSell(instance.uid)
+			return
+		end
+
+		if isEquipped(State.snapshot, instance.uid) then
+			NetClient.action(Net.ActionKind.Unequip, instance.uid)
+		else
+			NetClient.action(Net.ActionKind.Equip, instance.uid)
+		end
+	end)
+
+	return {
+		card = card,
+		stroke = stroke,
+		badgeBg = badgeBg,
+		instance = instance,
+		pet = pet,
+	}
+end
+
+---------------------------------------------------------------------------
+-- BUILD
+---------------------------------------------------------------------------
+
+function PetsPanel.build(parentGui)
+	gui = parentGui
+
+	local root = Theme.panel(gui, {
+		name = "PetsPanel",
+		size = UDim2.fromOffset(660, 600),
+		position = UDim2.new(0.5, 0, 0.5, 0),
+		color = Theme.white,
+		radius = 30,
+		zIndex = 25,
+	})
+	root.Visible = false
+	refs.root = root
+
+	local header = Instance.new("Frame")
+	header.Size = UDim2.new(1, 0, 0, 78)
+	header.BackgroundColor3 = Color3.fromRGB(160, 210, 255)
+	header.BorderSizePixel = 0
+	header.ZIndex = 26
+	header.Parent = root
+	Theme.corner(header, 28)
+
+	Theme.label(root, {
+		text = "MEUS PETS",
+		size = UDim2.new(1, 0, 0, 60),
+		position = UDim2.fromOffset(0, 8),
+		textSize = 40,
+		color = Color3.fromRGB(255, 255, 255),
+		strokeTransparency = 0,
+		strokeColor = Color3.fromRGB(50, 110, 180),
+		zIndex = 27,
+	})
+
+	local close = Theme.button(root, {
+		text = "✕",
+		size = UDim2.fromOffset(52, 52),
+		position = UDim2.new(1, -18, 0, 14),
+		anchor = Vector2.new(1, 0),
+		color = Theme.red,
+		textSize = 26,
+		radius = 26,
+		shadow = false,
+		zIndex = 30,
+	})
+	close.MouseButton1Click:Connect(function()
+		PetsPanel.hide()
+	end)
+
+	refs.countLabel = Theme.label(root, {
+		text = "0 / 0 equipados",
+		size = UDim2.new(1, -40, 0, 24),
+		position = UDim2.fromOffset(24, 88),
+		xAlign = Enum.TextXAlignment.Left,
+		textSize = 17,
+		color = Theme.textDark,
+		strokeTransparency = 1,
+		zIndex = 27,
+	})
+
+	-- botões de modo
+	local modeBar = Instance.new("Frame")
+	modeBar.Size = UDim2.new(1, -40, 0, 46)
+	modeBar.Position = UDim2.fromOffset(20, 116)
+	modeBar.BackgroundTransparency = 1
+	modeBar.ZIndex = 27
+	modeBar.Parent = root
+	Theme.list(modeBar, {
+		direction = Enum.FillDirection.Horizontal,
+		padding = 8,
+		hAlign = Enum.HorizontalAlignment.Left,
+	})
+
+	local function modeButton(text, order, color)
+		local btn = Theme.button(modeBar, {
+			text = text,
+			size = UDim2.fromOffset(150, 46),
+			color = color,
+			textSize = 17,
+			layoutOrder = order,
+			radius = 23,
+			shadow = false,
+			zIndex = 28,
+		})
+		return btn
+	end
+
+	local fuseButton = modeButton("FUNDIR", 1, Theme.purple)
+	local sellButton = modeButton("VENDER", 2, Theme.red)
+
+	fuseButton.MouseButton1Click:Connect(function()
+		fuseMode = not fuseMode
+		sellMode = false
+		fuseSelection = {}
+		PetsPanel.refresh()
+	end)
+
+	sellButton.MouseButton1Click:Connect(function()
+		sellMode = not sellMode
+		fuseMode = false
+		PetsPanel.refresh()
+	end)
+
+	local confirmFuse = Theme.button(modeBar, {
+		text = "CONFIRMAR FUSÃO",
+		size = UDim2.fromOffset(200, 46),
+		color = Theme.pink,
+		textSize = 16,
+		layoutOrder = 3,
+		radius = 23,
+		shadow = false,
+		zIndex = 28,
+	})
+	refs.confirmFuse = confirmFuse
+	confirmFuse.MouseButton1Click:Connect(function()
+		if #fuseSelection == 3 then
+			NetClient.action(Net.ActionKind.Fuse, fuseSelection)
+			fuseSelection = {}
+			fuseMode = false
+			PetsPanel.refresh()
+		end
+	end)
+
+	-- grade
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Size = UDim2.new(1, -40, 1, -190)
+	scroll.Position = UDim2.fromOffset(20, 172)
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel = 0
+	scroll.ScrollBarThickness = 5
+	scroll.ScrollBarImageColor3 = Color3.fromRGB(200, 210, 225)
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroll.CanvasSize = UDim2.fromOffset(0, 0)
+	scroll.ZIndex = 26
+	scroll.Parent = root
+
+	local grid = Instance.new("UIGridLayout")
+	grid.CellSize = UDim2.fromOffset(CARD, CARD + 22)
+	grid.CellPadding = UDim2.fromOffset(10, 10)
+	grid.SortOrder = Enum.SortOrder.LayoutOrder
+	grid.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	grid.Parent = scroll
+	refs.grid = scroll
+
+	refs.empty = Theme.label(root, {
+		text = "Nenhum pet ainda.\nAbra um ovo na aba OVOS 🥚",
+		size = UDim2.new(1, -60, 0, 120),
+		position = UDim2.fromScale(0.5, 0.55),
+		anchor = Vector2.new(0.5, 0.5),
+		textSize = 22,
+		color = Color3.fromRGB(170, 170, 180),
+		strokeTransparency = 1,
+		wrapped = true,
+		zIndex = 27,
+	})
+
+	Theme.makeDraggable(root, header)
+
+	State.subscribe(function()
+		if root.Visible then
+			PetsPanel.refresh()
+		end
+	end)
+
+	return root
+end
+
+function PetsPanel.confirmSell(uid)
+	local instance = nil
+	for _, cardRef in pairs(refs.cards) do
+		if cardRef.instance.uid == uid then
+			instance = cardRef.instance
+			break
+		end
+	end
+	if not instance then
+		return
+	end
+	-- venda direta (o servidor devolve o valor via toast)
+	NetClient.action(Net.ActionKind.SellPet, uid)
+end
+
+function PetsPanel.refresh()
+	local snapshot = State.snapshot
+	if not snapshot or not refs.root then
+		return
+	end
+
+	for _, cardRef in pairs(refs.cards) do
+		cardRef.card:Destroy()
+	end
+	refs.cards = {}
+
+	local list = sortedPets(snapshot)
+	refs.empty.Visible = #list == 0
+
+	for index, instance in ipairs(list) do
+		local cardRef = buildCard(refs.grid, instance)
+		if cardRef then
+			cardRef.card.LayoutOrder = index
+			cardRef.badgeBg.Visible = isEquipped(snapshot, instance.uid)
+
+			if inFuse(instance.uid) then
+				cardRef.stroke.Color = Theme.cyan
+				cardRef.stroke.Thickness = 7
+			end
+			if sellMode then
+				cardRef.card.BackgroundColor3 = Color3.fromRGB(255, 235, 235)
+			end
+			refs.cards[instance.uid] = cardRef
+		end
+	end
+
+	refs.countLabel.Text = string.format(
+		"%d pets · %d/%d equipados · renda +%s/s",
+		#list,
+		#snapshot.equipped,
+		snapshot.slots,
+		Format.number(snapshot.income)
+	)
+
+	refs.confirmFuse.Visible = fuseMode
+	refs.confirmFuse.Text = string.format("CONFIRMAR FUSÃO (%d/3)", #fuseSelection)
+	refs.confirmFuse.BackgroundColor3 = #fuseSelection == 3 and Theme.green or Color3.fromRGB(190, 190, 200)
+end
+
+function PetsPanel.show()
+	refs.root.Visible = true
+	PetsPanel.refresh()
+end
+
+function PetsPanel.hide()
+	refs.root.Visible = false
+	fuseMode = false
+	sellMode = false
+	fuseSelection = {}
+end
+
+function PetsPanel.toggle()
+	if refs.root.Visible then
+		PetsPanel.hide()
+	else
+		PetsPanel.show()
+	end
+end
+
+return PetsPanel
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="22">
+          <Properties>
+            <string name="Name">ShopPanel</string>
+            <string name="Source"><![CDATA[-- ShopPanel
+-- Loja de moedas (toque, slots, multiplicador) e loja de gemas
+-- (renda, sorte, toque, slots) — duas abas no mesmo painel, como nos prints.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.GameConfig)
+local Format = require(Shared.Format)
+local Net = require(Shared.Net)
+
+local Theme = require(script.Parent.Theme)
+local State = require(script.Parent.State)
+local NetClient = require(script.Parent.NetClient)
+
+local ShopPanel = {}
+
+local refs = { rows = {} }
+local gui
+local currentTab = "coins"
+
+local COIN_META = {
+	tap = { icon = "👆", desc = "Mais moedas por toque" },
+	slots = { icon = "🎒", desc = "Equipe mais pets" },
+	mult = { icon = "✨", desc = "Multiplica toda a renda" },
+}
+
+local GEM_META = {
+	gemsIncome = { icon = "💎", desc = "Renda de pets permanente" },
+	gemsLuck = { icon = "🍀", desc = "Mais chance de pets raros" },
+	gemsTap = { icon = "👊", desc = "Toque mais forte, pra sempre" },
+	gemsSlots = { icon = "🎒", desc = "Slot extra permanente" },
+}
+
+local function clearRows()
+	for _, row in pairs(refs.rows) do
+		row:Destroy()
+	end
+	refs.rows = {}
+end
+
+local function buildRow(parent, order, icon, title, subtitle, buttonText, affordable, onClick)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -8, 0, 76)
+	row.BackgroundColor3 = Color3.fromRGB(255, 250, 240)
+	row.BorderSizePixel = 0
+	row.LayoutOrder = order
+	row.Parent = parent
+	Theme.corner(row, 18)
+	Theme.stroke(row, Color3.fromRGB(230, 215, 195), 3)
+
+	local iconFrame = Instance.new("Frame")
+	iconFrame.Size = UDim2.fromOffset(52, 52)
+	iconFrame.Position = UDim2.fromOffset(12, 12)
+	iconFrame.BackgroundColor3 = Color3.fromRGB(255, 235, 200)
+	iconFrame.BorderSizePixel = 0
+	iconFrame.ZIndex = 2
+	iconFrame.Parent = row
+	Theme.corner(iconFrame, 16)
+
+	Theme.label(iconFrame, {
+		text = icon,
+		size = UDim2.fromScale(1, 1),
+		textSize = 28,
+		strokeTransparency = 1,
+		zIndex = 3,
+	})
+
+	Theme.label(row, {
+		text = title,
+		size = UDim2.new(1, -230, 0, 22),
+		position = UDim2.fromOffset(76, 12),
+		xAlign = Enum.TextXAlignment.Left,
+		textSize = 18,
+		color = Theme.textDark,
+		strokeTransparency = 1,
+		zIndex = 3,
+	})
+
+	Theme.label(row, {
+		text = subtitle,
+		size = UDim2.new(1, -230, 0, 18),
+		position = UDim2.fromOffset(76, 36),
+		xAlign = Enum.TextXAlignment.Left,
+		textSize = 14,
+		color = Color3.fromRGB(160, 150, 140),
+		strokeTransparency = 1,
+		zIndex = 3,
+	})
+
+	local buy = Theme.button(row, {
+		text = buttonText,
+		size = UDim2.fromOffset(150, 46),
+		position = UDim2.new(1, -12, 0.5, 0),
+		anchor = Vector2.new(1, 0.5),
+		color = affordable and Theme.green or Color3.fromRGB(200, 200, 205),
+		textSize = 16,
+		radius = 23,
+		shadow = false,
+		zIndex = 4,
+	})
+	buy.MouseButton1Click:Connect(function()
+		if affordable then
+			onClick()
+		end
+	end)
+
+	refs.rows[#refs.rows + 1] = row
+	return row
+end
+
+function ShopPanel.build(parentGui)
+	gui = parentGui
+
+	local root = Theme.panel(gui, {
+		name = "ShopPanel",
+		size = UDim2.fromOffset(560, 580),
+		position = UDim2.new(0.5, 0, 0.5, 0),
+		color = Theme.white,
+		radius = 30,
+		zIndex = 25,
+	})
+	root.Visible = false
+	refs.root = root
+
+	local header = Instance.new("Frame")
+	header.Size = UDim2.new(1, 0, 0, 78)
+	header.BackgroundColor3 = Color3.fromRGB(130, 210, 130)
+	header.BorderSizePixel = 0
+	header.ZIndex = 26
+	header.Parent = root
+	Theme.corner(header, 28)
+
+	refs.title = Theme.label(root, {
+		text = "LOJA",
+		size = UDim2.new(1, 0, 0, 60),
+		position = UDim2.fromOffset(0, 8),
+		textSize = 40,
+		color = Color3.fromRGB(255, 255, 255),
+		strokeTransparency = 0,
+		strokeColor = Color3.fromRGB(60, 130, 60),
+		zIndex = 27,
+	})
+
+	local close = Theme.button(root, {
+		text = "✕",
+		size = UDim2.fromOffset(52, 52),
+		position = UDim2.new(1, -18, 0, 14),
+		anchor = Vector2.new(1, 0),
+		color = Theme.red,
+		textSize = 26,
+		radius = 26,
+		shadow = false,
+		zIndex = 30,
+	})
+	close.MouseButton1Click:Connect(function()
+		ShopPanel.hide()
+	end)
+
+	-- barra de abas
+	local tabs = Instance.new("Frame")
+	tabs.Size = UDim2.new(1, -40, 0, 52)
+	tabs.Position = UDim2.fromOffset(20, 88)
+	tabs.BackgroundTransparency = 1
+	tabs.ZIndex = 27
+	tabs.Parent = root
+	Theme.list(tabs, {
+		direction = Enum.FillDirection.Horizontal,
+		padding = 8,
+		hAlign = Enum.HorizontalAlignment.Left,
+	})
+
+	local function tabButton(text, id, order, color)
+		local btn = Theme.button(tabs, {
+			text = text,
+			size = UDim2.fromOffset(240, 50),
+			color = color,
+			textSize = 19,
+			layoutOrder = order,
+			radius = 25,
+			shadow = false,
+			zIndex = 28,
+		})
+		btn.MouseButton1Click:Connect(function()
+			currentTab = id
+			ShopPanel.refresh()
+		end)
+		return btn
+	end
+
+	refs.coinTab = tabButton("🪙 MOEDAS", "coins", 1, Theme.yellow)
+	refs.gemTab = tabButton("💎 GEMAS", "gems", 2, Theme.purple)
+
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Size = UDim2.new(1, -32, 1, -176)
+	scroll.Position = UDim2.fromOffset(16, 152)
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel = 0
+	scroll.ScrollBarThickness = 5
+	scroll.ScrollBarImageColor3 = Color3.fromRGB(210, 200, 190)
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroll.CanvasSize = UDim2.fromOffset(0, 0)
+	scroll.ZIndex = 26
+	scroll.Parent = root
+	Theme.list(scroll, { padding = 8 })
+	refs.scroll = scroll
+
+	Theme.makeDraggable(root, header)
+
+	State.subscribe(function()
+		if root.Visible then
+			ShopPanel.refresh()
+		end
+	end)
+
+	return root
+end
+
+function ShopPanel.refresh()
+	local snapshot = State.snapshot
+	if not snapshot or not refs.root then
+		return
+	end
+
+	clearRows()
+	refs.coinTab.BackgroundColor3 = currentTab == "coins" and Theme.yellow or Color3.fromRGB(220, 220, 220)
+	refs.gemTab.BackgroundColor3 = currentTab == "gems" and Theme.purple or Color3.fromRGB(220, 220, 220)
+
+	if currentTab == "coins" then
+		refs.title.Text = "LOJA"
+		local order = 0
+		for _, kind in ipairs({ "tap", "slots", "mult" }) do
+			order += 1
+			local meta = COIN_META[kind]
+			local upgrade = GameConfig.Upgrades[kind]
+			local tier = snapshot.upgrades[kind]
+			local cost = GameConfig.upgradeCost(kind, tier)
+			local prefix = "Nível " .. tier .. "/" .. upgrade.maxTier .. " · " .. meta.desc
+
+			local text
+			if cost then
+				text = "🪙 " .. Format.number(cost)
+			else
+				text = "MÁXIMO"
+			end
+
+			buildRow(
+				refs.scroll,
+				order,
+				meta.icon,
+				upgrade.name,
+				prefix,
+				text,
+				cost ~= nil and snapshot.coins >= cost,
+				function()
+					NetClient.action(Net.ActionKind.BuyUpgrade, kind)
+				end
+			)
+		end
+	else
+		refs.title.Text = "GEMAS"
+		local order = 0
+		for _, kind in ipairs({ "gemsIncome", "gemsLuck", "gemsTap", "gemsSlots" }) do
+			order += 1
+			local meta = GEM_META[kind]
+			local upgrade = GameConfig.GemUpgrades[kind]
+			local rank = snapshot.gemUpgrades[kind]
+			local cost = GameConfig.gemCost(kind, rank)
+			local prefix = "Rank " .. rank .. "/" .. upgrade.maxRank .. " · " .. meta.desc
+
+			local text
+			if cost then
+				text = "💎 " .. cost
+			else
+				text = "MÁXIMO"
+			end
+
+			buildRow(
+				refs.scroll,
+				order,
+				meta.icon,
+				upgrade.name,
+				prefix,
+				text,
+				cost ~= nil and snapshot.gems >= cost,
+				function()
+					NetClient.action(Net.ActionKind.BuyGemUpgrade, kind)
+				end
+			)
+		end
+
+		-- troca de gemas (informativo)
+		order += 1
+		buildRow(
+			refs.scroll,
+			order,
+			"💠",
+			"Ganhe gemas",
+			"Rebirth dá gemas · ranking semanal",
+			"—",
+			false,
+			function() end
+		)
+	end
+end
+
+function ShopPanel.show(tab)
+	if tab then
+		currentTab = tab
+	end
+	refs.root.Visible = true
+	ShopPanel.refresh()
+end
+
+function ShopPanel.hide()
+	refs.root.Visible = false
+end
+
+function ShopPanel.toggle()
+	if refs.root.Visible then
+		ShopPanel.hide()
+	else
+		ShopPanel.show()
+	end
+end
+
+return ShopPanel
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="23">
+          <Properties>
+            <string name="Name">State</string>
+            <string name="Source"><![CDATA[-- State
+-- Snapshot mais recente + assinatura. Sem framework.
+
+local State = {}
+
+State.snapshot = nil
+State.static = nil
+State.listeners = {}
+
+function State.set(snapshot)
+	State.snapshot = snapshot
+	for _, callback in ipairs(State.listeners) do
+		task.spawn(callback, snapshot)
+	end
+end
+
+function State.setStatic(data)
+	State.static = data
+end
+
+function State.subscribe(callback)
+	table.insert(State.listeners, callback)
+	if State.snapshot then
+		task.spawn(callback, State.snapshot)
+	end
+	return function()
+		for index, listener in ipairs(State.listeners) do
+			if listener == callback then
+				table.remove(State.listeners, index)
+				break
+			end
+		end
+	end
+end
+
+return State
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="24">
+          <Properties>
+            <string name="Name">TapButton</string>
+            <string name="Source"><![CDATA[-- TapButton
+-- O botão gigante de toque no canto inferior direito, com o "+1" flutuando
+-- igual aos prints. Também aceita clique direto no mundo (mouse) pra tocar.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Format = require(Shared.Format)
+
+local Theme = require(script.Parent.Theme)
+local State = require(script.Parent.State)
+
+local TapButton = {}
+
+local refs = {}
+local gui
+local onTap
+
+local function spawnPlusOne(amount)
+	local parent = refs.holder
+	if not parent then
+		return
+	end
+
+	local plus = Theme.label(parent, {
+		text = "+" .. Format.number(amount),
+		size = UDim2.fromOffset(150, 60),
+		position = UDim2.fromScale(0.5, 0.1),
+		anchor = Vector2.new(0.5, 1),
+		textSize = 34,
+		color = Theme.yellow,
+		strokeTransparency = 0,
+		strokeColor = Theme.outline,
+		zIndex = 20,
+	})
+	plus.Rotation = math.random(-8, 8)
+
+	TweenService:Create(plus, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = plus.Position - UDim2.fromScale(0, 0.5),
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	}):Play()
+
+	task.delay(0.75, function()
+		plus:Destroy()
+	end)
+end
+
+function TapButton.build(parentGui, tapCallback)
+	gui = parentGui
+	onTap = tapCallback
+
+	local holder = Instance.new("Frame")
+	holder.Name = "TapHolder"
+	holder.BackgroundTransparency = 1
+	holder.Size = UDim2.fromOffset(210, 210)
+	holder.Position = UDim2.new(1, -30, 1, -30)
+	holder.AnchorPoint = Vector2.new(1, 1)
+	holder.Parent = gui
+	refs.holder = holder
+
+	-- sombra
+	local shadow = Instance.new("Frame")
+	shadow.Size = UDim2.fromOffset(184, 184)
+	shadow.Position = UDim2.fromOffset(8, 16)
+	shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+	shadow.BackgroundColor3 = Theme.shadow
+	shadow.BackgroundTransparency = 0.55
+	shadow.BorderSizePixel = 0
+	shadow.Parent = holder
+	Theme.corner(shadow, 46)
+
+	-- botão
+	local button = Instance.new("TextButton")
+	button.Name = "TapButton"
+	button.Size = UDim2.fromOffset(184, 184)
+	button.AnchorPoint = Vector2.new(0.5, 0.5)
+	button.Position = UDim2.fromScale(0.5, 0.5)
+	button.BackgroundColor3 = Color3.fromRGB(110, 195, 250)
+	button.BorderSizePixel = 0
+	button.AutoButtonColor = false
+	button.Text = ""
+	button.Parent = holder
+	Theme.corner(button, 46)
+	Theme.stroke(button, Color3.fromRGB(70, 140, 210), 6)
+	Theme.gradient(button, Color3.fromRGB(160, 225, 255), Color3.fromRGB(90, 170, 235))
+
+	-- "dedo" desenhado com partes (sem asset)
+	local finger = Theme.label(button, {
+		text = "👆",
+		size = UDim2.fromScale(0.72, 0.72),
+		position = UDim2.fromScale(0.5, 0.44),
+		anchor = Vector2.new(0.5, 0.5),
+		textSize = 96,
+		strokeTransparency = 1,
+		zIndex = 5,
+	})
+	finger.Rotation = -12
+
+	-- selo "+1" no topo, como no print
+	local badgeFrame = Instance.new("Frame")
+	badgeFrame.Size = UDim2.fromOffset(74, 44)
+	badgeFrame.Position = UDim2.fromScale(0.62, 0.02)
+	badgeFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	badgeFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	badgeFrame.BorderSizePixel = 0
+	badgeFrame.ZIndex = 8
+	badgeFrame.Parent = holder
+	Theme.corner(badgeFrame, 14)
+	Theme.stroke(badgeFrame, Color3.fromRGB(60, 130, 200), 4)
+
+	Theme.label(badgeFrame, {
+		text = "+1",
+		size = UDim2.fromScale(1, 1),
+		textSize = 26,
+		color = Color3.fromRGB(70, 150, 220),
+		strokeTransparency = 1,
+		zIndex = 9,
+	})
+
+	local scale = Instance.new("UIScale")
+	scale.Parent = button
+
+	local function doTap()
+		scale.Scale = 0.9
+		TweenService:Create(scale, TweenInfo.new(0.12, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Scale = 1,
+		}):Play()
+		onTap()
+	end
+
+	button.MouseButton1Click:Connect(doTap)
+	-- mobile: mousebutton1click cobre touch; adiciona também atalho espaço
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.Space then
+			doTap()
+		end
+	end)
+
+	refs.button = button
+	refs.finger = finger
+
+	local lastPower = 1
+	State.subscribe(function(snapshot)
+		lastPower = snapshot.tapPower or 1
+		local badge = badgeFrame:FindFirstChildOfClass("TextLabel")
+		if badge then
+			badge.Text = "+" .. Format.number(lastPower)
+		end
+	end)
+
+	return holder
+end
+
+function TapButton.showReward(amount)
+	spawnPlusOne(amount)
+end
+
+return TapButton
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="25">
+          <Properties>
+            <string name="Name">Theme</string>
+            <string name="Source"><![CDATA[-- Theme
+-- Visual cartoon dos tycoons de ovo: cantos bem grandes, contorno escuro
+-- grosso, gradiente pastel, sombra chapada embaixo. Fonte FredokaOne.
+-- Nada de painel cinza de programador.
+
+local Theme = {}
+
+Theme.text = Color3.fromRGB(255, 255, 255)
+Theme.textDark = Color3.fromRGB(74, 52, 38)
+Theme.outline = Color3.fromRGB(64, 44, 30)
+
+Theme.green = Color3.fromRGB(126, 217, 87)
+Theme.greenDark = Color3.fromRGB(74, 160, 60)
+Theme.yellow = Color3.fromRGB(255, 206, 61)
+Theme.yellowDark = Color3.fromRGB(226, 158, 26)
+Theme.blue = Color3.fromRGB(96, 186, 255)
+Theme.blueDark = Color3.fromRGB(52, 132, 216)
+Theme.purple = Color3.fromRGB(178, 130, 255)
+Theme.purpleDark = Color3.fromRGB(124, 78, 205)
+Theme.pink = Color3.fromRGB(255, 138, 190)
+Theme.pinkDark = Color3.fromRGB(215, 84, 145)
+Theme.red = Color3.fromRGB(255, 106, 106)
+Theme.cyan = Color3.fromRGB(96, 240, 235)
+Theme.white = Color3.fromRGB(255, 252, 245)
+Theme.panel = Color3.fromRGB(255, 248, 232)
+Theme.panelStroke = Color3.fromRGB(206, 168, 116)
+Theme.shadow = Color3.fromRGB(38, 26, 18)
+
+Theme.font = Enum.Font.FredokaOne
+Theme.fontBody = Enum.Font.FredokaOne
+Theme.fontNum = Enum.Font.FredokaOne
+
+local function corner(instance, radius)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius or 18)
+	c.Parent = instance
+	return c
+end
+Theme.corner = corner
+
+local function stroke(instance, color, thickness, transparency)
+	local s = Instance.new("UIStroke")
+	s.Color = color or Theme.outline
+	s.Thickness = thickness or 3
+	s.Transparency = transparency or 0
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.LineJoinMode = Enum.LineJoinMode.Round
+	s.Parent = instance
+	return s
+end
+Theme.stroke = stroke
+
+local function gradient(instance, top, bottom, rotation)
+	local g = Instance.new("UIGradient")
+	g.Color = ColorSequence.new(top, bottom)
+	g.Rotation = rotation or 90
+	g.Parent = instance
+	return g
+end
+Theme.gradient = gradient
+
+-- botão principal: pílula com gradiente, contorno grosso e sombra
+function Theme.button(parent, props)
+	local button = Instance.new("TextButton")
+	button.Name = props.name or "Button"
+	button.AutoButtonColor = false
+	button.BorderSizePixel = 0
+	button.Size = props.size or UDim2.fromOffset(200, 56)
+	button.Position = props.position or UDim2.fromOffset(0, 0)
+	button.AnchorPoint = props.anchor or Vector2.zero
+	button.Font = props.font or Theme.font
+	button.Text = props.text or ""
+	button.TextColor3 = props.textColor or Theme.text
+	button.TextSize = props.textSize or 22
+	button.TextStrokeTransparency = props.textStrokeTransparency or 0.25
+	button.TextStrokeColor3 = Theme.outline
+	button.BackgroundColor3 = props.color or Theme.green
+	button.LayoutOrder = props.layoutOrder or 0
+	button.ZIndex = props.zIndex or 2
+	button.Parent = parent
+
+	corner(button, props.radius or (button.AbsoluteSize.Y > 0 and math.floor(button.AbsoluteSize.Y / 2) or 22))
+	stroke(button, props.strokeColor or Theme.outline, props.strokeThickness or 3)
+	gradient(button, props.gradientTop or Color3.new(1, 1, 1), props.gradientBottom or Color3.fromRGB(228, 228, 228))
+
+	if props.shadow ~= false then
+		local shadow = Instance.new("Frame")
+		shadow.Name = "Shadow"
+		shadow.BackgroundColor3 = props.shadowColor or Theme.shadow
+		shadow.BackgroundTransparency = 0.6
+		shadow.BorderSizePixel = 0
+		shadow.Size = UDim2.fromScale(1, 1)
+		shadow.Position = UDim2.fromOffset(0, props.shadowOffset or 5)
+		shadow.ZIndex = button.ZIndex - 1
+		shadow.Parent = parent
+		corner(shadow, props.radius or 22)
+		stroke(shadow, Theme.outline, props.strokeThickness or 3)
+		shadow.LayoutOrder = -1
+
+		button.AncestryChanged:Connect(function()
+			shadow:Destroy()
+		end)
+
+		-- acompanha posição e tamanho do botão
+		local function sync()
+			shadow.Position = button.Position + UDim2.fromOffset(0, props.shadowOffset or 5)
+			shadow.Size = button.Size
+			shadow.AnchorPoint = button.AnchorPoint
+			shadow.Visible = button.Visible
+		end
+		button:GetPropertyChangedSignal("Position"):Connect(sync)
+		button:GetPropertyChangedSignal("Size"):Connect(sync)
+		button:GetPropertyChangedSignal("Visible"):Connect(sync)
+		sync()
+	end
+
+	-- feedback de press
+	local scale = Instance.new("UIScale")
+	scale.Parent = button
+	button.MouseButton1Down:Connect(function()
+		scale.Scale = 0.94
+	end)
+	button.MouseButton1Up:Connect(function()
+		scale.Scale = 1
+	end)
+	button.MouseLeave:Connect(function()
+		scale.Scale = 1
+	end)
+
+	return button
+end
+
+function Theme.panel(parent, props)
+	local frame = Instance.new("Frame")
+	frame.Name = props.name or "Panel"
+	frame.BackgroundColor3 = props.color or Theme.panel
+	frame.BorderSizePixel = 0
+	frame.Size = props.size or UDim2.fromOffset(420, 520)
+	frame.Position = props.position or UDim2.new(0.5, 0, 0.5, 0)
+	frame.AnchorPoint = props.anchor or Vector2.new(0.5, 0.5)
+	frame.ZIndex = props.zIndex or 10
+	frame.Parent = parent
+
+	corner(frame, props.radius or 26)
+	stroke(frame, props.strokeColor or Theme.panelStroke, 4)
+	return frame
+end
+
+function Theme.label(parent, props)
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = props.size or UDim2.fromScale(1, 1)
+	label.Position = props.position or UDim2.fromOffset(0, 0)
+	label.AnchorPoint = props.anchor or Vector2.zero
+	label.Font = props.font or Theme.font
+	label.Text = props.text or ""
+	label.TextColor3 = props.color or Theme.text
+	label.TextSize = props.textSize or 20
+	label.TextXAlignment = props.xAlign or Enum.TextXAlignment.Center
+	label.TextYAlignment = props.yAlign or Enum.TextYAlignment.Center
+	label.TextScaled = props.scaled or false
+	label.TextWrapped = props.wrapped or false
+	label.RichText = props.rich or false
+	label.TextStrokeTransparency = props.stroke == false and 1 or (props.strokeTransparency or 0.35)
+	label.TextStrokeColor3 = props.strokeColor or Theme.outline
+	label.ZIndex = props.zIndex or 2
+	label.LayoutOrder = props.layoutOrder or 0
+	label.Parent = parent
+	return label
+end
+
+-- container vertical com espaçamento
+function Theme.list(parent, props)
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = props and props.direction or Enum.FillDirection.Vertical
+	layout.Padding = UDim.new(0, props and props.padding or 10)
+	layout.HorizontalAlignment = props and props.hAlign or Enum.HorizontalAlignment.Center
+	layout.VerticalAlignment = props and props.vAlign or Enum.VerticalAlignment.Top
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = parent
+	return layout
+end
+
+function Theme.padding(parent, px)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, px)
+	pad.PaddingBottom = UDim.new(0, px)
+	pad.PaddingLeft = UDim.new(0, px)
+	pad.PaddingRight = UDim.new(0, px)
+	pad.Parent = parent
+	return pad
+end
+
+-- ícone de pet: círculo colorido com emoji grande
+function Theme.petIcon(parent, pet, props)
+	props = props or {}
+	local size = props.size or 72
+
+	local holder = Instance.new("Frame")
+	holder.Size = UDim2.fromOffset(size, size)
+	holder.BackgroundColor3 = pet.color or Theme.white
+	holder.BorderSizePixel = 0
+	holder.ZIndex = props.zIndex or 3
+	holder.Parent = parent
+	corner(holder, math.floor(size / 2))
+	stroke(holder, Theme.outline, props.strokeThickness or 3)
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.Text = pet.emoji or "🐾"
+	label.ZIndex = holder.ZIndex + 1
+	label.Parent = holder
+
+	return holder, label
+end
+
+-- arrastar painel pelo cabeçalho
+function Theme.makeDraggable(frame, handle)
+	local UserInputService = game:GetService("UserInputService")
+	local dragging, dragStart, startPos = false, nil, nil
+
+	(handle or frame).InputBegan:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			dragging = true
+			dragStart = input.Position
+			startPos = frame.Position
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			dragging = false
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if not dragging then
+			return
+		end
+		if
+			input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			local delta = input.Position - dragStart
+			frame.Position =
+				UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+return Theme
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="26">
+          <Properties>
+            <string name="Name">Toasts</string>
+            <string name="Source"><![CDATA[-- Toasts
+-- Mensagens curtas no topo, no estilo dos tycoons (pílula branca com contorno).
+
+local TweenService = game:GetService("TweenService")
+
+local Theme = require(script.Parent.Theme)
+
+local Toasts = {}
+
+local container
+
+function Toasts.init(gui)
+	container = Instance.new("Frame")
+	container.Name = "Toasts"
+	container.BackgroundTransparency = 1
+	container.Size = UDim2.fromOffset(420, 260)
+	container.Position = UDim2.new(0.5, 0, 0, 130)
+	container.AnchorPoint = Vector2.new(0.5, 0)
+	container.Parent = gui
+
+	Theme.list(container, { padding = 8 })
+end
+
+function Toasts.push(text, kind)
+	if not container then
+		return
+	end
+
+	local color = Color3.fromRGB(255, 255, 255)
+	local textColor = Theme.textDark
+	if kind == "error" then
+		color = Color3.fromRGB(255, 200, 200)
+		textColor = Color3.fromRGB(170, 50, 50)
+	elseif kind == "success" then
+		color = Color3.fromRGB(205, 255, 205)
+		textColor = Color3.fromRGB(50, 130, 70)
+	end
+
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.fromOffset(400, 46)
+	frame.BackgroundColor3 = color
+	frame.BorderSizePixel = 0
+	frame.BackgroundTransparency = 1
+	frame.ZIndex = 35
+	frame.Parent = container
+	Theme.corner(frame, 23)
+
+	local label = Theme.label(frame, {
+		text = text,
+		size = UDim2.new(1, -28, 1, 0),
+		position = UDim2.fromOffset(14, 0),
+		textSize = 18,
+		color = textColor,
+		strokeTransparency = 1,
+		zIndex = 36,
+	})
+
+	TweenService:Create(frame, TweenInfo.new(0.18), { BackgroundTransparency = 0 }):Play()
+	TweenService:Create(label, TweenInfo.new(0.18), { TextTransparency = 0 }):Play()
+
+	task.delay(2.4, function()
+		TweenService:Create(frame, TweenInfo.new(0.35), { BackgroundTransparency = 1 }):Play()
+		TweenService:Create(label, TweenInfo.new(0.35), { TextTransparency = 1 }):Play()
+		task.wait(0.4)
+		frame:Destroy()
+	end)
+end
+
+return Toasts
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="27">
+          <Properties>
+            <string name="Name">WorldUI</string>
+            <string name="Source"><![CDATA[-- WorldUI
+-- Liga as placas do mapa aos paineis: clicar num ovo abre OVOS,
+-- clicar na loja abre LOJA, no portal abre RENASCIMENTO, etc.
+-- Também desenha o pet equipado flutuando atrás do jogador.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared.GameConfig)
+local Net = require(Shared.Net)
+
+local WorldUI = {}
+
+local handlers = {}
+
+function WorldUI.build(handlerMap)
+	handlers = handlerMap
+	local folder = Workspace:WaitForChild("EggTycoon", 15)
+	if not folder then
+		warn("[WorldUI] pasta do mapa não encontrada")
+		return
+	end
+
+	for _, instance in ipairs(folder:GetDescendants()) do
+		if instance:IsA("ClickDetector") or (instance:IsA("BasePart") and instance:GetAttribute("EggId")) then
+			local detector = instance:IsA("ClickDetector") and instance
+				or instance:FindFirstChildOfClass("ClickDetector")
+			if detector then
+				detector.MouseClick:Connect(function(player)
+					if player ~= Players.LocalPlayer then
+						return
+					end
+					WorldUI.route(instance)
+				end)
+			end
+		end
+	end
+end
+
+function WorldUI.route(instance)
+	local name = instance.Name
+	local eggId = instance:GetAttribute("EggId")
+
+	if eggId then
+		if handlers.selectEgg then
+			handlers.selectEgg(eggId)
+		end
+		return
+	end
+
+	if name:sub(1, 5) == "Zone_" then
+		local zone = name:sub(6)
+		if zone:sub(1, 4) == "egg_" then
+			local id = zone:sub(5)
+			-- "egg_halloween" e zona de loja; ovo normal abre a UI ja no ovo certo
+			if GameConfig.egg(id) then
+				if handlers.selectEgg then
+					handlers.selectEgg(id)
+				end
+			elseif handlers.zone then
+				handlers.zone(zone)
+			end
+		elseif handlers.zone then
+			handlers.zone(zone)
+		end
+	end
+end
+
+---------------------------------------------------------------------------
+-- PET FLUTUANTE ATRÁS DO JOGADOR
+---------------------------------------------------------------------------
+
+local rigs = {} -- [player] = { models = {}, lastKey }
+
+local function buildPetModel(pet)
+	local model = Instance.new("Model")
+	model.Name = "Pet_" .. pet.id
+
+	local body = Instance.new("Part")
+	body.Size = Vector3.new(3.2, 3.2, 3.2)
+	body.Shape = Enum.PartType.Ball
+	body.Color = pet.color
+	body.Material = pet.rarity == "secret" and Enum.Material.Neon or Enum.Material.SmoothPlastic
+	body.Anchored = true
+	body.CanCollide = false
+	body.CanQuery = false
+	body.TopSurface = Enum.SurfaceType.Smooth
+	body.Parent = model
+
+	-- olhinhos
+	for _, side in ipairs({ -1, 1 }) do
+		local eye = Instance.new("Part")
+		eye.Size = Vector3.new(0.62, 0.62, 0.62)
+		eye.Shape = Enum.PartType.Ball
+		eye.Color = Color3.fromRGB(30, 30, 40)
+		eye.Material = Enum.Material.SmoothPlastic
+		eye.Anchored = true
+		eye.CanCollide = false
+		eye.CanQuery = false
+		eye.Position = body.Position + Vector3.new(side * 0.85, 0.7, -1.35)
+		eye.Parent = model
+	end
+
+	-- orelhinhas
+	local ears = Instance.new("Part")
+	ears.Size = Vector3.new(2.6, 1.2, 0.7)
+	ears.Color = pet.color
+	ears.Material = Enum.Material.SmoothPlastic
+	ears.Anchored = true
+	ears.CanCollide = false
+	ears.CanQuery = false
+	ears.Position = body.Position + Vector3.new(0, 1.7, 0)
+	ears.Parent = model
+
+	return model, body
+end
+
+local PIPE = Instance.new("Folder")
+PIPE.Name = "PetRigs"
+PIPE.Parent = Workspace
+
+local function ensureRig(player)
+	if not rigs[player] then
+		rigs[player] = { models = {}, key = "" }
+	end
+	return rigs[player]
+end
+
+function WorldUI.syncPets(snapshot)
+	local player = Players.LocalPlayer
+	local rig = ensureRig(player)
+
+	local equipped = snapshot.equipped or {}
+	local ids = {}
+	for _, uid in ipairs(equipped) do
+		ids[#ids + 1] = tostring(uid)
+	end
+	local key = table.concat(ids, ",")
+	if key == rig.key then
+		return
+	end
+	rig.key = key
+
+	for _, model in ipairs(rig.models) do
+		model:Destroy()
+	end
+	rig.models = {}
+
+	local petsById = {}
+	for _, instance in ipairs(snapshot.pets or {}) do
+		petsById[instance.uid] = instance
+	end
+
+	local limit = math.min(#equipped, 8) -- visual: no máximo 8 flutuando
+	for index = 1, limit do
+		local uid = equipped[index]
+		local instance = petsById[uid]
+		if instance then
+			local pet = GameConfig.pet(instance.petId)
+			if pet then
+				local model, body = buildPetModel(pet)
+				model.Parent = PIPE
+				rig.models[index] = model
+			end
+		end
+	end
+end
+
+function WorldUI.stepPets(dt)
+	local player = Players.LocalPlayer
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+
+	local rig = rigs[player]
+	if not rig then
+		return
+	end
+
+	local now = os.clock()
+	local total = #rig.models
+	for index, model in pairs(rig.models) do
+		if model.Parent then
+			local angle = (index - 1) / math.max(total, 1) * math.pi * 2 + now * 0.8
+			local radius = 5.5
+			local bob = math.sin(now * 2 + index) * 0.45
+			local base = root.Position + Vector3.new(math.cos(angle) * radius, 3 + bob, math.sin(angle) * radius)
+			local look = CFrame.lookAt(base, root.Position + Vector3.new(0, 3, 0))
+
+			local body = model:FindFirstChildOfClass("Part")
+			if body then
+				-- guarda o offset de cada filho relativo ao corpo pra acompanhar
+				for _, child in ipairs(model:GetChildren()) do
+					if child:IsA("BasePart") and child ~= body then
+						if not child:GetAttribute("Offset") then
+							child:SetAttribute("Offset", child.Position - body.Position)
+						end
+					end
+				end
+				body.CFrame = look
+				for _, child in ipairs(model:GetChildren()) do
+					if child:IsA("BasePart") and child ~= body then
+						local offset = child:GetAttribute("Offset")
+						if offset then
+							child.CFrame = look * CFrame.new(offset)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+return WorldUI
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="Workspace" referent="28">
+    <Properties>
+      <string name="Name">Workspace</string>
+      <bool name="FilteringEnabled">true</bool>
+      <float name="Gravity">196.2</float>
+      <bool name="NeedsPivotMigration">false</bool>
+    </Properties>
+  </Item>
+</roblox>
