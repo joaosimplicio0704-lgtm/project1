@@ -18,6 +18,7 @@ local PALETTE = {
 	grass = Color3.fromRGB(104, 196, 90),
 	grassDark = Color3.fromRGB(76, 160, 70),
 	path = Color3.fromRGB(238, 196, 141),
+	pathLight = Color3.fromRGB(252, 222, 176),
 	pathEdge = Color3.fromRGB(214, 166, 110),
 	wood = Color3.fromRGB(150, 100, 62),
 	woodDark = Color3.fromRGB(110, 72, 44),
@@ -131,60 +132,147 @@ function World.build()
 	root.Name = "EggTycoon"
 	root.Parent = Workspace
 
-	-- agua de fundo + ilha principal em degrade de grama
+	-- MAR
+	-- Antes era um lençol de 3200x3200 chapado: o jogador via azul até o
+	-- horizonte e o mapa parecia um vazio. Agora são três camadas:
+	--   1. fundo opaco (areia escura) — dá profundidade e cor
+	--   2. uma orla clara em volta do arquipélago (água rasa)
+	--   3. o mar fundo, mais escuro e mais transparente
 	part({
-		Name = "Ocean",
-		Size = Vector3.new(3200, 4, 3200),
-		Position = Vector3.new(0, -8, 0),
-		Color = PALETTE.water,
-		Material = Enum.Material.Water,
-		Transparency = 0.15,
+		Name = "SeaFloor",
+		Size = Vector3.new(1100, 6, 1100),
+		Position = Vector3.new(0, -34, 0),
+		Color = Color3.fromRGB(56, 132, 150),
+		Material = Enum.Material.Sand,
 		CanCollide = false,
 	}, root)
 
-	-- laje de acesso aos portais: a praça é quadrada e os portais ficam num
-	-- anel; sem isso os cantos do anel caem na grama e o jogador tropeça.
+	-- água rasa: mais clara e quase opaca, cria a "praia" vista de cima
 	part({
-		Name = "PortalRingPad",
-		Size = Vector3.new(240, 1.4, 240),
-		Position = Vector3.new(0, 0.9, 0),
-		Color = PALETTE.path,
-		Material = Enum.Material.Brick,
-		Transparency = 0.35,
+		Name = "ShallowWater",
+		Size = Vector3.new(760, 6, 760),
+		Position = Vector3.new(0, -6, 0),
+		Color = Color3.fromRGB(120, 226, 236),
+		Material = Enum.Material.Water,
+		Transparency = 0.34,
+		CanCollide = false,
 	}, root)
 
-	-- praça central em tijolinho claro
+	-- mar fundo: escuro, cobre o resto do horizonte
 	part({
-		Name = "Plaza",
-		Size = Vector3.new(210, 3, 210),
-		Position = Vector3.new(0, 0.5, 0),
-		Color = PALETTE.path,
-		Material = Enum.Material.Brick,
+		Name = "Ocean",
+		Size = Vector3.new(4000, 6, 4000),
+		Position = Vector3.new(0, -10, 0),
+		Color = Color3.fromRGB(44, 132, 186),
+		Material = Enum.Material.Water,
+		Transparency = 0.18,
+		CanCollide = false,
 	}, root)
 
-	-- ilha de grama ao redor (grande, quadrada, com borda de terra)
-	part({
+	-- espuma na borda do arquipélago: um anel branco que quebra a linha reta
+	for i = 1, 44 do
+		local angle = (i / 44) * math.pi * 2
+		local wobble = 1 + math.sin(i * 2.7) * 0.06
+		local radius = 520 * wobble
+		local foam = part({
+			Name = "Foam",
+			Size = Vector3.new(30, 1.2, 16),
+			Position = Vector3.new(math.cos(angle) * radius, -3.4, math.sin(angle) * radius),
+			Color = Color3.fromRGB(238, 252, 255),
+			Material = Enum.Material.SmoothPlastic,
+			Transparency = 0.25,
+			CanCollide = false,
+		}, root)
+		foam.CFrame = CFrame.new(foam.Position) * CFrame.Angles(0, -angle, 0)
+	end
+
+	-- ILHA DO HUB — redonda, como as ilhas dos biomas.
+	-- Antes era um quadrado de 430 com uma praça quadrada de 300 por cima:
+	-- visto de cima parecia uma piscina. Redondo lê como "ilha".
+	local hubRadius = 215
+
+	local hubGrass = part({
 		Name = "Island",
-		Size = Vector3.new(420, 8, 420),
-		Position = Vector3.new(0, -3.5, 0),
+		Size = Vector3.new(10, hubRadius * 2, hubRadius * 2),
+		Position = Vector3.new(0, -4, 0),
 		Color = PALETTE.grass,
 		Material = Enum.Material.Grass,
+		Shape = Enum.PartType.Cylinder,
 	}, root)
+	hubGrass.CFrame = CFrame.new(hubGrass.Position) * CFrame.Angles(0, 0, math.pi / 2)
 
 	local dirtRing = part({
 		Name = "DirtRing",
-		Size = Vector3.new(430, 6, 430),
-		Position = Vector3.new(0, -6, 0),
+		Size = Vector3.new(8, hubRadius * 2.06, hubRadius * 2.06),
+		Position = Vector3.new(0, -7, 0),
 		Color = Color3.fromRGB(170, 110, 70),
 		Material = Enum.Material.Ground,
+		Shape = Enum.PartType.Cylinder,
+		CanCollide = false,
 	}, root)
-	dirtRing.CanCollide = false
+	dirtRing.CFrame = CFrame.new(dirtRing.Position) * CFrame.Angles(0, 0, math.pi / 2)
+
+	-- Praia ABAIXO da grama: com o topo dela no mesmo y da grama, ela cobria
+	-- a ilha inteira de areia (era isso o "losango marrom" do render).
+	local hubBeach = part({
+		Name = "Beach",
+		Size = Vector3.new(6, hubRadius * 2.12, hubRadius * 2.12),
+		Position = Vector3.new(0, -4.2, 0),
+		Color = Color3.fromRGB(240, 220, 170),
+		Material = Enum.Material.Sand,
+		Shape = Enum.PartType.Cylinder,
+		CanCollide = false,
+	}, root)
+	hubBeach.CFrame = CFrame.new(hubBeach.Position) * CFrame.Angles(0, 0, math.pi / 2)
+
+	-- praça central redonda
+	local plaza = part({
+		Name = "Plaza",
+		Size = Vector3.new(3, 190, 190),
+		Position = Vector3.new(0, 1.6, 0),
+		Color = PALETTE.path,
+		Material = Enum.Material.Brick,
+		Shape = Enum.PartType.Cylinder,
+	}, root)
+	plaza.CFrame = CFrame.new(plaza.Position) * CFrame.Angles(0, 0, math.pi / 2)
+
+	-- ANEL DE CAMINHOS — a roda dentada ligando praça e portais.
+	-- É o que faz o hub se ler como "mapa de jogo" e não como um pátio.
+	local PORTAL_RING = 138
+	local PATH_W = 26
+	for i = 1, 56 do
+		local angle = (i / 56) * math.pi * 2
+		local seg = part({
+			Name = "Path",
+			Size = Vector3.new(PATH_W, 1.2, 30),
+			Position = Vector3.new(math.cos(angle) * PORTAL_RING, 2.2, math.sin(angle) * PORTAL_RING),
+			Color = PALETTE.pathLight,
+			Material = Enum.Material.Brick,
+			CanCollide = false,
+		}, root)
+		seg.CFrame = CFrame.new(seg.Position) * CFrame.Angles(0, -angle, 0)
+	end
+
+	-- raios: da praça até o anel, um para cada portal
+	for i = 1, 7 do
+		local angle = (i / 7) * math.pi * 2
+		local mid = (95 + PORTAL_RING) / 2
+		local spoke = part({
+			Name = "Spoke",
+			Size = Vector3.new(22, 1.1, PORTAL_RING - 95 + 20),
+			Position = Vector3.new(math.cos(angle) * mid, 2.15, math.sin(angle) * mid),
+			Color = PALETTE.pathLight,
+			Material = Enum.Material.Brick,
+			CanCollide = false,
+		}, root)
+		spoke.CFrame = CFrame.new(spoke.Position) * CFrame.Angles(0, -angle + math.pi / 2, 0)
+	end
 
 	-- canteiros de grama alta na borda (silhueta cartoon)
 	local rng = Random.new(31)
 	for i = 1, 26 do
 		local angle = (i / 26) * math.pi * 2
-		local radius = 214 + rng:NextNumber() * 20
+		local radius = 204 + rng:NextNumber() * 16
 		local x = math.cos(angle) * radius
 		local z = math.sin(angle) * radius
 		local h = 8 + rng:NextNumber() * 10
@@ -213,7 +301,7 @@ function World.build()
 	local spawnPad = part({
 		Name = "SpawnLocation",
 		Size = Vector3.new(18, 1, 18),
-		Position = Vector3.new(0, 3.2, 86),
+		Position = Vector3.new(0, 3.2, 62),
 		Color = PALETTE.path,
 		Material = Enum.Material.Brick,
 	}, root)
@@ -221,7 +309,7 @@ function World.build()
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "Spawn"
 	spawn.Size = Vector3.new(16, 0.4, 16)
-	spawn.Position = Vector3.new(0, 3.9, 86)
+	spawn.Position = Vector3.new(0, 3.9, 62)
 	spawn.Anchored = true
 	spawn.CanCollide = false
 	spawn.Transparency = 1
@@ -233,13 +321,13 @@ function World.build()
 	part({
 		Name = "SpawnRing",
 		Size = Vector3.new(17, 0.25, 17),
-		Position = Vector3.new(0, 3.75, 86),
+		Position = Vector3.new(0, 3.75, 62),
 		Color = Color3.fromRGB(96, 240, 235),
 		Material = Enum.Material.Neon,
 		CanCollide = false,
 	}, root)
 
-	World.spawnPoint = Vector3.new(0, 5, 86)
+	World.spawnPoint = Vector3.new(0, 5, 62)
 end
 
 function World.spawnCFrame()
@@ -466,7 +554,7 @@ end
 ---------------------------------------------------------------------------
 
 function World.buildShop()
-	local origin = Vector3.new(-64, 0, -10)
+	local origin = Vector3.new(-104, 0, -14)
 
 	part({
 		Size = Vector3.new(28, 1, 24),
@@ -523,7 +611,7 @@ function World.buildShop()
 end
 
 function World.buildGemShop()
-	local origin = Vector3.new(64, 0, -10)
+	local origin = Vector3.new(104, 0, -14)
 
 	part({
 		Size = Vector3.new(28, 1, 24),
@@ -571,7 +659,7 @@ end
 ---------------------------------------------------------------------------
 
 function World.buildGoldenCrate()
-	local origin = Vector3.new(-58, 0, 40)
+	local origin = Vector3.new(-96, 0, 62)
 
 	part({
 		Size = Vector3.new(26, 1, 22),
@@ -632,7 +720,7 @@ end
 ---------------------------------------------------------------------------
 
 function World.buildFusion()
-	local origin = Vector3.new(58, 0, 40)
+	local origin = Vector3.new(96, 0, 62)
 
 	part({
 		Size = Vector3.new(26, 1, 22),
@@ -677,7 +765,7 @@ end
 ---------------------------------------------------------------------------
 
 function World.buildHalloween()
-	local origin = Vector3.new(-100, 0, 92)
+	local origin = Vector3.new(-168, 0, 118)
 
 	part({
 		Size = Vector3.new(30, 1, 22),
@@ -727,7 +815,7 @@ end
 ---------------------------------------------------------------------------
 
 function World.buildRebirthPortal()
-	local origin = Vector3.new(0, 0, -72)
+	local origin = Vector3.new(0, 0, -108)
 
 	-- escadaria
 	for i = 1, 6 do
@@ -773,7 +861,7 @@ end
 ---------------------------------------------------------------------------
 
 function World.buildTradePost()
-	local origin = Vector3.new(110, 0, 40)
+	local origin = Vector3.new(178, 0, 60)
 
 	part({
 		Size = Vector3.new(20, 1, 18),
@@ -893,7 +981,7 @@ function World.buildFestival()
 	-- POSTES: dois anéis de luz, um na praça e um na borda do hub
 	for ring = 1, 2 do
 		local count = ring == 1 and 6 or 12
-		local radius = ring == 1 and 88 or 170
+		local radius = ring == 1 and 128 or 220
 		for i = 1, count do
 			local angle = (i / count) * math.pi * 2
 			local x = math.cos(angle) * radius
@@ -931,8 +1019,8 @@ function World.buildFestival()
 	}
 	for cluster = 1, 6 do
 		local angle = (cluster / 6) * math.pi * 2 + 0.4
-		local cx = math.cos(angle) * 120
-		local cz = math.sin(angle) * 120
+		local cx = math.cos(angle) * 168
+		local cz = math.sin(angle) * 168
 		for b = 1, 5 do
 			local lift = 26 + b * 9
 			local spread = 3 + b * 1.2
@@ -966,20 +1054,29 @@ end
 
 -- Nuvem fofa: 4 esferas achatadas. Não colide, só decora.
 local function cloud(parent, position, scale, color)
+	-- Nuvem fofa de verdade: 7 esferas achatadas em arco, a maior no meio.
+	-- Antes eram 4 esferas pequenas e de longe pareciam pedras de gelo.
 	local puff = color or Color3.fromRGB(255, 255, 255)
-	for i, offset in ipairs({
-		{ -6, 0, 0, 12 },
-		{ 0, 2, 1, 16 },
-		{ 6, 0, -1, 12 },
-		{ 2, -1, 3, 10 },
-	}) do
-		ball({
+	local lobes = {
+		{ -1.55, -0.12, 0.0, 0.72 },
+		{ -0.75, 0.16, 0.18, 0.95 },
+		{ 0.05, 0.30, -0.10, 1.18 },
+		{ 0.85, 0.14, 0.12, 0.92 },
+		{ 1.60, -0.14, -0.05, 0.68 },
+		{ -0.30, -0.20, 0.55, 0.62 },
+		{ 0.45, -0.18, -0.52, 0.58 },
+	}
+	for i, lobe in ipairs(lobes) do
+		local d = lobe[4] * 13 * scale
+		part({
 			Name = "CloudPuff" .. i,
-			Size = Vector3.new(offset[4] * scale, offset[4] * 0.62 * scale, offset[4] * scale),
-			Position = position + Vector3.new(offset[1] * scale, offset[2] * scale, offset[3] * scale),
+			Size = Vector3.new(d, d * 0.72, d * 0.86),
+			Position = position + Vector3.new(lobe[1] * 13 * scale, lobe[2] * 9 * scale, lobe[3] * 10 * scale),
 			Color = puff,
 			Material = Enum.Material.SmoothPlastic,
-			Transparency = 0.06,
+			Transparency = 0.02,
+			CanCollide = false,
+			Shape = Enum.PartType.Ball,
 		}, parent)
 	end
 end
@@ -2181,32 +2278,77 @@ function World.buildBiome(biome, portalPosition, parent)
 	local center = Biomes.centerVector(biome)
 	local colors = biome.colors
 
-	-- plataforma de rocha flutuante (o "casco" da ilha)
-	part({
-		Name = "Base",
-		Size = Vector3.new(biome.radius * 2.3, 26, biome.radius * 2.3),
-		Position = center + Vector3.new(0, -26, 0),
-		Color = Color3.fromRGB(colors.rock[1], colors.rock[2], colors.rock[3]),
-		Material = Enum.Material.Slate,
-	}, home)
+	-- CASCO DA ILHA
+	-- Uma laje quadrada de 26 studs vira uma "plaquinha" vista de longe. O
+	-- casco é feito de camadas cilíndricas que afunilam para baixo, com rocha
+	-- irregular na borda: a silhueta fica orgânica e a ilha ganha peso.
+	local rockColor = Color3.fromRGB(colors.rock[1], colors.rock[2], colors.rock[3])
+	local rockDeep = Color3.fromRGB(colors.rock[1] - 42, colors.rock[2] - 42, colors.rock[3] - 42)
+	local rockUnder = Color3.fromRGB(colors.rock[1] - 70, colors.rock[2] - 70, colors.rock[3] - 70)
 
-	part({
-		Name = "BaseUnder",
-		Size = Vector3.new(biome.radius * 1.75, 30, biome.radius * 1.75),
-		Position = center + Vector3.new(0, -52, 0),
-		Color = Color3.fromRGB(colors.rock[1] - 40, colors.rock[2] - 40, colors.rock[3] - 40),
-		Material = Enum.Material.Slate,
-		CanCollide = false,
-	}, home)
+	for tier = 1, 4 do
+		local t = (tier - 1) / 3
+		local diameter = biome.radius * (2.24 - t * 0.95)
+		local thickness = 11
+		local tierPart = part({
+			Name = tier == 1 and "Base" or "BaseTier",
+			Size = Vector3.new(thickness, diameter, diameter),
+			Position = center + Vector3.new(0, -8 - (tier - 1) * 10.2, 0),
+			Color = tier == 1 and rockColor or (tier == 2 and rockDeep or rockUnder),
+			Material = Enum.Material.Slate,
+			Shape = Enum.PartType.Cylinder,
+			CanCollide = tier == 1,
+		}, home)
+		-- PartType.Cylinder cresce no eixo X: deitar para virar disco
+		tierPart.CFrame = CFrame.new(tierPart.Position) * CFrame.Angles(0, 0, math.pi / 2)
+	end
 
-	-- borda de praia circular
-	part({
+	-- ponta cônica embaixo: fecha a ilha com uma agulha de pedra
+	for tier = 1, 5 do
+		local t = tier / 5
+		local diameter = biome.radius * (1.25 - t * 1.05)
+		if diameter > 2 then
+			local spike = part({
+				Name = "BaseSpike",
+				Size = Vector3.new(12, diameter, diameter),
+				Position = center + Vector3.new(0, -50 - tier * 9, 0),
+				Color = rockUnder,
+				Material = Enum.Material.Slate,
+				Shape = Enum.PartType.Cylinder,
+				CanCollide = false,
+			}, home)
+			spike.CFrame = CFrame.new(spike.Position) * CFrame.Angles(0, 0, math.pi / 2)
+		end
+	end
+
+	-- rochas na borda: quebram o círculo perfeito do cilindro
+	local edgeRng = Random.new((biome.seed or 7) + 91)
+	for i = 1, 18 do
+		local angle = (i / 18) * math.pi * 2 + edgeRng:NextNumber() * 0.2
+		local radius = biome.radius * (1.04 + edgeRng:NextNumber() * 0.12)
+		local scale = 0.5 + edgeRng:NextNumber() * 0.9
+		local rock = part({
+			Name = "EdgeRock",
+			Size = Vector3.new(14 * scale, 11 * scale, 14 * scale),
+			Position = center
+				+ Vector3.new(math.cos(angle) * radius, -16 - edgeRng:NextNumber() * 14, math.sin(angle) * radius),
+			Color = rockDeep,
+			Material = Enum.Material.Rock,
+		}, home)
+		rock.CFrame = CFrame.new(rock.Position)
+			* CFrame.Angles(edgeRng:NextNumber() * 0.6, edgeRng:NextNumber() * 6.28, edgeRng:NextNumber() * 0.6)
+	end
+
+	-- PRAIA: disco circular (cilindro achatado) em vez de quadrado
+	local beach = part({
 		Name = "Beach",
-		Size = Vector3.new(biome.radius * 2.12, 3, biome.radius * 2.12),
+		Size = Vector3.new(3.2, biome.radius * 2.16, biome.radius * 2.16),
 		Position = center + Vector3.new(0, -1, 0),
 		Color = Color3.fromRGB(colors.sand[1], colors.sand[2], colors.sand[3]),
 		Material = Enum.Material.Sand,
+		Shape = Enum.PartType.Cylinder,
 	}, home)
+	beach.CFrame = CFrame.new(beach.Position) * CFrame.Angles(0, 0, math.pi / 2)
 
 	-- relevo em grade
 	local cells = Terrain.generate(biome)
@@ -2357,10 +2499,10 @@ function World.buildBiomes()
 	skyFolder.Name = "Sky"
 	skyFolder.Parent = root
 
-	cloudRing(root, Vector3.new(0, 0, 0), 300, 150, 9, 3.2)
-	cloudRing(root, Vector3.new(0, 0, 0), 700, 190, 12, 4.0)
-	cloudRing(root, Vector3.new(0, 0, 0), 1100, 230, 14, 5.0)
-	cloudRing(skyFolder, Vector3.new(0, Biomes.SkyHeight, 0), 170, 60, 6, 2.4, Color3.fromRGB(220, 210, 255))
+	cloudRing(root, Vector3.new(0, 0, 0), 620, 230, 11, 2.6)
+	cloudRing(root, Vector3.new(0, 0, 0), 980, 300, 13, 3.4)
+	cloudRing(root, Vector3.new(0, 0, 0), 1450, 380, 15, 4.4)
+	cloudRing(skyFolder, Vector3.new(0, Biomes.SkyHeight, 0), 190, 70, 7, 1.6, Color3.fromRGB(226, 214, 255))
 
 	-- Ilhas flutuantes de enfeite no caminho entre o hub e os biomas. Não
 	-- colidem e não têm função: existem para o percurso parecer um mundo.
@@ -2403,7 +2545,7 @@ function World.buildBiomes()
 		-- portal do hub
 		local portalPosition = Vector3.new(0, 0, 0)
 		if flat.Magnitude > 1 then
-			portalPosition = flat.Unit * 96
+			portalPosition = flat.Unit * 138
 		end
 		buildPortal(portalPosition, { accent = biome.colors.accent }, biome, root, "PortalTo_" .. biome.id)
 

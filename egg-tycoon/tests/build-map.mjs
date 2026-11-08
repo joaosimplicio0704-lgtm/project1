@@ -59,14 +59,20 @@ local function vec3Tag(name, v, level)
   write(level, "</Vector3>")
 end
 
-local function cfTag(v, level)
+-- A matriz de rotacao vem do host como lista de 9 numeros (linha maior).
+-- Se nao vier, e identidade — mas se vier e for ignorada, pecas giradas
+-- (cilindro deitado, letreiro, espuma) nascem todas viradas pro mesmo lado.
+local function cfTag(v, rot, level)
   if type(v) ~= "table" or type(v.X) ~= "number" then return end
+  local m = (type(rot) == "table" and #rot == 9) and rot
+    or { 1, 0, 0, 0, 1, 0, 0, 0, 1 }
   write(level, '<CoordinateFrame name="CFrame">')
   write(level + 1, "<X>" .. string.format("%.4f", v.X) .. "</X>")
   write(level + 1, "<Y>" .. string.format("%.4f", v.Y or 0) .. "</Y>")
   write(level + 1, "<Z>" .. string.format("%.4f", v.Z or 0) .. "</Z>")
-  for _, pair in ipairs({ { "R00", 1 }, { "R01", 0 }, { "R02", 0 }, { "R10", 0 }, { "R11", 1 }, { "R12", 0 }, { "R20", 0 }, { "R21", 0 }, { "R22", 1 } }) do
-    write(level + 1, "<" .. pair[1] .. ">" .. pair[2] .. "</" .. pair[1] .. ">")
+  local tags = { "R00", "R01", "R02", "R10", "R11", "R12", "R20", "R21", "R22" }
+  for i = 1, 9 do
+    write(level + 1, "<" .. tags[i] .. ">" .. string.format("%.4f", m[i] or 0) .. "</" .. tags[i] .. ">")
   end
   write(level, "</CoordinateFrame>")
 end
@@ -90,7 +96,11 @@ local function emit(instance, level)
 
   if class == "Part" or class == "SpawnLocation" or class == "WedgePart" then
     vec3Tag("size", instance.Size, level + 2)
-    cfTag(instance.CFrame and instance.CFrame.pos or instance.Position, level + 2)
+    cfTag(
+      instance.Position or (instance.CFrame and instance.CFrame.pos),
+      instance.CFrame and instance.CFrame.rot,
+      level + 2
+    )
     colorTag(instance.Color, level + 2)
     if instance.Material and MATERIALS[instance.Material.Name] then
       write(level + 2, '<token name="Material">' .. MATERIALS[instance.Material.Name] .. "</token>")

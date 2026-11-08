@@ -75,10 +75,14 @@ end
 
 -- O SpawnLocation precisa estar SOBRE a praça, não flutuando nem enterrado.
 -- Se ele ficar no vazio, o jogador cai no oceano ao entrar no jogo.
+-- Num PartType.Cylinder a altura fica no eixo X (o Roblox desenha o cilindro
+-- deitado em X), então Size.Y é o DIÂMETRO, não a espessura. Ler a espessura
+-- certa evita falso positivo de "spawn fora do chão".
 __plazaTop = nil
 for _, inst in ipairs(__root:GetChildren()) do
   if inst.Name == "Plaza" then
-    __plazaTop = inst.Position.Y + inst.Size.Y / 2
+    local isCylinder = inst.Shape == Enum.PartType.Cylinder
+    __plazaTop = inst.Position.Y + (isCylinder and inst.Size.X or inst.Size.Y) / 2
   end
 end
 
@@ -288,7 +292,7 @@ if (portals.length > 1 && closestPortal < 40) {
 }
 for (const portal of portals) {
 	const radius = Math.hypot(portal.x, portal.z);
-	if (radius > 120) problems.push(`portal ${portal.biome} fora da praça (${radius.toFixed(0)})`);
+	if (radius > 155) problems.push(`portal ${portal.biome} fora da laje (${radius.toFixed(0)})`);
 }
 
 const portalHits = fromLua(lua.globals.get("__portalHits")) ?? {};

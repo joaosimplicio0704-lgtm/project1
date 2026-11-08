@@ -164,6 +164,25 @@ mt.__index = function(self, key)
 end
 mt.__newindex = function(self, key, value)
 	local props = rawget(self, "__props")
+	-- No Roblox, escrever Position move a peça e o CFrame acompanha. Sem isso,
+	-- quem serializa lê CFrame.pos = (0,0,0) e o mapa inteiro nasce na origem.
+	if key == "Position" then
+		-- Move a peca mas MANTEM o giro: no Roblox, escrever Position nao
+		-- desrotaciona. Recriar o CFrame so com pos apagava a rotacao.
+		local oldCf = props.CFrame
+		props.Position = value
+		if value then
+			props.CFrame = setmetatable({ pos = value, rot = oldCf and oldCf.rot or IDENTITY }, cframeMt)
+		end
+		return
+	end
+	if key == "CFrame" then
+		props.CFrame = value
+		if value and value.pos then
+			props.Position = value.pos
+		end
+		return
+	end
 	if key == "Parent" then
 		local old = props.Parent
 		if old then
@@ -238,13 +257,32 @@ local function vec3(x, y, z)
 	return setmetatable({ X = x, Y = y, Z = z }, vec3Mt)
 end
 
+-- CFrame de verdade: guarda posicao E matriz de rotacao 3x3 (linha maior).
+-- Sem a matriz, CFrame.Angles() devolvia identidade e TODA peca rotacionada
+-- (espuma, letreiros, cilindros deitados) era serializada sem giro.
+local IDENTITY = { 1, 0, 0, 0, 1, 0, 0, 0, 1 }
 local cframeMt = {
 	__mul = function(a, b)
-		return setmetatable({ ok = true, pos = a.pos }, cframeMt)
+		local ra = a.rot or IDENTITY
+		local rb = b.rot or IDENTITY
+		local r = {}
+		for i = 0, 2 do
+			for j = 0, 2 do
+				r[i * 3 + j + 1] = ra[i * 3 + 1] * rb[j + 1]
+					+ ra[i * 3 + 2] * rb[3 + j + 1]
+					+ ra[i * 3 + 3] * rb[6 + j + 1]
+			end
+		end
+		local bp = b.pos or vec3(0, 0, 0)
+		local ap = a.pos or vec3(0, 0, 0)
+		local px = ra[1] * bp.X + ra[2] * bp.Y + ra[3] * bp.Z + ap.X
+		local py = ra[4] * bp.X + ra[5] * bp.Y + ra[6] * bp.Z + ap.Y
+		local pz = ra[7] * bp.X + ra[8] * bp.Y + ra[9] * bp.Z + ap.Z
+		return setmetatable({ pos = vec3(px, py, pz), rot = r }, cframeMt)
 	end,
 }
-local function cframe(pos)
-	return setmetatable({ pos = pos or vec3(0, 0, 0) }, cframeMt)
+local function cframe(pos, rot)
+	return setmetatable({ pos = pos or vec3(0, 0, 0), rot = rot or IDENTITY }, cframeMt)
 end
 
 local CHAINS = {
@@ -343,19 +381,51 @@ Vector3 = { new = vec3 }
 -- CFrame.lookAt/new sao chamados com ":" (metodo) no WorldUI, entao recebem self.
 CFrame = {}
 function CFrame.new(self, x, y, z)
+	-- Tres formas de chamada, e a ordem importa:
+	--   CFrame.new(10, 20, 30)       -> self=10
+	--   CFrame.new(vector3Pos)       -> self=vetor, x=nil  (metodo!)
+	--   CFrame.new(cf)               -> self=cf
+	-- A segunda caiu no `return cframe(x)` com x=nil e devolvia a ORIGEM:
+	-- toda peca posicionada por CFrame.new(inst.Position) nascia em (0,0,0).
 	if type(self) == "number" then
 		return cframe(vec3(self, x or 0, y or 0))
 	end
 	if type(x) == "number" then
 		return cframe(vec3(x, y or 0, z or 0))
 	end
+	if type(self) == "table" then
+		if self.pos then -- ja e um CFrame
+			return cframe(self.pos, self.rot)
+		end
+		if self.X then -- e um Vector3
+			return cframe(self)
+		end
+	end
 	return cframe(x)
 end
 function CFrame.lookAt(_, at, target)
 	return cframe(at)
 end
-function CFrame.Angles()
-	return cframe()
+-- rotacao por eixos fixos, ordem Y*X*Z (o suficiente para o mapa)
+function CFrame.Angles(rx, ry, rz)
+	local cx, sx = math.cos(rx or 0), math.sin(rx or 0)
+	local cy, sy = math.cos(ry or 0), math.sin(ry or 0)
+	local cz, sz = math.cos(rz or 0), math.sin(rz or 0)
+	local mx = { 1, 0, 0, 0, cx, -sx, 0, sx, cx }
+	local my = { cy, 0, sy, 0, 1, 0, -sy, 0, cy }
+	local mz = { cz, -sz, 0, sz, cz, 0, 0, 0, 1 }
+	local function mul(a, b)
+		local r = {}
+		for i = 0, 2 do
+			for j = 0, 2 do
+				r[i * 3 + j + 1] = a[i * 3 + 1] * b[j + 1]
+					+ a[i * 3 + 2] * b[3 + j + 1]
+					+ a[i * 3 + 3] * b[6 + j + 1]
+			end
+		end
+		return r
+	end
+	return cframe(nil, mul(mul(my, mx), mz))
 end
 Color3 = {
 	fromRGB = function(r, g, b)

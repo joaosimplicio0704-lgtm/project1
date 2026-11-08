@@ -127,11 +127,33 @@ npm install
 npm run build      # gera build/EggTycoon.rbxlx com o mapa dentro
 ```
 
-Ou live-sync enquanto edita:
+Ou live-sync enquanto edita — **salvar o arquivo basta, nada de Ctrl+S**:
 
 ```bash
-npm run serve      # depois: Plugins → Rojo → Connect no Studio
+npm run dev        # mapa automático + rojo serve, num processo só
 ```
+
+Depois, no Studio: `Plugins → Rojo → Connect` (porta 34872). A partir daí:
+
+| você faz | acontece |
+|---|---|
+| salva um `.luau` em `src/` | o mapa regenera em ~1s |
+| — | o `rojo serve` reenvia a árvore para o Studio |
+| — | o mapa novo aparece, sem tocar em nada |
+
+Por que o `npm run serve` antigo não bastava: o mapa (`Workspace/Map`) **não é
+arquivo versionado**, ele é gerado por `tests/build-map.mjs` a partir dos
+módulos Luau. O Rojo só reenvia o que mudou no disco — editar `World.luau` não
+mudava o mapa até alguém rodar `npm run build` na mão.
+
+| comando | o que faz |
+|---|---|
+| `npm run dev` | **o que você quer**: mapa auto + Rojo (porta 34872) |
+| `npm run serve` | build único + Rojo (sem auto-reload) |
+| `npm run build` | gera o `.rbxlx` final que você baixa |
+
+O watcher só olha `.luau`/`.lua` — ignorar a saída do próprio build evita loop
+infinito (o build escreve um `.rbxmx`, que dispararia o watcher de novo).
 
 ### Como o build funciona
 
@@ -208,7 +230,9 @@ Roda, em ordem:
 | `npm run world` | constrói o mapa: 7.065 partes, 7 biomas, nada enterrado |
 | `npm run sim` | 8h de um bot jogando |
 | `npm run build` | gera o `.rbxlx` final |
+| `npm run dev` | mapa automático + Rojo, sem Ctrl+S |
 | `npm run mapfile` | lê o arquivo gerado: partes, biomas, ovos, spawn |
+| `python3 tools/preview.py` | renderiza o mapa em PNG (para VER o resultado) |
 
 O `mapfile` é o teste mais importante para quem baixa o jogo: ele abre o
 `.rbxlx` de verdade e falha se faltar `SpawnLocation`, se algum bioma não

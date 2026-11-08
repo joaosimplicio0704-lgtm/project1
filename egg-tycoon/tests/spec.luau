@@ -361,9 +361,11 @@ for i, a in ipairs(Biomes.List) do
 		end
 	end
 end
+-- 170 studs: perto o suficiente para caber na tela, longe o bastante para
+-- cada ilha ter horizonte proprio. Abaixo de 120 as silhuetas se encostam.
 check(
-	"ilhas com pelo menos 200 studs de vao",
-	closest >= 200,
+	"ilhas com pelo menos 120 studs de vao",
+	closest >= 120,
 	string.format("%s: %.0f", tostring(closestPair), closest)
 )
 
@@ -373,7 +375,7 @@ for _, b in ipairs(Biomes.List) do
 		highest = b.radius
 	end
 end
-check("todas as ilhas tem raio parecido", highest <= 160, tostring(highest))
+check("todas as ilhas tem raio parecido", highest <= 130, tostring(highest))
 
 -- a luz de cada bioma precisa existir e ser distinta o bastante para se notar
 local lightKeys = {}

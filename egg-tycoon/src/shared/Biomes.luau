@@ -6,11 +6,11 @@
 local Biomes = {}
 
 Biomes.HubRadius = 96
--- Raio do anel das ilhas. Com 6 ilhas num anel de 520, os centros ficam a 520
--- studs um do outro: da borda de uma ilha até a próxima sobram ~276 studs. Com
--- o valor antigo (312) o vão era de 68 — as ilhas pareciam coladas.
-Biomes.RingDistance = 520
-Biomes.IslandRadius = 140
+-- Arquipélago compacto: as 6 ilhas cabem num disco de ~430 studs. Longe o
+-- bastante para cada uma ter horizonte próprio, perto o bastante para caberem
+-- juntas na tela. Anel de 760 deixava o hub perdido num oceano vazio.
+Biomes.RingDistance = 380
+Biomes.IslandRadius = 105
 Biomes.SkyHeight = 300
 
 -- kind: "free" nunca bloqueia | "hatched" precisa ter chovido N ovos
@@ -24,8 +24,8 @@ Biomes.List = {
 		unlock = { kind = "free", value = 0 },
 		blurb = "Onde todo mundo começa. Grama macia e flores.",
 		theme = "meadow",
-		center = { x = 520, y = 0, z = 0 },
-		radius = 140,
+		center = { x = 380, y = 0, z = 0 },
+		radius = 105,
 		colors = {
 			grass = { 116, 208, 96 },
 			grassDark = { 84, 172, 76 },
@@ -53,8 +53,8 @@ Biomes.List = {
 		unlock = { kind = "hatched", value = 3 },
 		blurb = "Árvores gigantes e cogumelos que brilham.",
 		theme = "forest",
-		center = { x = 260, y = 0, z = 450 },
-		radius = 140,
+		center = { x = 190, y = 0, z = 329 },
+		radius = 105,
 		colors = {
 			grass = { 74, 168, 92 },
 			grassDark = { 48, 128, 72 },
@@ -82,8 +82,8 @@ Biomes.List = {
 		unlock = { kind = "rebirths", value = 1 },
 		blurb = "Dunas, obeliscos e ruínas soterradas.",
 		theme = "desert",
-		center = { x = -260, y = 0, z = 450 },
-		radius = 140,
+		center = { x = -190, y = 0, z = 329 },
+		radius = 105,
 		colors = {
 			grass = { 236, 208, 150 },
 			grassDark = { 214, 178, 116 },
@@ -111,8 +111,8 @@ Biomes.List = {
 		unlock = { kind = "rebirths", value = 2 },
 		blurb = "Montanhas de gelo e pinheiros nevados.",
 		theme = "ice",
-		center = { x = -520, y = 0, z = 0 },
-		radius = 140,
+		center = { x = -380, y = 0, z = 0 },
+		radius = 105,
 		colors = {
 			grass = { 232, 246, 255 },
 			grassDark = { 196, 226, 248 },
@@ -140,8 +140,8 @@ Biomes.List = {
 		unlock = { kind = "rebirths", value = 3 },
 		blurb = "Pedra escura, névoa roxa e obeliscos.",
 		theme = "shadow",
-		center = { x = -260, y = 0, z = -450 },
-		radius = 140,
+		center = { x = -190, y = 0, z = -329 },
+		radius = 105,
 		colors = {
 			grass = { 96, 86, 130 },
 			grassDark = { 66, 58, 98 },
@@ -169,8 +169,8 @@ Biomes.List = {
 		unlock = { kind = "rebirths", value = 4 },
 		blurb = "Abóboras gigantes, névoa laranja e fantasmas.",
 		theme = "halloween",
-		center = { x = 260, y = 0, z = -450 },
-		radius = 140,
+		center = { x = 190, y = 0, z = -329 },
+		radius = 105,
 		colors = {
 			grass = { 152, 176, 96 },
 			grassDark = { 108, 132, 66 },
@@ -198,8 +198,8 @@ Biomes.List = {
 		unlock = { kind = "rebirths", value = 5 },
 		blurb = "Ilha flutuante entre estrelas. O ovo dos 30M.",
 		theme = "cosmos",
-		center = { x = 0, y = 300, z = 0 },
-		radius = 96,
+		center = { x = 0, y = 262, z = 0 },
+		radius = 82,
 		colors = {
 			grass = { 72, 64, 128 },
 			grassDark = { 50, 44, 96 },

@@ -8,6 +8,7 @@
     "build": "npm run build-map && rojo build default.project.json -o build/EggTycoon.rbxlx",
     "build-map": "node tests/build-map.mjs",
     "serve": "npm run build-map && rojo serve default.project.json",
+    "dev": "node tools/dev.mjs",
     "test": "node tests/run.mjs",
     "check": "node tests/check.mjs",
     "boot": "node tests/boot.mjs",
