@@ -13,8 +13,10 @@ local Remotes = require(script.Remotes)
 local PlayerData = require(script.PlayerData)
 local Sessions = require(script.Sessions)
 local Game = require(script.Game)
+local Effects = require(script.Effects)
 
 World.build()
+Effects.init(workspace)
 
 -- Viagem entre biomas: o Game decide SE pode ir, o init.server faz o teleporte.
 Game.arrivalFor = function(session, biomeId)
@@ -30,6 +32,106 @@ Game.arrivalFor = function(session, biomeId)
 	if cframe then
 		root.CFrame = cframe
 	end
+end
+
+-- ---------------------------------------------------------------------------
+-- FEEDBACK NO MUNDO
+-- Cada ação do jogador tem que deixar marca no espaço. Sem isso a mecânica
+-- só mexe em número de painel: quem entra no jogo (ou vê um print) não vê
+-- nada acontecendo. Onde o efeito nasce: no pé do personagem.
+-- ---------------------------------------------------------------------------
+local function feetPosition(session)
+	local character = session.player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return nil
+	end
+	return root.Position - Vector3.new(0, 2.6, 0)
+end
+
+-- Cor por raridade vem da PROPRIA config (GameConfig.Rarities), em vez de uma
+-- tabela duplicada aqui: duplicar garante divergir quando alguem ajustar a
+-- paleta, e o efeito sai com a cor errada.
+local function rarityColor(rarityId)
+	local rarity = GameConfig.RarityById and GameConfig.RarityById[rarityId]
+	if rarity and rarity.color then
+		return rarity.color
+	end
+	return Color3.fromRGB(210, 215, 225)
+end
+
+Game.fx.tap = function(session, gained)
+	local pos = feetPosition(session)
+	if not pos then
+		return
+	end
+	-- uma moeda por clique: o jogador vê o dinheiro sair do chão
+	Effects.coinBurst(pos + Vector3.new(0, 2, 0), Color3.fromRGB(255, 205, 60), 1)
+	Effects.shockwave(pos, Color3.fromRGB(255, 235, 150), 9, 0.4)
+end
+
+Game.fx.hatch = function(session, pet, instance)
+	local pos = feetPosition(session)
+	if not pos then
+		return
+	end
+	local rarity = pet.rarity or "common"
+	local color = rarityColor(rarity)
+	Effects.hatchBurst(pos + Vector3.new(0, 4, 0), color, rarity == "secret")
+	Effects.floatText(pos + Vector3.new(0, 8, 0), pet.name or "Pet", color, 26)
+end
+
+Game.fx.equip = function(session)
+	local data = session.data
+	local equipped = {}
+	-- o campo da instancia e petId (nao id): comparar pet.id dava nil e o
+	-- pet orbitando nunca aparecia
+	for _, uid in ipairs(data.equipped or {}) do
+		for _, pet in ipairs(data.pets or {}) do
+			if pet.uid == uid then
+				local config = GameConfig.pet(pet.petId)
+				equipped[#equipped + 1] = {
+					color = rarityColor(config and config.rarity or "common"),
+					name = config and config.name or "Pet",
+				}
+			end
+		end
+	end
+	Effects.setOrbit(session.player, equipped)
+end
+
+Game.fx.upgrade = function(session, kind, level)
+	local pos = feetPosition(session)
+	if not pos then
+		return
+	end
+	-- nomes reais em GameConfig.defaultData().upgrades: tap / slots / mult
+	local labels = {
+		tap = "FORÇA",
+		slots = "ESPAÇO DO PET",
+		mult = "MULTIPLICADOR",
+	}
+	Effects.floatText(
+		pos + Vector3.new(0, 9, 0),
+		string.format("%s NÍVEL %d", labels[kind] or string.upper(kind), level),
+		Color3.fromRGB(140, 255, 180),
+		20
+	)
+	Effects.burst(pos + Vector3.new(0, 3, 0), Color3.fromRGB(140, 255, 180), 12, 16, 1.8)
+end
+
+Game.fx.rebirth = function(session, rebirths)
+	local pos = feetPosition(session)
+	if not pos then
+		return
+	end
+	Effects.rebirthWave(pos)
+	Effects.floatText(
+		pos + Vector3.new(0, 14, 0),
+		string.format("REBIRTH %d!", rebirths),
+		Color3.fromRGB(255, 225, 110),
+		40
+	)
 end
 
 local remotes = Remotes.setup()
@@ -83,7 +185,18 @@ Players.PlayerAdded:Connect(function(player)
 	task.spawn(startSession, player)
 end)
 
-Players.PlayerRemoving:Connect(endSession)
+-- pets orbitando: anda junto com o personagem, então precisa de tick próprio
+task.spawn(function()
+	while true do
+		local dt = task.wait(0.05)
+		Effects.step(dt)
+	end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	Effects.removePlayer(player)
+	endSession(player)
+end)
 for _, player in ipairs(Players:GetPlayers()) do
 	task.spawn(startSession, player)
 end

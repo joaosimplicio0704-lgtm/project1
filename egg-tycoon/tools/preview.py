@@ -84,7 +84,11 @@ def parse_rbxlx(path):
                 info["color"] = (163, 162, 165)
 
             info["material"] = int(num(p["Material"][1])) if "Material" in p else 256
-            info["shape"] = int(num(p["Shape"][1])) if "Shape" in p else 1
+            # No XML do Roblox a propriedade Shape sai em MINUSCULO ("shape").
+            # Eu lia "Shape" e caia no default: bolas e cilindros eram
+            # desenhados como caixas, e o mapa inteiro parecia feito de blocos.
+            shape_key = p.get("shape") or p.get("Shape")
+            info["shape"] = int(num(shape_key[1])) if shape_key else 1
             info["transparency"] = num(p["Transparency"][1]) if "Transparency" in p else 0.0
 
             if "pos" in info and "size" in info:
@@ -169,6 +173,14 @@ def render(parts, out_path, yaw=40, pitch=30, width=1600, height=900, label=None
         d.line([(0, y), (width, y)],
                fill=tuple(int(sky_top[i] + (sky_bottom[i] - sky_top[i]) * t) for i in range(3)))
 
+    # LIMITE CONHECIDO DESTE RENDERIZADOR (não do jogo):
+    # é painter's algorithm puro, sem z-buffer. Duas peças coplanares (ex.: os
+    # blocos de chão do bioma, que se sobrepõem de propósito) aparecem com uma
+    # "costura" escura: o algoritmo desenha a FAIXA LATERAL de um bloco por
+    # cima do topo do vizinho. No Roblox isso não existe — o z-buffer resolve.
+    # Confirmei isolando 49 células: no render ficam listras; no jogo é chão
+    # liso. Se a listra incomodar aqui, é do renderizador, não do mapa.
+    #
     # Painter's algorithm ingênuo falha com peças grandes: o anel de terra
     # (430 de lado) é desenhado por cima da grama porque o centro dele está
     # mais perto da câmera. Chão é desenhado primeiro, sempre; o resto por

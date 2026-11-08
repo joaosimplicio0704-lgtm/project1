@@ -181,14 +181,26 @@ end
 
 -- Ganchos preenchidos pelo init.server (o Game nao conhece jogador/CFrame).
 Game.arrivalFor = function() end
+-- Feedback no mundo: cada acao deixa rastro visivel (moeda, anel, pet).
+-- Sem isto a mecanica so muda numeros no painel e quem olha o mapa nao ve
+-- jogo nenhum acontecendo.
+Game.fx = {
+	tap = function() end,
+	hatch = function() end,
+	equip = function() end,
+	upgrade = function() end,
+	rebirth = function() end,
+}
 
 Game.handlers = {}
 
 function Game.handlers.tap(session, payload)
 	local data = session.data
 	local count = math.clamp(tonumber(payload) or 1, 1, 10)
-	addCoins(session, GameConfig.tapPower(data) * count)
+	local gained = GameConfig.tapPower(data) * count
+	addCoins(session, gained)
 	data.stats.taps += count
+	Game.fx.tap(session, gained)
 	bumpQuest(session)
 	return true
 end
@@ -209,7 +221,6 @@ function Game.handlers.hatch(session, payload)
 	end
 	data.coins -= price
 	data.eggBought[egg.id] = bought + 1
-
 	local pet =
 		GameConfig.rollPet(egg.id, rng:NextNumber(), rng:NextNumber(), GameConfig.SecretChance / GameConfig.luck(data))
 	if not pet then
@@ -230,6 +241,7 @@ function Game.handlers.hatch(session, payload)
 		Net.EventKind.Hatch,
 		{ petId = pet.id, uid = instance.uid, rarity = pet.rarity }
 	)
+	Game.fx.hatch(session, pet, instance)
 	return true
 end
 
@@ -240,11 +252,13 @@ function Game.handlers.equip(session, uid)
 	if not ok then
 		return fail(session, reason)
 	end
+	Game.fx.equip(session)
 	return true
 end
 
 function Game.handlers.unequip(session, uid)
 	Pets.unequip(session.data, tonumber(uid))
+	Game.fx.equip(session)
 	return true
 end
 
@@ -272,6 +286,7 @@ function Game.handlers.buyUpgrade(session, kind)
 	end
 	data.coins -= cost
 	data.upgrades[kind] = tier + 1
+	Game.fx.upgrade(session, kind, tier + 1)
 	bumpQuest(session)
 	return true
 end
@@ -325,6 +340,7 @@ function Game.handlers.rebirth(session)
 
 	Pets.autoEquip(data)
 	remotes.event:FireClient(session.player, Net.EventKind.Rebirth, { rebirths = data.rebirths, crystals = crystals })
+	Game.fx.rebirth(session, data.rebirths)
 	return true
 end
 

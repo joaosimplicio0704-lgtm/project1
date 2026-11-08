@@ -198,7 +198,11 @@ Biomes.List = {
 		unlock = { kind = "rebirths", value = 5 },
 		blurb = "Ilha flutuante entre estrelas. O ovo dos 30M.",
 		theme = "cosmos",
-		center = { x = 0, y = 262, z = 0 },
+		-- 262 ficava alto demais: no mapa inteiro o cosmos aparecia como
+		-- lixo verde no céu, e não dava pra ler como ilha. 118 é alto o
+		-- bastante para ser "a ilha flutuante" e baixo o bastante para o
+		-- jogador continuar vendo o arquipélago ao redor.
+		center = { x = 0, y = 118, z = 0 },
 		radius = 82,
 		colors = {
 			grass = { 72, 64, 128 },

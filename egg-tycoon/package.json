@@ -17,7 +17,8 @@
     "mapfile": "node tests/mapfile.mjs",
     "sim": "node tests/simulate.mjs",
     "fmt": "stylua src tests",
-    "verify": "npm run check && npm run test && npm run boot && npm run client && npm run world && npm run sim && npm run build && npm run mapfile"
+    "verify": "npm run check && npm run test && npm run boot && npm run client && npm run world && npm run effects && npm run sim && npm run build && npm run mapfile",
+    "effects": "node tests/effects.mjs"
   },
   "devDependencies": {
     "@luau-rs/luau": "^0.739.0",

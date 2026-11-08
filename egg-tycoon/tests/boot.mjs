@@ -18,7 +18,7 @@ const prepare = (src) =>
 		.filter((line) => !/^local Shared = /.test(line))
 		.filter(
 			(line) =>
-				!/^local (Sessions|PlayerData|World|Remotes|Game|Net|GameConfig|Pets|Format) = require\(/.test(line),
+				!/^local (Sessions|PlayerData|World|Remotes|Game|Effects|Net|GameConfig|Pets|Format) = require\(/.test(line),
 		)
 		.join("\n");
 
@@ -47,8 +47,36 @@ end
 Vector3 = {
   new = function(x,y,z) return setmetatable({X=x or 0,Y=y or 0,Z=z or 0}, V3) end,
 }
-CFrame = { new = function() return {} end }
-Enum = { Material = {}, SurfaceType = {}, PartType = {} }
+local cfMt = {}
+cfMt.__mul = function(a, b) return setmetatable({ pos = (a.pos or {X=0,Y=0,Z=0}) }, cfMt) end
+CFrame = {
+  new = function(x, y, z)
+    if type(x) == "table" then return setmetatable({ pos = x.pos or x }, cfMt) end
+    return setmetatable({ pos = Vector3.new(x or 0, y or 0, z or 0) }, cfMt)
+  end,
+  Angles = function() return setmetatable({ pos = Vector3.new(0,0,0) }, cfMt) end,
+}
+-- Enum generico: qualquer grupo devolve um valor com Name
+Enum = setmetatable({}, {
+  __index = function(t, group)
+    local g = setmetatable({}, { __index = function(tt, k)
+      local v = { Name = k }
+      rawset(tt, k, v)
+      return v
+    end })
+    rawset(t, group, g)
+    return g
+  end,
+})
+
+-- Servicos usados pelo Effects. Precisam existir ANTES do modulo ser lido.
+TweenInfo = { new = function(...) return { ... } end }
+TweenService = {
+  Create = function(self, part, info, goal) return { Play = function() end } end,
+}
+Debris = { AddItem = function() end }
+RunService = { Heartbeat = { Connect = function() return { Disconnect = function() end } end } }
+UDim2 = { fromOffset = function() return {} end, fromScale = function() return {} end }
 
 Random = {
   new = function()
@@ -68,7 +96,49 @@ Random = {
 }
 
 Players = {}
-Instance = { new = function() error("servidor nao deveria criar Instance aqui") end }
+
+-- Instance minimalista o suficiente para o Effects rodar. Antes este host
+-- dava error() de proposito ("servidor nao deveria criar Instance aqui"),
+-- o que impedia testar qualquer coisa que fabrique objeto no mundo.
+local __imt = {}
+__imt.__index = function(self, key)
+  local props = rawget(self, "__props")
+  if props[key] ~= nil then return props[key] end
+  local kids = rawget(self, "__children")
+  if key == "GetChildren" then return function() return kids end end
+  if key == "FindFirstChild" then
+    return function(_, n)
+      for _, c in ipairs(kids) do if c.Name == n then return c end end
+      return nil
+    end
+  end
+  if key == "Destroy" then return function() end end
+  if key == "SetAttribute" then return function() end end
+  if key == "GetAttribute" then return function() return nil end end
+  if key == "IsA" then return function() return false end end
+  return nil
+end
+__imt.__newindex = function(self, key, value)
+  rawget(self, "__props")[key] = value
+end
+Instance = {
+  new = function(class)
+    local o = setmetatable({}, __imt)
+    rawset(o, "__props", { ClassName = class, Name = class })
+    rawset(o, "__children", {})
+    return o
+  end,
+}
+workspace = Instance.new("Folder")
+workspace.Name = "Workspace"
+game = {
+  GetService = function(_, name)
+    if name == "TweenService" then return TweenService end
+    if name == "Debris" then return Debris end
+    if name == "RunService" then return RunService end
+    return Instance.new("Folder")
+  end,
+}
 
 print = function(...)
   local parts = {}
@@ -109,7 +179,20 @@ function Sessions.all() return Sessions.byPlayer end`,
   save = function() end,
 }`,
 	mod("Game", "src/server/Game.luau"),
+	mod("Effects", "src/server/Effects.luau"),
 	String.raw`
+-- Wiring dos efeitos, igual ao init.server. O boot antigo montava os modulos
+-- na mao e NUNCA passava por isto: um gancho quebrado (Game.fx.tap virando
+-- nil) passava batido. Agora qualquer acao que chame os ganchos exercita o
+-- caminho real.
+Effects.init(workspace)
+local __fxCalls = { tap = 0, hatch = 0, equip = 0, upgrade = 0, rebirth = 0 }
+Game.fx.tap = function() __fxCalls.tap += 1 end
+Game.fx.hatch = function() __fxCalls.hatch += 1 end
+Game.fx.equip = function() __fxCalls.equip += 1 end
+Game.fx.upgrade = function() __fxCalls.upgrade += 1 end
+Game.fx.rebirth = function() __fxCalls.rebirth += 1 end
+
 Game.init(__remoteSet)
 
 local function makePlayer(name, id)
@@ -267,6 +350,49 @@ assert(type(snap.rebirthCost) == "number", "rebirthCost nao numerico")
 local static = Game.staticState()
 assert(#static.eggs == #GameConfig.Eggs, "staticState nao mandou todos os ovos")
 assert(#static.pets > 0, "staticState sem pets")
+
+-- ---------------------------------------------------------------------------
+-- GANCHOS DE FEEDBACK
+-- Cada acao do jogador tem que chamar o gancho correspondente. Sem isto a
+-- mecanica roda mas o mundo fica mudo: foi exatamente a reclamacao do
+-- usuario ("ate agora nao vi mecanica nenhuma").
+-- ---------------------------------------------------------------------------
+s1.data.coins = 1e9
+act(A.Tap, 1)
+act(A.Hatch, nil)
+-- precisa ser um pet NAO equipado: Pets.equip devolve "ja equipado" e nao
+-- dispara o gancho. Escolhe o primeiro fora da lista.
+local freeUid = nil
+for _, pet in ipairs(s1.data.pets) do
+  local taken = false
+  for _, uid in ipairs(s1.data.equipped) do
+    if uid == pet.uid then taken = true end
+  end
+  if not taken then freeUid = pet.uid break end
+end
+if not freeUid then
+  -- todos equipados pelo autoEquip: cria um sobrando para exercitar o gancho
+  local extra = Pets.add(s1.data, "chick", false)
+  freeUid = extra and extra.uid
+end
+assert(freeUid, "nao consegui preparar um pet para equipar")
+
+-- Slots cheios e o caso normal (autoEquip preenche tudo ao entrar), entao
+-- "equipar" um pet sobrando falha por design. O caminho que SEMPRE passa e
+-- desequipar: tira um e o gancho roda. Depois equipa de volta.
+local equippedUid = s1.data.equipped[1]
+act(A.Unequip, equippedUid)
+assert(#s1.data.equipped < GameConfig.petSlots(s1.data), "unequip nao liberou slot")
+act(A.Equip, freeUid)
+act(A.BuyUpgrade, "tap")
+
+print(string.format("ganchos: tap=%d hatch=%d equip=%d upgrade=%d",
+  __fxCalls.tap, __fxCalls.hatch, __fxCalls.equip, __fxCalls.upgrade))
+
+assert(__fxCalls.tap > 0, "tap nao disparou efeito no mundo")
+assert(__fxCalls.hatch > 0, "chocar ovo nao disparou efeito no mundo")
+assert(__fxCalls.upgrade > 0, "upgrade nao disparou efeito no mundo")
+assert(__fxCalls.equip > 0, "equipar pet nao disparou efeito no mundo")
 
 print("\nboot ok")
 `,

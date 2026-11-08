@@ -403,8 +403,38 @@ function CFrame.new(self, x, y, z)
 	end
 	return cframe(x)
 end
-function CFrame.lookAt(_, at, target)
-	return cframe(at)
+-- Aceita as duas formas de chamada:
+--   CFrame.lookAt(origem, alvo)     -> self=origem
+--   CFrame:lookAt(origem, alvo)     -> self=CFrame
+function CFrame.lookAt(self, at, target)
+	if target == nil then
+		-- chamado como funcao: (origem, alvo)
+		target = at
+		at = self
+	end
+	-- lookAt de verdade: frente do CFrame e -Z local, que deve apontar de
+	-- `at` para `target`. Sem isso as placas nao giravam e todas olhavam
+	-- para o mesmo lado (bug real no mapa).
+	local f = vec3(target.X - at.X, target.Y - at.Y, target.Z - at.Z)
+	local len = math.sqrt(f.X * f.X + f.Y * f.Y + f.Z * f.Z)
+	if len < 1e-5 then
+		return cframe(at)
+	end
+	local fx, fy, fz = f.X / len, f.Y / len, f.Z / len
+	-- right = frente x up(0,1,0)
+	local rx, rz = -fz, fx
+	local rlen = math.sqrt(rx * rx + rz * rz)
+	if rlen < 1e-5 then
+		rx, rz, rlen = 1, 0, 1
+	end
+	rx, rz = rx / rlen, rz / rlen
+	-- up = right x frente
+	local ux = -rz * fy
+	local uy = rz * fx - rx * fz
+	local uz = rx * fy
+	-- matriz: colunas = right, up, frente-negada
+	local rot = { rx, ux, -fx, 0, uy, -fy, rz, uz, -fz }
+	return cframe(at, rot)
 end
 -- rotacao por eixos fixos, ordem Y*X*Z (o suficiente para o mapa)
 function CFrame.Angles(rx, ry, rz)
@@ -418,9 +448,7 @@ function CFrame.Angles(rx, ry, rz)
 		local r = {}
 		for i = 0, 2 do
 			for j = 0, 2 do
-				r[i * 3 + j + 1] = a[i * 3 + 1] * b[j + 1]
-					+ a[i * 3 + 2] * b[3 + j + 1]
-					+ a[i * 3 + 3] * b[6 + j + 1]
+				r[i * 3 + j + 1] = a[i * 3 + 1] * b[j + 1] + a[i * 3 + 2] * b[3 + j + 1] + a[i * 3 + 3] * b[6 + j + 1]
 			end
 		end
 		return r

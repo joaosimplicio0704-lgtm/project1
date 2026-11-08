@@ -10,7 +10,14 @@ local Noise = require(script.Parent.Noise)
 
 local Terrain = {}
 
-Terrain.GridSize = 17
+-- Grade 23x23 (era 17).
+-- Com 17, numa ilha de raio 105 cada célula tinha ~13 studs: o relevo virava
+-- 4 degraus gigantes e, visto de cima, parecia um xadrez de blocos com vão
+-- de areia entre eles — não chão.
+-- 23 deixa a célula em ~9 studs, que já lê como chão maciço. Testei 33
+-- (célula de 6): o chão fica melhor, mas o .rbxlx saltou de 8 para 24 MB,
+-- porque cada célula ocupa ~3 KB de XML. 23 é o ponto de equilíbrio.
+Terrain.GridSize = 23
 -- Tamanho da célula é derivado do raio do bioma: a grade SEMPRE cobre a
 -- ilha inteira. Antes era fixo em 14.95 e, quando as ilhas cresceram, sobrava
 -- um anel de ilha sem terreno — chão nenhum, só a base de pedra.
@@ -72,6 +79,14 @@ function Terrain.generate(biome)
 	-- cobre 96% do raio do bioma; os 4% restantes viram a praia que já existe
 	local radiusCells = biome.radius * 0.96
 	local cell = (radiusCells * 2) / (half * 2 + 1)
+	-- Cada cubo e desenhado 12% MAIOR que o passo da grade.
+	-- Antes era exatamente do tamanho da celula: como as posicoes sao
+	-- gx*cell, os cubos se tocavam na borda e qualquer arredondamento
+	-- abria uma fresta. Visto de cima o chao virava um xadrez de blocos
+	-- soltos com vao entre eles — nada parecia terreno solido.
+	-- A sobreposicao fecha os vaos; 12% e invisivel e nao "arredonda"
+	-- o relevo.
+	local cellFill = cell * 1.12
 
 	for gx = -half, half do
 		for gz = -half, half do
@@ -101,9 +116,9 @@ function Terrain.generate(biome)
 					x = lx,
 					y = topY,
 					z = lz,
-					sx = cell,
+					sx = cellFill,
 					sy = thickness,
-					sz = cell,
+					sz = cellFill,
 					color = color,
 					kind = kind,
 					top = true,
@@ -116,9 +131,9 @@ function Terrain.generate(biome)
 						x = lx,
 						y = topY - step * thickness,
 						z = lz,
-						sx = cell,
+						sx = cellFill,
 						sy = thickness,
-						sz = cell,
+						sz = cellFill,
 						color = biome.colors.grassDark,
 						kind = "fill",
 						top = false,

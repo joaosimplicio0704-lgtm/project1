@@ -133,32 +133,38 @@ function World.build()
 	root.Parent = Workspace
 
 	-- MAR
-	-- Antes era um lençol de 3200x3200 chapado: o jogador via azul até o
-	-- horizonte e o mapa parecia um vazio. Agora são três camadas:
-	--   1. fundo opaco (areia escura) — dá profundidade e cor
-	--   2. uma orla clara em volta do arquipélago (água rasa)
-	--   3. o mar fundo, mais escuro e mais transparente
-	part({
-		Name = "SeaFloor",
-		Size = Vector3.new(1100, 6, 1100),
-		Position = Vector3.new(0, -34, 0),
-		Color = Color3.fromRGB(56, 132, 150),
-		Material = Enum.Material.Sand,
-		CanCollide = false,
-	}, root)
+	-- MAR ORGÂNICO — anéis concêntricos
+	-- Histórico das tentativas, porque cada uma falhou por um motivo:
+	--   1. quadrado de 760  -> desenhava um QUADRADO em volta das ilhas redondas
+	--   2. fatias em anel   -> virou RODA DE BICICLETA (costura entre fatias)
+	--   3. placas fora de grade -> cheio de LINHA DE COSTURA onde as bordas se
+	--      sobrepunham em degraus
+	-- A que funciona: poucos anéis concêntricos, cada um um único cilindro
+	-- enorme. Um cilindro não tem costura; e como cada anel tem raio e Y
+	-- próprios, não há briga de pixel entre eles.
+	local function seaRing(name, radius, y, color, transparency, material)
+		local disc = part({
+			Name = name,
+			Size = Vector3.new(2.4, radius * 2, radius * 2),
+			Position = Vector3.new(0, y, 0),
+			Color = color,
+			Material = material,
+			Transparency = transparency,
+			CanCollide = false,
+			Shape = Enum.PartType.Cylinder,
+		}, root)
+		disc.CFrame = CFrame.new(disc.Position) * CFrame.Angles(0, 0, math.pi / 2)
+		return disc
+	end
 
-	-- água rasa: mais clara e quase opaca, cria a "praia" vista de cima
-	part({
-		Name = "ShallowWater",
-		Size = Vector3.new(760, 6, 760),
-		Position = Vector3.new(0, -6, 0),
-		Color = Color3.fromRGB(120, 226, 236),
-		Material = Enum.Material.Water,
-		Transparency = 0.34,
-		CanCollide = false,
-	}, root)
+	-- degraus de água: do centro para fora, cada anel mais escuro
+	seaRing("SeaFloor", 596, -34, Color3.fromRGB(56, 132, 150), 0, Enum.Material.Sand)
+	seaRing("ShallowWater", 580, -6.0, Color3.fromRGB(126, 228, 238), 0.28, Enum.Material.Water)
+	-- halo: a borda do primeiro anel, um tom acima, para a transição não ser
+	-- um corte seco de círculo perfeito
+	seaRing("SeaHalo", 604, -6.6, Color3.fromRGB(146, 236, 244), 0.52, Enum.Material.Water)
 
-	-- mar fundo: escuro, cobre o resto do horizonte
+	-- mar fundo: escuro, cobre o horizonte até a névoa
 	part({
 		Name = "Ocean",
 		Size = Vector3.new(4000, 6, 4000),
@@ -173,7 +179,7 @@ function World.build()
 	for i = 1, 44 do
 		local angle = (i / 44) * math.pi * 2
 		local wobble = 1 + math.sin(i * 2.7) * 0.06
-		local radius = 520 * wobble
+		local radius = 610 * wobble
 		local foam = part({
 			Name = "Foam",
 			Size = Vector3.new(30, 1.2, 16),
@@ -272,13 +278,22 @@ function World.build()
 	local rng = Random.new(31)
 	for i = 1, 26 do
 		local angle = (i / 26) * math.pi * 2
-		local radius = 204 + rng:NextNumber() * 16
+		-- Canteiros na borda do hub. O raio sozinho nao basta: com 21 de
+		-- largura, um bloco centrado em r=200 avanca ate r=210.5 e passa do
+		-- raio 215 da ilha — sobrava um canto flutuando no mar. O raio tem
+		-- de descontar a meia-largura.
+		local w = 16 + rng:NextNumber() * 10
+		local radius = 215 - w / 2 - 6 - rng:NextNumber() * 10
 		local x = math.cos(angle) * radius
 		local z = math.sin(angle) * radius
 		local h = 8 + rng:NextNumber() * 10
+		-- A grama do hub tem o topo em y=1. Com base em -1 os canteiros
+		-- afundavam 2 studs e so a pontinha aparecia: de longe pareciam
+		-- quadradinhos verdes soltos no mar.
+		local GROUND_TOP = 1
 		part({
-			Size = Vector3.new(16 + rng:NextNumber() * 10, h, 16 + rng:NextNumber() * 10),
-			Position = Vector3.new(x, -1 + h / 2, z),
+			Size = Vector3.new(w, h, w * 0.9 + 4),
+			Position = Vector3.new(x, GROUND_TOP + h / 2 - 1.5, z),
 			Color = i % 2 == 0 and PALETTE.grass or PALETTE.grassDark,
 			Material = Enum.Material.Grass,
 		}, root)
@@ -464,7 +479,10 @@ end
 -- UI DE MUNDO (placa + click detector)
 ---------------------------------------------------------------------------
 
-local function makeSign(position, text, color, parent)
+-- `facing` e o ponto para onde a placa OLHA (por padrao: o centro do mapa).
+-- Sem isso todas as 15 placas nasciam viradas para -Z: a placa do bioma que
+-- fica do lado oposto do arquipelago mostrava as costas para quem chegava.
+local function makeSign(position, text, color, parent, facing)
 	local board = part({
 		Name = "Sign_" .. text,
 		Size = Vector3.new(16, 6, 0.8),
@@ -473,6 +491,17 @@ local function makeSign(position, text, color, parent)
 		Material = Enum.Material.WoodPlanks,
 		CanCollide = false,
 	}, parent)
+
+	local target = facing or Vector3.new(0, position.Y, 0)
+	local dx = target.X - position.X
+	local dz = target.Z - position.Z
+	if math.sqrt(dx * dx + dz * dz) > 0.5 then
+		-- NormalId.Front aponta para -Z local: apontamos o -Z para o alvo
+		-- olhando PARA TRAS do alvo.
+		local from = Vector3.new(position.X, position.Y, position.Z)
+		local to = Vector3.new(from.X - dx, from.Y, from.Z - dz)
+		board.CFrame = CFrame.lookAt(from, to)
+	end
 
 	local gui = Instance.new("SurfaceGui")
 	gui.Face = Enum.NormalId.Front
@@ -2359,6 +2388,29 @@ function World.buildBiome(biome, portalPosition, parent)
 	cellModel.Name = "Terrain"
 	cellModel.Parent = home
 
+	-- CHÃO CONTÍNUO
+	-- As células são blocos de alturas diferentes empilhados em degraus.
+	-- Vistos de cima, cada bloco é um quadrado com vão em volta: o chão
+	-- parecia um xadrez flutuando sobre a praia, não terreno maciço.
+	-- Esta laje única, logo abaixo do relevo, fecha todos os vãos de uma vez.
+	-- Material "Ground" e cor da terra: se aparecer em alguma fresta, lê
+	-- como solo, não como buraco.
+	local floorTop = groundY - Terrain.CellThickness * 0.6
+	local groundDisc = part({
+		Name = "GroundDisc",
+		Size = Vector3.new(Terrain.CellThickness * 2.2, biome.radius * 1.94, biome.radius * 1.94),
+		Position = center + Vector3.new(0, floorTop, 0),
+		Color = Color3.fromRGB(
+			math.max(0, colors.grassDark[1] - 18),
+			math.max(0, colors.grassDark[2] - 18),
+			math.max(0, colors.grassDark[3] - 18)
+		),
+		Material = Enum.Material.Ground,
+		CanCollide = true,
+		Shape = Enum.PartType.Cylinder,
+	}, cellModel)
+	groundDisc.CFrame = CFrame.new(groundDisc.Position) * CFrame.Angles(0, 0, math.pi / 2)
+
 	for _, cell in ipairs(cells) do
 		local cellPart = part({
 			Name = cell.top and "CellTop" or "CellFill",
@@ -2506,31 +2558,41 @@ function World.buildBiomes()
 
 	-- Ilhas flutuantes de enfeite no caminho entre o hub e os biomas. Não
 	-- colidem e não têm função: existem para o percurso parecer um mundo.
+	-- Ilhas flutuantes de enfeite no caminho entre o hub e os biomas.
+	--
+	-- Antes elas tinham a MESMA assinatura visual de uma ilha de verdade:
+	-- topo plano de grama sobre um bloco de pedra. Algumas nasciam altas
+	-- (height ate +80) e de longe pareciam pedaços arrancados do mapa
+	-- boiando no céu — foi a origem dos "quadrados verdes" no render.
+	-- Agora são rochas flutuantes de verdade: pedra pura, sem grama, em
+	-- altura baixa. Ninguém confunde com uma ilha jogável.
 	local rngIslets = Random.new(4711)
 	for i = 1, 14 do
 		local angle = (i / 14) * math.pi * 2 + 0.3
-		local distance = 300 + rngIslets:NextNumber() * 480
-		local height = -40 + rngIslets:NextNumber() * 120
-		local size = 18 + rngIslets:NextNumber() * 26
+		local distance = 320 + rngIslets:NextNumber() * 460
+		-- altura baixa: entre a linha d'água e pouco acima dela
+		local height = -18 + rngIslets:NextNumber() * 34
+		local size = 14 + rngIslets:NextNumber() * 22
 		local x = math.cos(angle) * distance
 		local z = math.sin(angle) * distance
-		local islet = part({
-			Name = "Islet",
-			Size = Vector3.new(size * 2, size * 0.5, size * 2),
-			Position = Vector3.new(x, height - size * 0.2, z),
-			Color = PALETTE.grass,
-			Material = Enum.Material.Grass,
-			CanCollide = false,
-		}, skyFolder)
-		part({
-			Name = "IsletUnder",
-			Size = Vector3.new(size * 1.5, size * 0.9, size * 1.5),
-			Position = Vector3.new(x, height - size * 0.75, z),
+		local rock = ball({
+			Name = "SkyRock",
+			Size = Vector3.new(size * 1.7, size * 0.9, size * 1.5),
+			Position = Vector3.new(x, height, z),
 			Color = PALETTE.rockDark,
+			Material = Enum.Material.Slate,
+		}, skyFolder)
+		rock.CanCollide = false
+		rock.CanQuery = false
+		-- uma pedra menor de apoio, para a silhueta não ser uma bola só
+		ball({
+			Name = "SkyRock",
+			Size = Vector3.new(size * 0.9, size * 0.6, size * 0.8),
+			Position = Vector3.new(x + size * 0.6, height - size * 0.4, z - size * 0.3),
+			Color = PALETTE.rock,
 			Material = Enum.Material.Slate,
 			CanCollide = false,
 		}, skyFolder)
-		islet.CanQuery = false
 	end
 
 	for _, biome in ipairs(Biomes.List) do
