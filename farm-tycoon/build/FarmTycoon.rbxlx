@@ -1,13 +1,34 @@
 <roblox version="4">
-  <Item class="ReplicatedStorage" referent="0">
+  <Item class="Lighting" referent="0">
+    <Properties>
+      <string name="Name">Lighting</string>
+      <Color3 name="Ambient">
+        <R>0.373</R>
+        <G>0.412</G>
+        <B>0.471</B>
+      </Color3>
+      <float name="Brightness">2.6</float>
+      <float name="ClockTime">14.5</float>
+      <float name="EnvironmentDiffuseScale">0.4</float>
+      <float name="EnvironmentSpecularScale">0.3</float>
+      <float name="GeographicLatitude">-15</float>
+      <bool name="GlobalShadows">true</bool>
+      <Color3 name="OutdoorAmbient">
+        <R>0.549</R>
+        <G>0.608</G>
+        <B>0.686</B>
+      </Color3>
+    </Properties>
+  </Item>
+  <Item class="ReplicatedStorage" referent="1">
     <Properties>
       <string name="Name">ReplicatedStorage</string>
     </Properties>
-    <Item class="Folder" referent="1">
+    <Item class="Folder" referent="2">
       <Properties>
         <string name="Name">Shared</string>
       </Properties>
-      <Item class="ModuleScript" referent="2">
+      <Item class="ModuleScript" referent="3">
         <Properties>
           <string name="Name">Format</string>
           <string name="Source"><![CDATA[-- Format
@@ -74,7 +95,7 @@ return Format
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="3">
+      <Item class="ModuleScript" referent="4">
         <Properties>
           <string name="Name">GameConfig</string>
           <string name="Source"><![CDATA[-- GameConfig
@@ -523,7 +544,7 @@ return GameConfig
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="4">
+      <Item class="ModuleScript" referent="5">
         <Properties>
           <string name="Name">Net</string>
           <string name="Source"><![CDATA[-- Net
@@ -564,11 +585,11 @@ return Net
       </Item>
     </Item>
   </Item>
-  <Item class="ServerScriptService" referent="5">
+  <Item class="ServerScriptService" referent="6">
     <Properties>
       <string name="Name">ServerScriptService</string>
     </Properties>
-    <Item class="Script" referent="6">
+    <Item class="Script" referent="7">
       <Properties>
         <string name="Name">Server</string>
         <token name="RunContext">0</token>
@@ -734,7 +755,7 @@ end)
 print(string.format("[FarmTycoon] Servidor pronto. %d crops, %d niveis.", #GameConfig.Crops, GameConfig.MaxLevel))
 ]]></string>
       </Properties>
-      <Item class="ModuleScript" referent="7">
+      <Item class="ModuleScript" referent="8">
         <Properties>
           <string name="Name">Economy</string>
           <string name="Source"><![CDATA[-- Economy
@@ -1141,7 +1162,7 @@ return Economy
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="8">
+      <Item class="ModuleScript" referent="9">
         <Properties>
           <string name="Name">Farm</string>
           <string name="Source"><![CDATA[-- Farm
@@ -1319,7 +1340,7 @@ return Farm
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="9">
+      <Item class="ModuleScript" referent="10">
         <Properties>
           <string name="Name">PlayerData</string>
           <string name="Source"><![CDATA[-- PlayerData
@@ -1457,7 +1478,7 @@ return PlayerData
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="10">
+      <Item class="ModuleScript" referent="11">
         <Properties>
           <string name="Name">Remotes</string>
           <string name="Source"><![CDATA[-- Remotes
@@ -1499,7 +1520,7 @@ return Remotes
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="11">
+      <Item class="ModuleScript" referent="12">
         <Properties>
           <string name="Name">Sessions</string>
           <string name="Source"><![CDATA[-- Sessions
@@ -1531,7 +1552,7 @@ return Sessions
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="12">
+      <Item class="ModuleScript" referent="13">
         <Properties>
           <string name="Name">World</string>
           <string name="Source"><![CDATA[-- World
@@ -1904,15 +1925,15 @@ return World
       </Item>
     </Item>
   </Item>
-  <Item class="StarterPlayer" referent="13">
+  <Item class="StarterPlayer" referent="14">
     <Properties>
       <string name="Name">StarterPlayer</string>
     </Properties>
-    <Item class="StarterPlayerScripts" referent="14">
+    <Item class="StarterPlayerScripts" referent="15">
       <Properties>
         <string name="Name">StarterPlayerScripts</string>
       </Properties>
-      <Item class="LocalScript" referent="15">
+      <Item class="LocalScript" referent="16">
         <Properties>
           <string name="Name">Client</string>
           <string name="Source"><![CDATA[-- init.client
@@ -2024,7 +2045,7 @@ end)
 print("[FarmTycoon] Cliente pronto ·", #GameConfig.Crops, "crops ·", player.Name)
 ]]></string>
         </Properties>
-        <Item class="ModuleScript" referent="16">
+        <Item class="ModuleScript" referent="17">
           <Properties>
             <string name="Name">Effects</string>
             <string name="Source"><![CDATA[-- Effects
@@ -2150,7 +2171,7 @@ return Effects
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="17">
+        <Item class="ModuleScript" referent="18">
           <Properties>
             <string name="Name">Hud</string>
             <string name="Source"><![CDATA[-- Hud
@@ -2352,7 +2373,7 @@ return Hud
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="18">
+        <Item class="ModuleScript" referent="19">
           <Properties>
             <string name="Name">NetClient</string>
             <string name="Source"><![CDATA[-- NetClient
@@ -2385,7 +2406,7 @@ return NetClient
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="19">
+        <Item class="ModuleScript" referent="20">
           <Properties>
             <string name="Name">Panels</string>
             <string name="Source"><![CDATA[-- Panels
@@ -3066,7 +3087,7 @@ return Panels
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="20">
+        <Item class="ModuleScript" referent="21">
           <Properties>
             <string name="Name">Render</string>
             <string name="Source"><![CDATA[-- Render
@@ -3378,7 +3399,7 @@ return Render
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="21">
+        <Item class="ModuleScript" referent="22">
           <Properties>
             <string name="Name">State</string>
             <string name="Source"><![CDATA[-- State
@@ -3415,7 +3436,7 @@ return State
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="22">
+        <Item class="ModuleScript" referent="23">
           <Properties>
             <string name="Name">Theme</string>
             <string name="Source"><![CDATA[-- Theme
@@ -3600,7 +3621,7 @@ return Theme
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="23">
+        <Item class="ModuleScript" referent="24">
           <Properties>
             <string name="Name">Toasts</string>
             <string name="Source"><![CDATA[-- Toasts
@@ -3670,5 +3691,13 @@ return Toasts
         </Item>
       </Item>
     </Item>
+  </Item>
+  <Item class="Workspace" referent="25">
+    <Properties>
+      <string name="Name">Workspace</string>
+      <bool name="FilteringEnabled">true</bool>
+      <float name="Gravity">196.2</float>
+      <bool name="NeedsPivotMigration">false</bool>
+    </Properties>
   </Item>
 </roblox>
