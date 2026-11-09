@@ -1,0 +1,4 @@
+/build/
+*.pdb
+*.obj
+config.json
