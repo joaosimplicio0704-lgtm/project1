@@ -6,6 +6,8 @@
 #include "features/aim.h"
 #include "features/detector.h"
 #include "features/esp.h"
+#include "features/memview.h"
+#include "features/trigger.h"
 #include "imgui/imgui.h"
 #include "menu/menu.h"
 #include "offsets.h"
@@ -25,6 +27,16 @@ bool PressedOnce(int vk) {
     const bool pressed = down && !state[vk];
     state[vk] = down;
     return pressed;
+}
+
+bool ForegroundIsPid(DWORD pid) {
+    const HWND foreground = GetForegroundWindow();
+    if (!foreground)
+        return false;
+
+    DWORD owner = 0;
+    GetWindowThreadProcessId(foreground, &owner);
+    return owner == pid;
 }
 
 } // namespace
@@ -69,6 +81,8 @@ int main() {
 
     Detector  detector;
     AimAssist aim;
+    MemView   memView;
+    Trigger   trigger;
 
     bool  menuOpen = false;
     bool  running = true;
@@ -121,7 +135,13 @@ int main() {
         aim.Tick(settings, esp, overlay.Width(), overlay.Height(), overlay.IsInteractive());
         aim.DrawFov(drawList, settings, overlay.Width(), overlay.Height());
 
-        menu::Draw(settings, esp, overlay, detector, &menuOpen);
+        trigger.Tick(settings, aim,
+                     overlay.IsInteractive() ||
+                     (settings.fire.requireForeground && !ForegroundIsPid(esp.Pid())));
+
+        memView.Tick(esp.Mem());
+
+        menu::Draw(settings, esp, overlay, detector, memView, aim, trigger, &menuOpen);
 
         // menu fechado pelo X da janela tambem devolve o mouse pro jogo
         if (!menuOpen && overlay.IsInteractive())
@@ -134,6 +154,7 @@ int main() {
     }
 
     std::printf("[exit] fechando\n");
+    trigger.Reset();
     aim.Reset();
     HandleCleanup::Stop();
     esp.Shutdown();

@@ -5,7 +5,10 @@
 #include <cmath>
 #include <cstdio>
 
+#include "../features/aim.h"
 #include "../features/detector.h"
+#include "../features/memview.h"
+#include "../features/trigger.h"
 #include "../features/esp.h"
 #include "../imgui/imgui.h"
 #include "../offsets.h"
@@ -14,7 +17,7 @@
 namespace menu {
 
 static char g_status[128] = "";
-static bool g_binding = false;
+static int g_binding = 0;   // 0 = nenhum, 1 = tecla do aim, 2 = tecla do tiro
 static bool g_pressed[256]{};
 static bool g_prev[256]{};
 
@@ -71,6 +74,30 @@ static const char* KeyName(int vk) {
     return buffer;
 }
 
+static void KeyBindButton(int slot, int& key) {
+    if (g_binding == slot) {
+        ImGui::Button("apertar tecla...", ImVec2(120.f, 0.f));
+        for (int vk = 1; vk < 256; ++vk) {
+            if (vk == VK_ESCAPE) {
+                if (g_pressed[vk]) g_binding = 0;
+                break;
+            }
+            if (g_pressed[vk]) {
+                key = vk;
+                g_binding = 0;
+                break;
+            }
+        }
+    } else {
+        if (ImGui::Button(KeyName(key), ImVec2(120.f, 0.f))) {
+            g_binding = slot;
+            PrimeKeys();
+        }
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("tecla");
+}
+
 // ------------------------------------------------------------
 static void DrawEspTab(cfg::Settings& settings) {
     ImGui::Checkbox("ESP  (F1)", &settings.espEnabled);
@@ -97,27 +124,7 @@ static void DrawAimTab(cfg::Settings& settings, Esp& esp) {
     ImGui::Checkbox("Aim assist", &aim.enabled);
 
     ImGui::SameLine(200.f);
-    if (g_binding) {
-        ImGui::Button("apertar tecla...", ImVec2(120.f, 0.f));
-        for (int vk = 1; vk < 256; ++vk) {
-            if (vk == VK_ESCAPE) {
-                if (g_pressed[vk]) g_binding = false;
-                break;
-            }
-            if (g_pressed[vk]) {
-                aim.key = vk;
-                g_binding = false;
-                break;
-            }
-        }
-    } else {
-        if (ImGui::Button(KeyName(aim.key), ImVec2(120.f, 0.f))) {
-            g_binding = true;
-            PrimeKeys();
-        }
-        ImGui::SameLine();
-        ImGui::TextDisabled("tecla");
-    }
+    KeyBindButton(1, aim.key);
 
     ImGui::Checkbox("Modo toggle", &aim.toggleMode);
     ImGui::SameLine();
@@ -162,6 +169,42 @@ static void DrawAimTab(cfg::Settings& settings, Esp& esp) {
     ImGui::TextDisabled("ganho real por tick: %.3f", aim.strength / (aim.smoothing < 1.f ? 1.f : aim.smoothing));
     if (!esp.Attached())
         ImGui::TextDisabled("sem processo: nada e enviado");
+}
+
+// ------------------------------------------------------------
+static void DrawFireTab(cfg::Settings& settings, const AimAssist& aim, const Trigger& trigger) {
+    cfg::TriggerSettings& fire = settings.fire;
+
+    ImGui::Checkbox("Disciplina de tiro", &fire.enabled);
+    ImGui::SameLine(200.f);
+    KeyBindButton(2, fire.key);
+
+    ImGui::Checkbox("Auto (sem tecla)", &fire.autoFire);
+    ImGui::Checkbox("So com o jogo em foco", &fire.requireForeground);
+
+    ImGui::SeparatorText("Portao");
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderFloat("Erro max (px)", &fire.maxErrorPx, 0.5f, 20.f, "%.1f");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("só solta o clique com o crosshair dentro desse raio do osso");
+
+    ImGui::SeparatorText("Cadencia");
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderInt("Intervalo (ms)", &fire.minIntervalMs, 16, 1000);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%d tiros/s no maximo", 1000 / (fire.minIntervalMs < 1 ? 1 : fire.minIntervalMs));
+
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderInt("Hold (ms)", &fire.holdMs, 1, 100);
+
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderInt("Rajada", &fire.burst, 1, 10);
+
+    ImGui::Spacing();
+    ImGui::Text("alvo     %s  (%.1f px)", aim.HasTarget() ? "sim" : "nao", aim.TargetError());
+    ImGui::Text("tiros    %d", trigger.ShotsFired());
+    ImGui::TextDisabled("espalhamento e do jogo (raycast em Lua/servidor).");
+    ImGui::TextDisabled("aqui: cada tiro sai com o crosshair no centro e com cadencia.");
 }
 
 // ------------------------------------------------------------
@@ -279,14 +322,15 @@ static void DrawConfigTab(cfg::Settings& settings, Esp& esp, Overlay& overlay) {
 }
 
 // ------------------------------------------------------------
-void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detector, bool* open) {
+void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detector,
+          MemView& memView, const AimAssist& aim, const Trigger& trigger, bool* open) {
     if (!open || !*open)
         return;
 
     if (g_binding)
         SampleKeys();
 
-    ImGui::SetNextWindowSize(ImVec2(430.f, 430.f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(470.f, 470.f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(40.f, 40.f), ImGuiCond_FirstUseEver);
 
     if (!ImGui::Begin("roblox-external", open, ImGuiWindowFlags_NoCollapse)) {
@@ -303,8 +347,16 @@ void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detecto
             DrawAimTab(settings, esp);
             ImGui::EndTabItem();
         }
+        if (ImGui::BeginTabItem("Tiros")) {
+            DrawFireTab(settings, aim, trigger);
+            ImGui::EndTabItem();
+        }
         if (ImGui::BeginTabItem("Jogo")) {
             DrawGameTab(settings, detector);
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Memoria")) {
+            memView.Draw(esp.Mem());
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Config")) {

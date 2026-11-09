@@ -21,6 +21,8 @@ cl /nologo /std:c++20 /O2 /EHsc /MT /W3 /utf-8 ^
    src\features\esp.cpp ^
    src\features\aim.cpp ^
    src\features\detector.cpp ^
+   src\features\trigger.cpp ^
+   src\features\memview.cpp ^
    src\overlay\overlay.cpp ^
    src\menu\menu.cpp ^
    src\imgui\imgui.cpp ^

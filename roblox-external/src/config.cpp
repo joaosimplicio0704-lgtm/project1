@@ -91,7 +91,16 @@ static bool SaveConfig(const Settings& s) {
     out << "  \"aimDeadzone\": "       << a.deadzonePx << ",\n";
     out << "  \"aimJitter\": "         << a.jitterPx << ",\n";
     out << "  \"aimDrawFov\": "        << Bool(a.drawFov) << ",\n";
-    out << "  \"aimRequireForeground\": " << Bool(a.requireForeground) << "\n";
+    out << "  \"aimRequireForeground\": " << Bool(a.requireForeground) << ",\n";
+    const TriggerSettings& f = s.fire;
+    out << "  \"fireEnabled\": "        << Bool(f.enabled) << ",\n";
+    out << "  \"fireKey\": "            << f.key << ",\n";
+    out << "  \"fireAuto\": "           << Bool(f.autoFire) << ",\n";
+    out << "  \"fireMaxError\": "       << f.maxErrorPx << ",\n";
+    out << "  \"fireInterval\": "       << f.minIntervalMs << ",\n";
+    out << "  \"fireHold\": "           << f.holdMs << ",\n";
+    out << "  \"fireBurst\": "          << f.burst << ",\n";
+    out << "  \"fireRequireForeground\": " << Bool(f.requireForeground) << "\n";
     out << "}\n";
 
     return out.good();
@@ -131,6 +140,20 @@ static bool LoadConfig(Settings& s) {
     a.jitterPx    = AsFloat(ValueOf(text, "aimJitter"), a.jitterPx);
     a.drawFov     = AsBool(ValueOf(text, "aimDrawFov"), a.drawFov);
     a.requireForeground = AsBool(ValueOf(text, "aimRequireForeground"), a.requireForeground);
+
+    TriggerSettings& f = s.fire;
+    f.enabled     = AsBool(ValueOf(text, "fireEnabled"), f.enabled);
+    f.key         = AsInt(ValueOf(text, "fireKey"), f.key);
+    f.autoFire    = AsBool(ValueOf(text, "fireAuto"), f.autoFire);
+    f.maxErrorPx  = AsFloat(ValueOf(text, "fireMaxError"), f.maxErrorPx);
+    f.minIntervalMs = AsInt(ValueOf(text, "fireInterval"), f.minIntervalMs);
+    f.holdMs      = AsInt(ValueOf(text, "fireHold"), f.holdMs);
+    f.burst       = AsInt(ValueOf(text, "fireBurst"), f.burst);
+    f.requireForeground = AsBool(ValueOf(text, "fireRequireForeground"), f.requireForeground);
+
+    if (f.minIntervalMs < 16) f.minIntervalMs = 16;
+    if (f.holdMs < 1)  f.holdMs = 1;
+    if (f.burst < 1)   f.burst = 1;
 
     if (s.tickMs < 1)   s.tickMs = 1;
     if (s.tickMs > 250) s.tickMs = 250;

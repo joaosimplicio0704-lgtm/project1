@@ -47,6 +47,20 @@ struct AimSettings {
     bool  requireForeground = true;    // so age com a janela do jogo na frente
 };
 
+// ============================================================
+// TIRO — portao + cadencia
+// ============================================================
+struct TriggerSettings {
+    bool  enabled = false;
+    int   key = 0x05;              // VK_XBUTTON1 (botao lateral)
+    bool  autoFire = false;        // atira sozinho quando o portao abre
+    float maxErrorPx = 3.f;        // so atira com o crosshair em cima
+    int   minIntervalMs = 120;     // cadencia maxima
+    int   holdMs = 12;             // tempo pressionado
+    int   burst = 1;               // tiros por aperto
+    bool  requireForeground = true;
+};
+
 // perfil por jogo (PlaceId)
 struct Profile {
     uint64_t placeId = 0;
@@ -73,6 +87,7 @@ struct Settings {
     int   tickMs      = kTickMs;
 
     AimSettings aim;
+    TriggerSettings fire;
     std::vector<Profile> profiles;
 };
 

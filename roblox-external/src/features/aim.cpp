@@ -68,6 +68,7 @@ Vector3 BonePoint(const Target& target, int bone) {
 
 void AimAssist::Reset() {
     m_hasTarget = false;
+    m_targetError = 0.f;
     m_accumX = 0.f;
     m_accumY = 0.f;
     m_lastDown = false;
@@ -78,32 +79,18 @@ void AimAssist::Tick(const cfg::Settings& settings, const Esp& esp, float width,
 
     const cfg::AimSettings& aim = settings.aim;
 
-    if (!aim.enabled || blocked || width <= 0.f || height <= 0.f || !esp.Attached()) {
-        m_accumX = m_accumY = 0.f;
-        return;
-    }
-
-    if (aim.requireForeground && !ForegroundIsPid(esp.Pid())) {
-        m_accumX = m_accumY = 0.f;
-        return;
-    }
-
-    // ---- tecla: segurar ou toggle ----
-    const bool down = (GetAsyncKeyState(aim.key) & 0x8000) != 0;
-    if (aim.toggleMode && down && !m_lastDown)
-        m_toggled = !m_toggled;
-    m_lastDown = down;
-
-    const bool active = aim.toggleMode ? m_toggled : down;
-    if (!active) {
+    if (width <= 0.f || height <= 0.f || !esp.Attached()) {
         m_accumX = m_accumY = 0.f;
         return;
     }
 
     const float centerX = width * 0.5f;
     const float centerY = height * 0.5f;
+    m_fovCenterX = centerX;
+    m_fovCenterY = centerY;
 
-    // ---- alvo mais perto do crosshair dentro do FOV ----
+    // ---- alvo mais perto do crosshair, sempre calculado:
+    //      o trigger le isso mesmo com o aim assist desligado ----
     bool found = false;
     float bestDistance = aim.fovPx;
     Vector2 bestScreen{};
@@ -135,6 +122,29 @@ void AimAssist::Tick(const cfg::Settings& settings, const Esp& esp, float width,
     m_hasTarget = true;
     m_targetX = bestScreen.x;
     m_targetY = bestScreen.y;
+    m_targetError = bestDistance;
+
+    if (!aim.enabled || blocked) {
+        m_accumX = m_accumY = 0.f;
+        return;
+    }
+
+    if (aim.requireForeground && !ForegroundIsPid(esp.Pid())) {
+        m_accumX = m_accumY = 0.f;
+        return;
+    }
+
+    // ---- tecla: segurar ou toggle ----
+    const bool down = (GetAsyncKeyState(aim.key) & 0x8000) != 0;
+    if (aim.toggleMode && down && !m_lastDown)
+        m_toggled = !m_toggled;
+    m_lastDown = down;
+
+    const bool active = aim.toggleMode ? m_toggled : down;
+    if (!active) {
+        m_accumX = m_accumY = 0.f;
+        return;
+    }
 
     // ---- delta ----
     const float errorX = bestScreen.x - centerX;

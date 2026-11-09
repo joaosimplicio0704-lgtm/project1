@@ -23,12 +23,18 @@ public:
 
     void Reset();
 
-    bool HasTarget() const { return m_hasTarget; }
+    bool  HasTarget() const { return m_hasTarget; }
+    float TargetError() const { return m_targetError; }   // px ate o centro
+    float TargetX() const { return m_targetX; }
+    float TargetY() const { return m_targetY; }
 
 private:
     bool  m_hasTarget = false;
     float m_targetX = 0.f;
     float m_targetY = 0.f;
+    float m_targetError = 0.f;
+    float m_fovCenterX = 0.f;
+    float m_fovCenterY = 0.f;
 
     float m_accumX = 0.f;   // resto fracionario do delta
     float m_accumY = 0.f;

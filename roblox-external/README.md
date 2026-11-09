@@ -2,7 +2,8 @@
 
 Reescrita do base `misery1x/Roblox-External` com o dump de offsets
 `version-f0ea5da9412f4e35`, `StealthyOpenProcess` v5 no lugar do `OpenProcess` cru,
-**detector de jogo** e **aim assist configurável**.
+**detector de jogo**, **aim assist configurável**, **leitor de memória em tempo real**
+e **disciplina de tiro**.
 
 Externo, read-only: `ReadProcessMemory` + `SendInput` + overlay D3D11/ImGui.
 Nada é escrito em memória do jogo, nada é injetado, nenhum driver.
@@ -42,7 +43,7 @@ END      sai
 Mouse 5  aim assist (segurar; rebindável na aba Aim)
 ```
 
-Quatro abas: **ESP**, **Aim**, **Jogo**, **Config**.
+Seis abas: **ESP**, **Aim**, **Tiros**, **Jogo**, **Memória**, **Config**.
 `config.json` e `profiles.json` ficam ao lado do `.exe`.
 
 ### Input do menu
@@ -88,6 +89,41 @@ passo = clamp(passo, passo_max)
 Se o menu estiver aberto o aim não envia nada. O ganho real por tick aparece na
 aba (`forca / suavizacao`), pra não ter que fazer conta de cabeça.
 
+## Disciplina de tiro
+
+Espalhamento de bala em Roblox mora no jogo — raycast em Lua ou no servidor. Externo
+não mexe nisso sem escrever memória ou hookar o VM. O que dá pra fazer de verdade:
+
+- **portão**: só solta o clique com o crosshair dentro de `Erro max (px)` do osso.
+  Tiro sai centrado em vez de sair torto.
+- **cadência**: `Intervalo (ms)` limita tiros por segundo — não empilha recoil nem
+  transforma hold em spray.
+- **rajada**: N tiros por aperto, espaçados pelo intervalo.
+- **auto**: dispara sozinho enquanto o portão estiver aberto (sem tecla).
+
+Aba **Tiros** mostra o erro do alvo em px e a contagem de tiros em tempo real, e a
+tecla é rebindável igual à do aim. Menu aberto ou jogo fora de foco = não atira.
+
+## Leitor de memória em tempo real
+
+Aba **Memória**. Expressão aceita três formas:
+
+```
+base+0x8EB6960          offset a partir do módulo (RobloxPlayerBeta.exe)
+base+0x8EB6960>0x1F8    cadeia: lê o ponteiro e soma (quantos '>' quiser)
+0x7FF6A0001234          endereço absoluto
+```
+
+Cada watch mostra o valor no tipo escolhido (`u8`, `i32`, `u32`, `i64`, `float`,
+`double`, `ptr`, `string`) e fica **verde quando muda** entre ticks. Releitura a 60Hz,
+independente do tick do ESP.
+
+`dump` abre um hexdump de 16 ou 32 linhas a partir do endereço do watch, com o byte
+alterado destacado — dá pra ver padding, flag e string mudando ao vivo.
+
+Watches vivem só na sessão (não vão pro `config.json` de propósito: endereço cru
+envelhece rápido).
+
 ## Detector de jogo
 
 Lê a identidade do DataModel a cada 1s (e na hora quando o DataModel muda):
@@ -120,6 +156,8 @@ src/
   features/esp.*        ActorLoop — leitura da cena + draw
   features/aim.*        seleção de alvo + SendInput
   features/detector.*   PlaceId/GameId/JobId + perfil por jogo
+  features/memview.*    leitor ao vivo + hexdump com byte alterado
+  features/trigger.*    portão de erro + cadência + rajada
   menu/menu.*           menu tabbed
   overlay/overlay.*     janela + D3D11 + ImGui
   imgui/                v1.92.1-WIP vendorizado (upstream, verificado)
@@ -148,6 +186,7 @@ Tudo em `src/offsets.h`, dentro de `namespace rbx`. Cola o dump novo por cima, r
 | ESP só com nome | caixa, nome, barra de vida, distância, team check, alcance |
 | sem reattach | detecta saída do processo e reabre handle a cada 1s |
 | — | detector de jogo + aim assist + perfis por PlaceId |
+| — | leitor de memória ao vivo + disciplina de tiro |
 
 ## Limitações
 
