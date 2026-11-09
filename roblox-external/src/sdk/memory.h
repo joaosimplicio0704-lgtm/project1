@@ -18,17 +18,25 @@ public:
     // process_name = "RobloxPlayerBeta.exe". stealth = abre o handle via
     // StealthyOpenProcess (callstack dentro de kernel32); fallback automatico
     // para OpenProcess se o truque falhar.
-    bool Attach(const char* process_name, bool stealth = true);
+    // write = abre com PROCESS_VM_WRITE|VM_OPERATION (usado pelo voo).
+    // sem isso o handle e estritamente read-only.
+    bool Attach(const char* process_name, bool stealth = true, bool write = false);
     void Detach();
 
     bool Alive() const;
     bool Ready() const { return m_handle != nullptr && m_base != 0; }
 
     uintptr_t Base() const { return m_base; }
+    size_t BaseSize() const { return m_baseSize; }
+    bool CanWrite() const { return m_canWrite; }
     DWORD Pid() const { return m_pid; }
     HANDLE Handle() const { return m_handle; }
 
     bool Read(uintptr_t address, void* out, size_t size) const;
+    bool Write(uintptr_t address, const void* data, size_t size) const;
+
+    template <typename T>
+    bool Write(uintptr_t address, const T& value) const { return Write(address, &value, sizeof(T)); }
 
     template <typename T>
     bool Read(uintptr_t address, T& out) const { return Read(address, &out, sizeof(T)); }
@@ -55,4 +63,6 @@ private:
     HANDLE m_handle = nullptr;
     DWORD m_pid = 0;
     uintptr_t m_base = 0;
+    size_t m_baseSize = 0;
+    bool m_canWrite = false;
 };

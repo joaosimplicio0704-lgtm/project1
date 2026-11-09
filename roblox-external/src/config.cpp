@@ -100,7 +100,14 @@ static bool SaveConfig(const Settings& s) {
     out << "  \"fireInterval\": "       << f.minIntervalMs << ",\n";
     out << "  \"fireHold\": "           << f.holdMs << ",\n";
     out << "  \"fireBurst\": "          << f.burst << ",\n";
-    out << "  \"fireRequireForeground\": " << Bool(f.requireForeground) << "\n";
+    out << "  \"fireRequireForeground\": " << Bool(f.requireForeground) << ",\n";
+    const FlySettings& v = s.fly;
+    out << "  \"flyEnabled\": "        << Bool(v.enabled) << ",\n";
+    out << "  \"flyKey\": "            << v.key << ",\n";
+    out << "  \"flyToggle\": "         << Bool(v.toggleMode) << ",\n";
+    out << "  \"flySpeed\": "          << v.speed << ",\n";
+    out << "  \"flyZeroVelocity\": "   << Bool(v.zeroVelocity) << ",\n";
+    out << "  \"flyRequireForeground\": " << Bool(v.requireForeground) << "\n";
     out << "}\n";
 
     return out.good();
@@ -150,6 +157,17 @@ static bool LoadConfig(Settings& s) {
     f.holdMs      = AsInt(ValueOf(text, "fireHold"), f.holdMs);
     f.burst       = AsInt(ValueOf(text, "fireBurst"), f.burst);
     f.requireForeground = AsBool(ValueOf(text, "fireRequireForeground"), f.requireForeground);
+
+    FlySettings& v = s.fly;
+    v.enabled     = AsBool(ValueOf(text, "flyEnabled"), v.enabled);
+    v.key         = AsInt(ValueOf(text, "flyKey"), v.key);
+    v.toggleMode  = AsBool(ValueOf(text, "flyToggle"), v.toggleMode);
+    v.speed       = AsFloat(ValueOf(text, "flySpeed"), v.speed);
+    v.zeroVelocity = AsBool(ValueOf(text, "flyZeroVelocity"), v.zeroVelocity);
+    v.requireForeground = AsBool(ValueOf(text, "flyRequireForeground"), v.requireForeground);
+
+    if (v.speed < 5.f)   v.speed = 5.f;
+    if (v.speed > 500.f) v.speed = 500.f;
 
     if (f.minIntervalMs < 16) f.minIntervalMs = 16;
     if (f.holdMs < 1)  f.holdMs = 1;

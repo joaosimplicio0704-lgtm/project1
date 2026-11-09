@@ -128,9 +128,11 @@ bool Esp::Attach() {
     m_cache.clear();
     m_dataModel = 0;
     m_targets.clear();
+    m_local = LocalState{};
     m_view = Matrix4x4{};
 
-    if (m_memory.Attach(cfg::kProcessName, m_settings && m_settings->stealthOpen)) {
+    const bool wantWrite = m_settings && m_settings->fly.enabled;
+    if (m_memory.Attach(cfg::kProcessName, m_settings && m_settings->stealthOpen, wantWrite)) {
         m_status = "ok";
         return true;
     }
@@ -199,6 +201,10 @@ bool Esp::Tick() {
         }
     }
 
+    // voo ligado com handle read-only: precisa reabrir com VM_WRITE
+    if (m_settings->fly.enabled && m_memory.Ready() && !m_memory.CanWrite())
+        m_forceReattach = true;
+
     if (!m_memory.Ready()) {
         m_targets.clear();
         if (!m_status || std::string(m_status) == "ok")
@@ -241,12 +247,45 @@ bool Esp::Tick() {
     const uintptr_t localTeam = localPlayer ? m_memory.ReadPtr(localPlayer + rbx::Player::Team) : 0;
 
     m_localRoot = Vector3{};
+    m_local = LocalState{};
+    m_local.dataModel = dataModel;
+    m_local.localPlayer = localPlayer;
+
     if (localPlayer) {
         const uintptr_t character = m_memory.ReadPtr(localPlayer + rbx::Player::ModelInstance);
+        m_local.character = character;
         if (character) {
             const std::vector<uintptr_t> parts = Children(character);
+
             const uintptr_t rootPart = FindByName(m_memory, parts, "HumanoidRootPart");
             ReadPartPosition(m_memory, rootPart, m_localRoot);
+
+            m_local.rootPart = rootPart;
+            if (rootPart) {
+                m_local.primitive = m_memory.ReadPtr(rootPart + rbx::BasePart::Primitive);
+                if (m_local.primitive) {
+                    m_memory.Read(m_local.primitive + rbx::Primitive::Position, m_local.position);
+                    m_memory.Read(m_local.primitive + rbx::Primitive::AssemblyLinearVelocity, m_local.velocity);
+                }
+            }
+
+            m_local.humanoid = FindByClass(m_memory, parts, "Humanoid");
+            if (m_local.humanoid) {
+                m_local.health = m_memory.ReadOr<float>(m_local.humanoid + rbx::Humanoid::Health, 0.f);
+                m_local.maxHealth = m_memory.ReadOr<float>(m_local.humanoid + rbx::Humanoid::MaxHealth, 0.f);
+                m_local.walkSpeed = m_memory.ReadOr<float>(m_local.humanoid + rbx::Humanoid::Walkspeed, 0.f);
+                m_local.jumpPower = m_memory.ReadOr<float>(m_local.humanoid + rbx::Humanoid::JumpPower, 0.f);
+            }
+        }
+    }
+
+    m_local.workspace = m_memory.ReadPtr(dataModel + rbx::DataModel::Workspace);
+    if (m_local.workspace) {
+        m_local.camera = m_memory.ReadPtr(m_local.workspace + rbx::Workspace::CurrentCamera);
+        if (m_local.camera) {
+            m_memory.Read(m_local.camera + rbx::Camera::Position, m_local.cameraPosition);
+            m_memory.Read(m_local.camera + rbx::Camera::Rotation, m_local.cameraRotation);
+            m_local.fov = m_memory.ReadOr<float>(m_local.camera + rbx::Camera::FieldOfView, 0.f);
         }
     }
 

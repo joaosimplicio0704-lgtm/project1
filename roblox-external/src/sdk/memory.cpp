@@ -46,14 +46,16 @@ DWORD Memory::FindPid(const char* process_name) {
     return pid;
 }
 
-bool Memory::Attach(const char* process_name, bool stealth) {
+bool Memory::Attach(const char* process_name, bool stealth, bool write) {
     Detach();
 
     m_pid = FindPid(process_name);
     if (!m_pid)
         return false;
 
-    const DWORD access = PROCESS_VM_READ | PROCESS_QUERY_INFORMATION;
+    DWORD access = PROCESS_VM_READ | PROCESS_QUERY_INFORMATION;
+    if (write)
+        access |= PROCESS_VM_WRITE | PROCESS_VM_OPERATION;
 
     if (stealth) {
         m_handle = StealthyOpenProcess::Execute(m_pid, access);
@@ -76,6 +78,7 @@ bool Memory::Attach(const char* process_name, bool stealth) {
             do {
                 if (SameExe(entry.szModule, process_name)) {
                     m_base = reinterpret_cast<uintptr_t>(entry.modBaseAddr);
+                    m_baseSize = entry.modBaseSize;
                     break;
                 }
             } while (Module32Next(modules, &entry));
@@ -87,10 +90,14 @@ bool Memory::Attach(const char* process_name, bool stealth) {
         Detach();
         return false;
     }
+
+    m_canWrite = write;
     return true;
 }
 
 void Memory::Detach() {
+    m_baseSize = 0;
+    m_canWrite = false;
     if (m_handle) {
         CloseHandle(m_handle);
         m_handle = nullptr;
@@ -115,6 +122,18 @@ bool Memory::Read(uintptr_t address, void* out, size_t size) const {
     if (!ReadProcessMemory(m_handle, reinterpret_cast<LPCVOID>(address), out, size, &read))
         return false;
     return read == size;
+}
+
+bool Memory::Write(uintptr_t address, const void* data, size_t size) const {
+    if (!m_handle || !m_canWrite || !data || !size)
+        return false;
+    if (!IsUserAddress(address, size))
+        return false;
+
+    SIZE_T written = 0;
+    if (!WriteProcessMemory(m_handle, reinterpret_cast<LPVOID>(address), data, size, &written))
+        return false;
+    return written == size;
 }
 
 uintptr_t Memory::Resolve(uintptr_t base, std::initializer_list<uintptr_t> chain) const {

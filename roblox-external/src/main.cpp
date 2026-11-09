@@ -6,6 +6,7 @@
 #include "features/aim.h"
 #include "features/detector.h"
 #include "features/esp.h"
+#include "features/fly.h"
 #include "features/memview.h"
 #include "features/trigger.h"
 #include "imgui/imgui.h"
@@ -83,6 +84,7 @@ int main() {
     AimAssist aim;
     MemView   memView;
     Trigger   trigger;
+    Fly       fly;
 
     bool  menuOpen = false;
     bool  running = true;
@@ -139,9 +141,13 @@ int main() {
                      overlay.IsInteractive() ||
                      (settings.fire.requireForeground && !ForegroundIsPid(esp.Pid())));
 
+        fly.Tick(settings, esp,
+                 overlay.IsInteractive() ||
+                 (settings.fly.requireForeground && !ForegroundIsPid(esp.Pid())));
+
         memView.Tick(esp.Mem());
 
-        menu::Draw(settings, esp, overlay, detector, memView, aim, trigger, &menuOpen);
+        menu::Draw(settings, esp, overlay, detector, memView, aim, trigger, fly, &menuOpen);
 
         // menu fechado pelo X da janela tambem devolve o mouse pro jogo
         if (!menuOpen && overlay.IsInteractive())
@@ -155,6 +161,7 @@ int main() {
 
     std::printf("[exit] fechando\n");
     trigger.Reset();
+    fly.Reset();
     aim.Reset();
     HandleCleanup::Stop();
     esp.Shutdown();

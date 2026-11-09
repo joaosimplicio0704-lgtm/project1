@@ -1,8 +1,12 @@
 #include "memview.h"
 
+#include <windows.h>
+
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 
+#include "../features/esp.h"
 #include "../imgui/imgui.h"
 
 namespace {
@@ -12,6 +16,9 @@ constexpr ImU32 kByteColor = IM_COL32(220, 220, 220, 255);
 constexpr ImU32 kZeroColor = IM_COL32(110, 110, 120, 255);
 constexpr ImU32 kChangedColor = IM_COL32(120, 255, 140, 255);
 constexpr ImU32 kAsciiColor = IM_COL32(170, 190, 170, 255);
+
+constexpr size_t kScanChunk = 1u << 20;   // 1MB por leitura
+constexpr size_t kScanLimit = 1000;       // teto de resultados
 
 const char* TypeName(int type) {
     switch (type) {
@@ -24,6 +31,24 @@ const char* TypeName(int type) {
     case kPointer: return "ptr";
     case kString: return "string";
     default: return "?";
+    }
+}
+
+const char* ScanTypeName(int type) {
+    switch (type) {
+    case kScanInt32: return "i32";
+    case kScanFloat: return "float";
+    case kScanInt64: return "i64";
+    default: return "?";
+    }
+}
+
+size_t ScanTypeSize(int type) {
+    switch (type) {
+    case kScanInt32: return 4;
+    case kScanFloat: return 4;
+    case kScanInt64: return 8;
+    default: return 4;
     }
 }
 
@@ -41,14 +66,13 @@ bool ParseNumber(const std::string& text, uintptr_t& out) {
 }
 
 std::string Trim(const std::string& text) {
-    size_t begin = text.find_first_not_of(" \t");
+    const size_t begin = text.find_first_not_of(" \t");
     if (begin == std::string::npos)
         return {};
-    size_t end = text.find_last_not_of(" \t");
+    const size_t end = text.find_last_not_of(" \t");
     return text.substr(begin, end - begin + 1);
 }
 
-// resolve "base+off>off>off"
 uintptr_t ResolveExpression(const Memory& memory, const std::string& expression, bool& ok) {
     ok = false;
     if (expression.empty())
@@ -64,7 +88,6 @@ uintptr_t ResolveExpression(const Memory& memory, const std::string& expression,
         if (token.empty())
             return 0;
 
-        // offset depois de '+'
         uintptr_t offset = 0;
         std::string basePart = token;
         const size_t plus = token.find('+');
@@ -81,7 +104,7 @@ uintptr_t ResolveExpression(const Memory& memory, const std::string& expression,
                     return 0;
                 current = memory.Base() + offset;
             } else if (basePart.empty()) {
-                current = offset; // "+0x1234" = absoluto
+                current = offset;
             } else {
                 if (!ParseNumber(basePart, current))
                     return 0;
@@ -90,7 +113,6 @@ uintptr_t ResolveExpression(const Memory& memory, const std::string& expression,
             first = false;
         } else {
             if (!fromBase && !basePart.empty()) {
-                // ">0x1F8" ou ">base+0x..." — base no meio nao faz sentido, mas aceita o offset
                 uintptr_t absolute = 0;
                 if (!ParseNumber(basePart, absolute))
                     return 0;
@@ -111,8 +133,272 @@ uintptr_t ResolveExpression(const Memory& memory, const std::string& expression,
     return current;
 }
 
+bool Matches(const uint8_t* data, int type, double value) {
+    switch (type) {
+    case kScanInt32: {
+        const int32_t expected = static_cast<int32_t>(value);
+        int32_t found{};
+        std::memcpy(&found, data, sizeof(found));
+        return found == expected;
+    }
+    case kScanFloat: {
+        const float expected = static_cast<float>(value);
+        float found{};
+        std::memcpy(&found, data, sizeof(found));
+        return std::memcmp(&found, &expected, sizeof(float)) == 0;
+    }
+    case kScanInt64: {
+        const int64_t expected = static_cast<int64_t>(value);
+        int64_t found{};
+        std::memcpy(&found, data, sizeof(found));
+        return found == expected;
+    }
+    default:
+        return false;
+    }
+}
+
+std::string FormatScanValue(const Memory& memory, uintptr_t address, int type) {
+    char buffer[48]{};
+    switch (type) {
+    case kScanInt32:
+        std::snprintf(buffer, sizeof(buffer), "%d", memory.ReadOr<int32_t>(address, 0));
+        break;
+    case kScanFloat:
+        std::snprintf(buffer, sizeof(buffer), "%.4f", memory.ReadOr<float>(address, 0.f));
+        break;
+    case kScanInt64:
+        std::snprintf(buffer, sizeof(buffer), "%lld",
+                      static_cast<long long>(memory.ReadOr<int64_t>(address, 0)));
+        break;
+    default:
+        break;
+    }
+    return buffer;
+}
+
 } // namespace
 
+// ============================================================
+// automatico
+// ============================================================
+static void Row(const char* label, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    ImGui::TextColored(ImVec4(0.62f, 0.62f, 0.68f, 1.f), "%s", label);
+    ImGui::SameLine(150.f);
+    ImGui::TextV(format, args);
+    va_end(args);
+}
+
+static void RowAddress(const char* label, uintptr_t address) {
+    Row(label, "0x%llX", static_cast<unsigned long long>(address));
+}
+
+void MemView::DrawAuto(const Esp& esp) {
+    const LocalState& local = esp.Local();
+
+    if (!esp.Attached()) {
+        ImGui::TextDisabled("sem processo — procurando RobloxPlayerBeta.exe");
+        return;
+    }
+    if (!local.Valid()) {
+        ImGui::TextDisabled("processo ok, personagem ainda nao carregou");
+        return;
+    }
+
+    RowAddress("DataModel", local.dataModel);
+    RowAddress("Workspace", local.workspace);
+    RowAddress("Camera", local.camera);
+    RowAddress("LocalPlayer", local.localPlayer);
+    RowAddress("Character", local.character);
+    RowAddress("Humanoid", local.humanoid);
+    RowAddress("RootPart", local.rootPart);
+    RowAddress("Primitive", local.primitive);
+
+    ImGui::Separator();
+    Row("Health", "%.1f / %.1f", local.health, local.maxHealth);
+    Row("WalkSpeed", "%.2f", local.walkSpeed);
+    Row("JumpPower", "%.2f", local.jumpPower);
+
+    Row("Position", "%.2f, %.2f, %.2f", local.position.x, local.position.y, local.position.z);
+    Row("Velocity", "%.2f, %.2f, %.2f", local.velocity.x, local.velocity.y, local.velocity.z);
+    Row("Camera pos", "%.2f, %.2f, %.2f", local.cameraPosition.x, local.cameraPosition.y, local.cameraPosition.z);
+    Row("Camera fwd", "%.3f, %.3f, %.3f",
+        -local.cameraRotation[2], -local.cameraRotation[5], -local.cameraRotation[8]);
+    Row("FOV", "%.1f", local.fov);
+}
+
+// ============================================================
+// varredura
+// ============================================================
+void MemView::ScanReset() {
+    m_scan.clear();
+    m_scanTruncated = false;
+    m_scanStatus[0] = '\0';
+}
+
+void MemView::ScanStart(const Memory& memory) {
+    m_scan.clear();
+    m_scanTruncated = false;
+
+    const HANDLE handle = memory.Handle();
+    const uintptr_t base = memory.Base();
+    const size_t size = memory.BaseSize();
+
+    if (!handle || !base || !size) {
+        std::snprintf(m_scanStatus, sizeof(m_scanStatus), "sem modulo para varrer");
+        return;
+    }
+
+    const size_t typeSize = ScanTypeSize(m_scanType);
+    const double value = std::atof(m_scanValue);
+
+    std::vector<uint8_t> buffer(kScanChunk);
+    uintptr_t address = base;
+    const uintptr_t limit = base + size;
+
+    while (address < limit && m_scan.size() < kScanLimit) {
+        MEMORY_BASIC_INFORMATION region{};
+        if (!VirtualQueryEx(handle, reinterpret_cast<LPCVOID>(address), &region, sizeof(region)))
+            break;
+
+        const uintptr_t regionBase = reinterpret_cast<uintptr_t>(region.BaseAddress);
+        const uintptr_t regionEnd = regionBase + region.RegionSize;
+        const uintptr_t nextRegion = regionEnd > address ? regionEnd : address + 0x1000;
+
+        const bool readable = region.State == MEM_COMMIT &&
+                              !(region.Protect & PAGE_GUARD) &&
+                              !(region.Protect & PAGE_NOACCESS) &&
+                              (region.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+                                                 PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE));
+
+        if (!readable) {
+            address = nextRegion;
+            continue;
+        }
+
+        for (uintptr_t cursor = address; cursor < regionEnd && m_scan.size() < kScanLimit; cursor += kScanChunk) {
+            const size_t remaining = static_cast<size_t>(regionEnd - cursor);
+            const size_t toRead = remaining < kScanChunk ? remaining : kScanChunk;
+
+            SIZE_T got = 0;
+            if (!ReadProcessMemory(handle, reinterpret_cast<LPCVOID>(cursor), buffer.data(), toRead, &got) || got < typeSize) {
+                continue;
+            }
+
+            for (size_t offset = 0; offset + typeSize <= got; offset += typeSize) {
+                if (!Matches(buffer.data() + offset, m_scanType, value))
+                    continue;
+
+                m_scan.push_back(cursor + offset);
+                if (m_scan.size() >= kScanLimit) {
+                    m_scanTruncated = true;
+                    break;
+                }
+            }
+        }
+
+        address = nextRegion;
+    }
+
+    std::snprintf(m_scanStatus, sizeof(m_scanStatus), "%d resultado(s)%s",
+                  static_cast<int>(m_scan.size()), m_scanTruncated ? " (teto atingido)" : "");
+}
+
+void MemView::ScanFilter(const Memory& memory) {
+    if (m_scan.empty())
+        return;
+
+    const double value = std::atof(m_scanValue);
+    const size_t typeSize = ScanTypeSize(m_scanType);
+
+    std::vector<uintptr_t> kept;
+    kept.reserve(m_scan.size());
+
+    uint8_t data[8]{};
+    for (uintptr_t address : m_scan) {
+        if (!memory.Read(address, data, typeSize))
+            continue;
+        if (Matches(data, m_scanType, value))
+            kept.push_back(address);
+    }
+
+    m_scan = std::move(kept);
+    std::snprintf(m_scanStatus, sizeof(m_scanStatus), "%d resultado(s) apos filtro",
+                  static_cast<int>(m_scan.size()));
+}
+
+void MemView::DrawScanner(const Memory& memory) {
+    ImGui::TextDisabled("acha o endereco de um valor que voce ve no jogo");
+
+    ImGui::SetNextItemWidth(110.f);
+    if (ImGui::BeginCombo("##scantype", ScanTypeName(m_scanType))) {
+        for (int type = kScanInt32; type <= kScanInt64; ++type) {
+            if (ImGui::Selectable(ScanTypeName(type), type == m_scanType))
+                m_scanType = type;
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(140.f);
+    ImGui::InputText("##scanvalue", m_scanValue, sizeof(m_scanValue));
+
+    ImGui::SameLine();
+    if (ImGui::Button("Novo scan"))
+        ScanStart(memory);
+
+    ImGui::SameLine();
+    ImGui::BeginDisabled(m_scan.empty());
+    if (ImGui::Button("Filtrar"))
+        ScanFilter(memory);
+    ImGui::SameLine();
+    if (ImGui::Button("Limpar"))
+        ScanReset();
+    ImGui::EndDisabled();
+
+    if (m_scanStatus[0])
+        ImGui::TextDisabled("%s", m_scanStatus);
+
+    if (!m_scan.empty()) {
+        ImGui::BeginChild("##scan", ImVec2(0.f, 180.f), true);
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(m_scan.size()));
+        while (clipper.Step()) {
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+                const uintptr_t address = m_scan[static_cast<size_t>(i)];
+                ImGui::PushID(i);
+
+                ImGui::TextColored(ImVec4(0.62f, 0.62f, 0.68f, 1.f), "0x%llX",
+                                   static_cast<unsigned long long>(address));
+                ImGui::SameLine(200.f);
+                ImGui::TextUnformatted(FormatScanValue(memory, address, m_scanType).c_str());
+                ImGui::SameLine(340.f);
+                if (ImGui::SmallButton("watch")) {
+                    Watch watch{};
+                    char expr[32]{};
+                    std::snprintf(expr, sizeof(expr), "0x%llX", static_cast<unsigned long long>(address));
+                    watch.expr = expr;
+                    watch.type = m_scanType == kScanFloat ? kFloat : (m_scanType == kScanInt64 ? kInt64 : kInt32);
+                    m_watches.push_back(std::move(watch));
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("dump")) {
+                    m_dumpAddress = address;
+                    m_dumpPrevAddress = 0;
+                }
+
+                ImGui::PopID();
+            }
+        }
+        ImGui::EndChild();
+    }
+}
+
+// ============================================================
+// watches / dump
+// ============================================================
 void MemView::ReadWatch(const Memory& memory, Watch& watch) {
     watch.changed = false;
     watch.value[0] = '\0';
@@ -170,33 +456,68 @@ void MemView::ReadWatch(const Memory& memory, Watch& watch) {
     std::snprintf(watch.value, sizeof(watch.value), "%s", buffer);
 }
 
-void MemView::Tick(const Memory& memory) {
-    const uint64_t now = GetTickCount64();
-    if (now - m_lastTick < 16)          // ~60Hz de leitura
-        return;
-    m_lastTick = now;
+void MemView::DrawWatches(const Memory& memory) {
+    ImGui::TextDisabled("expressao: base+0x8EB6960  |  base+0x8EB6960>0x1F8  |  0x7FF6...");
 
-    for (Watch& watch : m_watches) {
+    ImGui::SetNextItemWidth(260.f);
+    ImGui::InputText("##expr", m_input, sizeof(m_input));
+    ImGui::SameLine();
+
+    ImGui::SetNextItemWidth(90.f);
+    if (ImGui::BeginCombo("##type", TypeName(m_inputType))) {
+        for (int type = kByte; type <= kString; ++type) {
+            if (ImGui::Selectable(TypeName(type), type == m_inputType))
+                m_inputType = type;
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Adicionar")) {
+        Watch watch{};
+        watch.expr = Trim(m_input);
+        watch.type = m_inputType;
         bool ok = false;
         watch.address = ResolveExpression(memory, watch.expr, ok);
-        ReadWatch(memory, watch);
+        m_watches.push_back(std::move(watch));
+        if (!m_dumpAddress)
+            m_dumpAddress = m_watches.back().address;
     }
 
-    // dump
-    std::memcpy(m_dumpPrev, m_dump, sizeof(m_dump));
-    if (m_dumpAddress != m_dumpPrevAddress) {
-        std::memset(m_dumpPrev, 0, sizeof(m_dumpPrev));
-        m_dumpPrevAddress = m_dumpAddress;
+    if (m_watches.empty()) {
+        ImGui::TextDisabled("nenhum watch manual — o painel automatico acima ja cobre o basico");
+        return;
     }
-    std::memset(m_dump, 0, sizeof(m_dump));
 
-    if (m_dumpAddress) {
-        if (!memory.Read(m_dumpAddress, m_dump, sizeof(m_dump)))
-            std::memset(m_dump, 0, sizeof(m_dump));
+    for (size_t i = 0; i < m_watches.size(); ++i) {
+        Watch& watch = m_watches[i];
+        ImGui::PushID(static_cast<int>(i));
+
+        if (ImGui::SmallButton("x")) {
+            m_watches.erase(m_watches.begin() + static_cast<long>(i));
+            ImGui::PopID();
+            break;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("dump")) {
+            m_dumpAddress = watch.address;
+            m_dumpPrevAddress = 0;
+        }
+        ImGui::SameLine();
+
+        ImGui::TextColored(ImVec4(0.65f, 0.65f, 0.70f, 1.f), "0x%llX",
+                           static_cast<unsigned long long>(watch.address));
+        ImGui::SameLine(180.f);
+        ImGui::TextDisabled("%-6s", TypeName(watch.type));
+        ImGui::SameLine(240.f);
+        ImGui::TextColored(watch.changed ? ImVec4(0.47f, 1.f, 0.55f, 1.f) : ImVec4(0.90f, 0.90f, 0.90f, 1.f),
+                           "%s", watch.value);
+
+        ImGui::PopID();
     }
 }
 
-void MemView::DrawDump(const Memory& memory) {
+void MemView::DrawDump() {
     ImGui::TextDisabled("dump 0x%llX", static_cast<unsigned long long>(m_dumpAddress));
     ImGui::SameLine();
     if (ImGui::SmallButton("16"))
@@ -220,7 +541,8 @@ void MemView::DrawDump(const Memory& memory) {
 
     for (int row = 0; row < m_dumpRows; ++row) {
         char address[24]{};
-        std::snprintf(address, sizeof(address), "%016llX", static_cast<unsigned long long>(m_dumpAddress + row * 16));
+        std::snprintf(address, sizeof(address), "%016llX",
+                      static_cast<unsigned long long>(m_dumpAddress + static_cast<uintptr_t>(row) * 16));
         draw->AddText(ImVec2(origin.x, y), kAddressColor, address);
 
         float x = origin.x + advance * 18.f;
@@ -249,70 +571,46 @@ void MemView::DrawDump(const Memory& memory) {
 
     ImGui::Dummy(ImVec2(advance * 78.f, static_cast<float>(m_dumpRows) * lineHeight));
     ImGui::EndChild();
-    (void)memory;
 }
 
-void MemView::Draw(const Memory& memory) {
-    ImGui::TextDisabled("expressao: base+0x8EB6960  |  base+0x8EB6960>0x1F8  |  0x7FF6...");
+// ============================================================
+void MemView::Tick(const Memory& memory) {
+    const uint64_t now = GetTickCount64();
+    if (now - m_lastTick < 16)   // ~60Hz
+        return;
+    m_lastTick = now;
 
-    ImGui::SetNextItemWidth(260.f);
-    ImGui::InputText("##expr", m_input, sizeof(m_input));
-    ImGui::SameLine();
-
-    ImGui::SetNextItemWidth(90.f);
-    if (ImGui::BeginCombo("##type", TypeName(m_inputType))) {
-        for (int type = kByte; type <= kString; ++type) {
-            if (ImGui::Selectable(TypeName(type), type == m_inputType))
-                m_inputType = type;
-        }
-        ImGui::EndCombo();
-    }
-
-    ImGui::SameLine();
-    if (ImGui::Button("Adicionar")) {
-        Watch watch{};
-        watch.expr = Trim(m_input);
-        watch.type = m_inputType;
+    for (Watch& watch : m_watches) {
         bool ok = false;
         watch.address = ResolveExpression(memory, watch.expr, ok);
-        m_watches.push_back(std::move(watch));
-        if (!m_dumpAddress)
-            m_dumpAddress = m_watches.back().address;
+        ReadWatch(memory, watch);
     }
 
-    ImGui::Separator();
-
-    if (m_watches.empty())
-        ImGui::TextDisabled("nenhum watch. cola um offset e clica em Adicionar.");
-
-    for (size_t i = 0; i < m_watches.size(); ++i) {
-        Watch& watch = m_watches[i];
-        ImGui::PushID(static_cast<int>(i));
-
-        if (ImGui::SmallButton("x")) {
-            m_watches.erase(m_watches.begin() + static_cast<long>(i));
-            ImGui::PopID();
-            break;
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("dump")) {
-            m_dumpAddress = watch.address;
-            m_dumpPrevAddress = 0;
-        }
-        ImGui::SameLine();
-
-        ImGui::TextColored(ImVec4(0.65f, 0.65f, 0.70f, 1.f), "0x%llX",
-                           static_cast<unsigned long long>(watch.address));
-        ImGui::SameLine(180.f);
-        ImGui::TextDisabled("%-6s", TypeName(watch.type));
-        ImGui::SameLine(240.f);
-        ImGui::TextColored(watch.changed ? ImVec4(0.47f, 1.f, 0.55f, 1.f) : ImVec4(0.90f, 0.90f, 0.90f, 1.f),
-                           "%s", watch.value);
-
-        ImGui::PopID();
+    std::memcpy(m_dumpPrev, m_dump, sizeof(m_dump));
+    if (m_dumpAddress != m_dumpPrevAddress) {
+        std::memset(m_dumpPrev, 0, sizeof(m_dumpPrev));
+        m_dumpPrevAddress = m_dumpAddress;
     }
+    std::memset(m_dump, 0, sizeof(m_dump));
 
-    ImGui::Separator();
     if (m_dumpAddress)
-        DrawDump(memory);
+        memory.Read(m_dumpAddress, m_dump, 16u * static_cast<size_t>(m_dumpRows));
+}
+
+void MemView::Draw(const Memory& memory, const Esp& esp) {
+    if (ImGui::BeginChild("##memscroll", ImVec2(0.f, 0.f), false)) {
+        if (ImGui::CollapsingHeader("Ao vivo (automatico)", ImGuiTreeNodeFlags_DefaultOpen)) {
+            DrawAuto(esp);
+        }
+        if (ImGui::CollapsingHeader("Varredura de valor")) {
+            DrawScanner(memory);
+        }
+        if (ImGui::CollapsingHeader("Watches manuais")) {
+            DrawWatches(memory);
+        }
+        if (m_dumpAddress && ImGui::CollapsingHeader("Hexdump", ImGuiTreeNodeFlags_DefaultOpen)) {
+            DrawDump();
+        }
+    }
+    ImGui::EndChild();
 }

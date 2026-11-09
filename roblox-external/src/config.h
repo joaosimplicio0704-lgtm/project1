@@ -61,6 +61,18 @@ struct TriggerSettings {
     bool  requireForeground = true;
 };
 
+// ============================================================
+// VOO — escreve em memoria (unico modulo que faz isso)
+// ============================================================
+struct FlySettings {
+    bool  enabled = false;
+    bool  toggleMode = false;
+    int   key = 0x46;              // VK_F
+    float speed = 60.f;            // studs por segundo
+    bool  zeroVelocity = true;     // zera AssemblyLinearVelocity pra gravidade nao brigar
+    bool  requireForeground = true;
+};
+
 // perfil por jogo (PlaceId)
 struct Profile {
     uint64_t placeId = 0;
@@ -88,6 +100,7 @@ struct Settings {
 
     AimSettings aim;
     TriggerSettings fire;
+    FlySettings fly;
     std::vector<Profile> profiles;
 };
 

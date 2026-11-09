@@ -10,6 +10,7 @@
 #include "../features/memview.h"
 #include "../features/trigger.h"
 #include "../features/esp.h"
+#include "../features/fly.h"
 #include "../imgui/imgui.h"
 #include "../offsets.h"
 #include "../overlay/overlay.h"
@@ -208,6 +209,35 @@ static void DrawFireTab(cfg::Settings& settings, const AimAssist& aim, const Tri
 }
 
 // ------------------------------------------------------------
+static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) {
+    cfg::FlySettings& v = settings.fly;
+
+    ImGui::Checkbox("Voo", &v.enabled);
+    ImGui::SameLine(200.f);
+    KeyBindButton(3, v.key);
+
+    ImGui::TextColored(ImVec4(1.f, 0.55f, 0.35f, 1.f),
+                       "unico modulo que ESCREVE em memoria (VM_WRITE)");
+    ImGui::TextDisabled("WASD no plano da camera, Space/Ctrl sobem/descem");
+
+    ImGui::SeparatorText("Ajuste");
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderFloat("Velocidade", &v.speed, 5.f, 300.f, "%.0f studs/s");
+
+    ImGui::Checkbox("Zerar velocidade", &v.zeroVelocity);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(gravidade nao briga)");
+
+    ImGui::Checkbox("Modo toggle", &v.toggleMode);
+    ImGui::Checkbox("So com o jogo em foco", &v.requireForeground);
+
+    ImGui::Spacing();
+    ImGui::Text("handle     %s", esp.Mem().CanWrite() ? "VM_WRITE ok" : "read-only (reatacha ao ligar)");
+    ImGui::Text("estado     %s", fly.Active() ? "voando" : "parado");
+    ImGui::Text("posicao    %.1f, %.1f, %.1f", esp.Local().position.x, esp.Local().position.y, esp.Local().position.z);
+}
+
+// ------------------------------------------------------------
 static void DrawGameTab(cfg::Settings& settings, Detector& detector) {
     const GameInfo& game = detector.Info();
 
@@ -323,7 +353,7 @@ static void DrawConfigTab(cfg::Settings& settings, Esp& esp, Overlay& overlay) {
 
 // ------------------------------------------------------------
 void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detector,
-          MemView& memView, const AimAssist& aim, const Trigger& trigger, bool* open) {
+          MemView& memView, const AimAssist& aim, const Trigger& trigger, const Fly& fly, bool* open) {
     if (!open || !*open)
         return;
 
@@ -355,8 +385,12 @@ void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detecto
             DrawGameTab(settings, detector);
             ImGui::EndTabItem();
         }
+        if (ImGui::BeginTabItem("Voo")) {
+            DrawFlyTab(settings, fly, esp);
+            ImGui::EndTabItem();
+        }
         if (ImGui::BeginTabItem("Memoria")) {
-            memView.Draw(esp.Mem());
+            memView.Draw(esp.Mem(), esp);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Config")) {

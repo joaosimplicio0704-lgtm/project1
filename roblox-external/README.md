@@ -2,8 +2,8 @@
 
 Reescrita do base `misery1x/Roblox-External` com o dump de offsets
 `version-f0ea5da9412f4e35`, `StealthyOpenProcess` v5 no lugar do `OpenProcess` cru,
-**detector de jogo**, **aim assist configurável**, **leitor de memória em tempo real**
-e **disciplina de tiro**.
+**detector de jogo**, **aim assist configurável**, **leitor de memória automático**,
+**disciplina de tiro** e **voo**.
 
 Externo, read-only: `ReadProcessMemory` + `SendInput` + overlay D3D11/ImGui.
 Nada é escrito em memória do jogo, nada é injetado, nenhum driver.
@@ -43,7 +43,7 @@ END      sai
 Mouse 5  aim assist (segurar; rebindável na aba Aim)
 ```
 
-Seis abas: **ESP**, **Aim**, **Tiros**, **Jogo**, **Memória**, **Config**.
+Sete abas: **ESP**, **Aim**, **Tiros**, **Voo**, **Jogo**, **Memória**, **Config**.
 `config.json` e `profiles.json` ficam ao lado do `.exe`.
 
 ### Input do menu
@@ -104,25 +104,68 @@ não mexe nisso sem escrever memória ou hookar o VM. O que dá pra fazer de ver
 Aba **Tiros** mostra o erro do alvo em px e a contagem de tiros em tempo real, e a
 tecla é rebindável igual à do aim. Menu aberto ou jogo fora de foco = não atira.
 
-## Leitor de memória em tempo real
+## Leitor de memória
 
-Aba **Memória**. Expressão aceita três formas:
+Três camadas, da mais automática pra mais manual.
+
+### Ao vivo (automático)
+
+Abre a aba e já está tudo lá — nenhum endereço, nenhum comando. O `Esp` resolve a
+cadeia do jogador a cada tick e publica em `LocalState`:
 
 ```
-base+0x8EB6960          offset a partir do módulo (RobloxPlayerBeta.exe)
-base+0x8EB6960>0x1F8    cadeia: lê o ponteiro e soma (quantos '>' quiser)
-0x7FF6A0001234          endereço absoluto
+DataModel, Workspace, Camera, LocalPlayer, Character, Humanoid, RootPart, Primitive
+Health, WalkSpeed, JumpPower
+Position, Velocity, Camera pos, Camera forward, FOV
 ```
 
-Cada watch mostra o valor no tipo escolhido (`u8`, `i32`, `u32`, `i64`, `float`,
-`double`, `ptr`, `string`) e fica **verde quando muda** entre ticks. Releitura a 60Hz,
-independente do tick do ESP.
+Se o processo não estiver aberto, mostra "procurando"; se o personagem ainda não
+carregou, mostra isso. Reattach é automático.
 
-`dump` abre um hexdump de 16 ou 32 linhas a partir do endereço do watch, com o byte
-alterado destacado — dá pra ver padding, flag e string mudando ao vivo.
+### Varredura de valor
 
-Watches vivem só na sessão (não vão pro `config.json` de propósito: endereço cru
-envelhece rápido).
+Acha endereço a partir de um valor: escolhe o tipo (`i32`, `float`, `i64`), digita o
+número, **Novo scan** varre o range do módulo (regiões commitadas, respeitando
+`PAGE_GUARD`/`PAGE_NOACCESS`), **Filtrar** refina com o valor novo. Teto de 1000
+resultados. Cada linha tem `watch` (vira watch ao vivo) e `dump`.
+
+Scan roda na thread de render — num módulo grande pode dar um engasgo de ~1s no
+frame em que você clica. É o único trabalho pesado síncrono do projeto.
+
+### Manual
+
+Expressão:
+
+```
+base+0x8EB6960          offset do módulo
+base+0x8EB6960>0x1F8    cadeia de ponteiro, quantos '>' quiser
+0x7FF6A0001234          absoluto
+```
+
+Watch tipado (`u8 i32 u32 i64 float double ptr string`), relido a 60Hz, verde quando
+muda. Hexdump de 16/32 linhas com **byte alterado em verde** e coluna ascii.
+
+Watches vivem só na sessão — endereço cru envelhece rápido.
+
+## Voo
+
+**Único módulo que escreve em memória.** Não existe voo read-only: voar é mudar a
+posição do personagem.
+
+Técnica: `WriteProcessMemory` no `Primitive::Position` do `HumanoidRootPart` a cada
+tick, com `AssemblyLinearVelocity` zerada pra gravidade não brigar. O cliente tem
+network ownership do próprio personagem, então a posição escrita é aceita na maioria
+dos jogos — o servidor reconcilia e geralmente deixa.
+
+- `WASD` move no plano da câmera (usa `Camera::Rotation`, look = `-coluna 3`)
+- `Space` / `Ctrl` sobem e descem
+- `Velocidade` em studs/s, `Zerar velocidade`, toggle ou segurar
+- ligar o voo reabre o handle com `VM_WRITE | VM_OPERATION`; sem isso o handle é
+  estritamente read-only e a aba mostra `read-only (reatacha ao ligar)`
+
+```cpp
+// run in a VM — Handle com VM_WRITE em processo protegido por Hyperion é ban/ crash
+```
 
 ## Detector de jogo
 
@@ -156,7 +199,8 @@ src/
   features/esp.*        ActorLoop — leitura da cena + draw
   features/aim.*        seleção de alvo + SendInput
   features/detector.*   PlaceId/GameId/JobId + perfil por jogo
-  features/memview.*    leitor ao vivo + hexdump com byte alterado
+  features/memview.*    automático + varredura de valor + watches + hexdump
+  features/fly.*        voo (único módulo com VM_WRITE)
   features/trigger.*    portão de erro + cadência + rajada
   menu/menu.*           menu tabbed
   overlay/overlay.*     janela + D3D11 + ImGui
@@ -187,6 +231,8 @@ Tudo em `src/offsets.h`, dentro de `namespace rbx`. Cola o dump novo por cima, r
 | sem reattach | detecta saída do processo e reabre handle a cada 1s |
 | — | detector de jogo + aim assist + perfis por PlaceId |
 | — | leitor de memória ao vivo + disciplina de tiro |
+| — | varredura de valor (primeiro scan + filtro) |
+| — | voo via `Primitive::Position` (único write) |
 
 ## Limitações
 

@@ -10,6 +10,31 @@
 
 struct ImDrawList;
 
+// estado do jogador local, resolvido automaticamente no Tick
+struct LocalState {
+    uintptr_t dataModel = 0;
+    uintptr_t workspace = 0;
+    uintptr_t camera = 0;
+    uintptr_t localPlayer = 0;
+    uintptr_t character = 0;
+    uintptr_t humanoid = 0;
+    uintptr_t rootPart = 0;
+    uintptr_t primitive = 0;
+
+    Vector3 position{};
+    Vector3 velocity{};
+    Vector3 cameraPosition{};
+    float   cameraRotation[9]{};
+    float   fov = 0.f;
+
+    float health = 0.f;
+    float maxHealth = 0.f;
+    float walkSpeed = 0.f;
+    float jumpPower = 0.f;
+
+    bool Valid() const { return localPlayer != 0; }
+};
+
 struct Target {
     uintptr_t   player = 0;
     std::string name;
@@ -39,6 +64,8 @@ public:
     const Memory& Mem() const { return m_memory; }
     const Matrix4x4& ViewMatrix() const { return m_view; }
     const std::vector<Target>& Targets() const { return m_targets; }
+    const LocalState& Local() const { return m_local; }
+    Memory& Mem() { return m_memory; }
     void RequestReattach() { m_forceReattach = true; }
 
 private:
@@ -52,6 +79,7 @@ private:
     std::vector<Target> m_targets;
 
     uintptr_t m_dataModel = 0;
+    LocalState m_local{};
     Vector3   m_localRoot{};
     bool      m_forceReattach = false;
     uint64_t  m_lastAttachAttempt = 0;
