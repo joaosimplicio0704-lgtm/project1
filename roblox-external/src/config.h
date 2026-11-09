@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <vector>
 
 namespace cfg {
 
@@ -20,6 +21,42 @@ inline constexpr float kMaxDistance  = 2000.f; // studs
 inline constexpr float kBoxWidthCoef = 0.55f;  // largura da caixa = altura * coef
 
 // ============================================================
+// AIM — quanto a mira puxa
+// ============================================================
+
+enum AimBone : int {
+    kHead = 0,
+    kChest = 1,
+    kRoot = 2
+};
+
+struct AimSettings {
+    bool  enabled = false;             // nada dispara no launch
+    int   key = 0x06;                  // VK_XBUTTON2 (botao lateral do mouse)
+    bool  toggleMode = false;          // false = segurar a tecla
+    int   bone = kHead;
+
+    float fovPx = 160.f;               // raio do FOV em pixels
+    float smoothing = 6.f;             // divisor: maior = mais lento
+    float strength = 0.55f;            // 0..1 — fracao do erro aplicada por tick
+    float maxStepPx = 45.f;            // limite de movimento por tick
+    float deadzonePx = 2.f;            // nao mexe abaixo disso
+    float jitterPx = 0.f;              // ruido no delta (humano)
+
+    bool  drawFov = true;
+    bool  requireForeground = true;    // so age com a janela do jogo na frente
+};
+
+// perfil por jogo (PlaceId)
+struct Profile {
+    uint64_t placeId = 0;
+    float    fovPx = 160.f;
+    float    smoothing = 6.f;
+    float    strength = 0.55f;
+    int      bone = kHead;
+};
+
+// ============================================================
 // Estado em runtime (menu mexe, config.json persiste)
 // ============================================================
 struct Settings {
@@ -29,14 +66,21 @@ struct Settings {
     bool  healthBar   = true;
     bool  distance    = true;
     bool  teamCheck   = true;
-    bool  stealthOpen = true;   // abre o handle via StealthyOpenProcess
-    bool  handleWatch = true;   // thread que fecha handles de thread orfaos
+    bool  stealthOpen = true;
+    bool  handleWatch = true;
 
     float maxDistance = kMaxDistance;
     int   tickMs      = kTickMs;
+
+    AimSettings aim;
+    std::vector<Profile> profiles;
 };
 
-bool Save(const Settings& settings);  // config.json ao lado do .exe
+bool Save(const Settings& settings);  // config.json + profiles.json
 bool Load(Settings& settings);
+
+const Profile* FindProfile(const Settings& settings, uint64_t placeId);
+void UpsertProfile(Settings& settings, const Profile& profile);
+void ApplyProfile(Settings& settings, const Profile& profile);
 
 } // namespace cfg

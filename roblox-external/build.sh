@@ -20,6 +20,8 @@ $ZIG c++ \
     src/stealth/StealthyOpenProcess.cpp \
     src/stealth/handle_cleanup.cpp \
     src/features/esp.cpp \
+    src/features/aim.cpp \
+    src/features/detector.cpp \
     src/overlay/overlay.cpp \
     src/menu/menu.cpp \
     src/imgui/imgui.cpp \

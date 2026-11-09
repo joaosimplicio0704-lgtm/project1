@@ -35,6 +35,10 @@ public:
     bool Attached() const { return m_memory.Ready(); }
     unsigned long Pid() const { return m_memory.Pid(); }
     unsigned long long Base() const { return m_memory.Base(); }
+    uintptr_t DataModel() const { return m_dataModel; }
+    const Memory& Mem() const { return m_memory; }
+    const Matrix4x4& ViewMatrix() const { return m_view; }
+    const std::vector<Target>& Targets() const { return m_targets; }
     void RequestReattach() { m_forceReattach = true; }
 
 private:
