@@ -233,6 +233,71 @@ function Hud.build(gui, callbacks)
 	statRow(statsHolder, { name = "Coins", icon = "🪙", label = "+0/s" })
 	statRow(statsHolder, { name = "Gems", icon = "💎", label = "Gemas" })
 
+	-- VIDA E XP (superior esquerdo, abaixo dos botões de atalho)
+	-- Duas barras, nessa ordem: vida em cima (vermelho, urgente) e XP embaixo
+	-- (dourado, progresso). A criança entende barra que enche sem ler nada.
+	local vitals = Instance.new("Frame")
+	vitals.BackgroundTransparency = 1
+	vitals.Size = UDim2.fromOffset(260, 74)
+	vitals.Position = UDim2.fromOffset(18, 88)
+	vitals.Parent = gui
+
+	-- vida
+	local healthTrack = Instance.new("Frame")
+	healthTrack.Size = UDim2.new(1, 0, 0, 26)
+	healthTrack.BackgroundColor3 = Color3.fromRGB(70, 40, 40)
+	healthTrack.BorderSizePixel = 0
+	healthTrack.Parent = vitals
+	Theme.corner(healthTrack, 13)
+	Theme.stroke(healthTrack, Color3.fromRGB(40, 24, 24), 3)
+
+	local healthFill = Instance.new("Frame")
+	healthFill.Size = UDim2.new(1, 0, 1, 0)
+	healthFill.BackgroundColor3 = Color3.fromRGB(235, 88, 88)
+	healthFill.BorderSizePixel = 0
+	healthFill.Parent = healthTrack
+	Theme.corner(healthFill, 13)
+
+	local healthText = Theme.label(vitals, {
+		text = "❤️ 100 / 100",
+		size = UDim2.fromOffset(260, 26),
+		textSize = 17,
+		color = Color3.fromRGB(255, 255, 255),
+		strokeTransparency = 0.2,
+		zIndex = (healthTrack.ZIndex or 1) + 2,
+	})
+	refs.healthFill = healthFill
+	refs.healthText = healthText
+
+	-- XP
+	local xpTrack = Instance.new("Frame")
+	xpTrack.Size = UDim2.new(1, 0, 0, 18)
+	xpTrack.Position = UDim2.fromOffset(0, 30)
+	xpTrack.BackgroundColor3 = Color3.fromRGB(56, 48, 34)
+	xpTrack.BorderSizePixel = 0
+	xpTrack.Parent = vitals
+	Theme.corner(xpTrack, 9)
+	Theme.stroke(xpTrack, Color3.fromRGB(40, 32, 20), 3)
+
+	local xpFill = Instance.new("Frame")
+	xpFill.Size = UDim2.new(0, 0, 1, 0)
+	xpFill.BackgroundColor3 = Color3.fromRGB(255, 206, 61)
+	xpFill.BorderSizePixel = 0
+	xpFill.Parent = xpTrack
+	Theme.corner(xpFill, 9)
+
+	local xpText = Theme.label(vitals, {
+		text = "Nv 1 · 0 / 100",
+		size = UDim2.fromOffset(260, 18),
+		position = UDim2.fromOffset(0, 30),
+		textSize = 14,
+		color = Color3.fromRGB(255, 255, 255),
+		strokeTransparency = 0.25,
+		zIndex = (xpTrack.ZIndex or 1) + 2,
+	})
+	refs.xpFill = xpFill
+	refs.xpText = xpText
+
 	-- BOTÕES LATERAIS (esquerda, meio)
 	local sideHolder = Instance.new("Frame")
 	sideHolder.BackgroundTransparency = 1
@@ -315,6 +380,27 @@ function Hud.build(gui, callbacks)
 		if last.rebirths ~= snapshot.rebirths then
 			refs.Rebirths.Text = tostring(snapshot.rebirths)
 			last.rebirths = snapshot.rebirths
+		end
+
+		-- VIDA: muda de cor conforme o perigo. Barra vermelha em 100% e
+		-- barra vermelha em 10% não comunicam nada; a cor é o aviso.
+		local maxHealth = snapshot.maxHealth or 100
+		local health = math.clamp(snapshot.health or maxHealth, 0, maxHealth)
+		local fraction = maxHealth > 0 and health / maxHealth or 0
+		if refs.healthFill then
+			refs.healthFill.Size = UDim2.fromScale(fraction, 1)
+			refs.healthFill.BackgroundColor3 = fraction > 0.5 and Color3.fromRGB(235, 88, 88)
+				or (fraction > 0.25 and Color3.fromRGB(245, 160, 60) or Color3.fromRGB(200, 50, 50))
+			refs.healthText.Text = string.format("❤️ %d / %d", math.floor(health), math.floor(maxHealth))
+		end
+
+		-- XP
+		local progress = snapshot.progress
+		if progress and refs.xpFill then
+			local need = math.max(1, progress.xpToNext or 1)
+			local have = math.clamp(progress.xp or 0, 0, need)
+			refs.xpFill.Size = UDim2.fromScale(have / need, 1)
+			refs.xpText.Text = string.format("Nv %d · %d / %d", progress.level or 1, have, need)
 		end
 
 		local quest = GameConfig.Quests[snapshot.questIndex]

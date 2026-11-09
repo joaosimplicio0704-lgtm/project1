@@ -13,6 +13,10 @@ local Format = require(Shared.Format)
 
 local Sessions = require(script.Parent.Sessions)
 local PlayerData = require(script.Parent.PlayerData)
+local MineServer = require(script.Parent.MineServer)
+local Monsters = require(script.Parent.Monsters)
+local Progress = require(script.Parent.Progress)
+local Combat = require(Shared.Combat)
 
 local Game = {}
 
@@ -22,6 +26,7 @@ local rng = Random.new(os.time())
 
 function Game.init(remoteSet)
 	remotes = remoteSet
+	MineServer.init(GameConfig)
 end
 
 ---------------------------------------------------------------------------
@@ -71,10 +76,44 @@ function Game.tick(dt)
 	for player, session in pairs(Sessions.all()) do
 		if player.Parent == Players then
 			local data = session.data
-			local income = Pets.income(data)
+			Progress.ensure(data)
+
+			-- bônus de nível entra na renda: subir de nível tem que aparecer
+			-- no número que o jogador vê crescendo, não só na vida
+			local levelBonus = Combat.levelBonus(data.level).income
+			local income = Pets.income(data) * levelBonus
 			if income > 0 then
 				addCoins(session, income * dt)
 			end
+
+			-- MONSTRO: nasce de novo e, se o jogador está no bioma dele,
+			-- ataca. O ataque é por proximidade do campo (checado no cliente
+			-- pelo painel de combate), então aqui só roda quando o jogador
+			-- está mesmo naquele bioma.
+			Monsters.tick(player, data)
+			if session.inCombat then
+				session.sinceHit = (session.sinceHit or 0) + dt
+				local maxHealth = Combat.playerMaxHealth(data.level)
+				if session.sinceHit >= Combat.RegenDelay then
+					data.health = Combat.regenerate(data.health or maxHealth, maxHealth, session.sinceHit, dt)
+				end
+				if (data.health or maxHealth) <= 0 then
+					-- morrer não tira pet nem moeda: volta ao spawn com vida
+					-- cheia depois de alguns segundos
+					data.health = maxHealth
+					session.sinceHit = Combat.RegenDelay
+					Game.fx.hurt(session, true)
+					remotes.event:FireClient(session.player, Net.EventKind.Toast, {
+						text = "💀 você caiu! voltando com vida cheia",
+						kind = "error",
+					})
+				end
+			else
+				-- fora de combate regenera sempre
+				local maxHealth = Combat.playerMaxHealth(data.level)
+				data.health = Combat.regenerate(data.health or maxHealth, maxHealth, 999, dt)
+			end
+
 			bumpQuest(session)
 		end
 	end
@@ -135,6 +174,18 @@ function Game.snapshot(session)
 		eggBought = data.eggBought,
 		rebirthCost = GameConfig.rebirthCost(GameConfig.rate(data), data.rebirths),
 		rate = GameConfig.rate(data),
+		-- PROGRESSAO: nível, barra de XP e vida
+		progress = Progress.snapshot(data),
+		health = data.health or Combat.PlayerMaxHealth,
+		maxHealth = Combat.playerMaxHealth(data.level or 1),
+		monster = Monsters.snapshot(session.player, data, data.biome or "meadow"),
+		mine = MineServer.snapshot(session.player, data),
+		mineRate = MineServer.rate(session.player, data),
+		biome = data.biome or "meadow",
+		biomes = Biomes.unlockedMap({
+			hatched = data.stats and data.stats.hatched or 0,
+			rebirths = data.rebirths or 0,
+		}),
 	}
 end
 
@@ -174,13 +225,107 @@ local function fail(session, message)
 	return false, message
 end
 
+-- Ganchos preenchidos pelo init.server (o Game nao conhece jogador/CFrame).
+Game.arrivalFor = function() end
+-- Feedback no mundo: cada acao deixa rastro visivel (moeda, anel, pet).
+-- Sem isto a mecanica so muda numeros no painel e quem olha o mapa nao ve
+-- jogo nenhum acontecendo.
+Game.fx = {
+	tap = function() end,
+	hatch = function() end,
+	equip = function() end,
+	upgrade = function() end,
+	rebirth = function() end,
+	mine = function() end,
+	hit = function() end,
+	levelUp = function() end,
+	hurt = function() end,
+	offline = function() end,
+}
+
 Game.handlers = {}
+
+-- COMBATE
+-- Bater no monstro é a ação central do jogo agora. O dano é calculado no
+-- SERVIDOR com o nível real do jogador: confiar no número que o cliente
+-- manda seria deixar qualquer um matar em um toque.
+function Game.handlers.hit(session, payload)
+	local data = session.data
+	Progress.ensure(data)
+	local biomeId = data.biome or "meadow"
+
+	-- jogador + pets equipados: o pet entra no dano, não só na recompensa.
+	-- O pet é limitado a uma fração do acerto do jogador (Progress.PetMaxShare),
+	-- então a ordem importa: calcula o acerto do jogador primeiro.
+	local playerHit = Combat.playerDamage(data.level, GameConfig.tapPower(data))
+	local petDamage = Progress.petDamage(data, playerHit)
+	local damage = playerHit + petDamage
+	local result, reason = Monsters.hit(session.player, data, biomeId, damage)
+	if not result then
+		return fail(session, reason or "não consegui bater")
+	end
+
+	-- todo mundo equipado ganha XP por participar da briga
+	local petLevelUps = {}
+	if result.killed then
+		local rewards = Progress.awardPetKill(data, result.xp)
+		for _, r in ipairs(rewards) do
+			if r.leveled then
+				petLevelUps[#petLevelUps + 1] = r
+			end
+		end
+	end
+
+	local xpInfo = nil
+	if result.killed then
+		addCoins(session, result.coins)
+		xpInfo = Progress.addXp(data, result.xp, "kill")
+		if xpInfo.leveled then
+			-- subir de nível cura cheio: recompensa que a criança SENTE
+			data.health = Combat.playerMaxHealth(data.level)
+		end
+		Game.fx.hit(session, result, true)
+	else
+		Game.fx.hit(session, result, false)
+	end
+
+	remotes.event:FireClient(session.player, Net.EventKind.Hit, {
+		damage = result.damage,
+		health = result.health,
+		maxHealth = result.maxHealth,
+		killed = result.killed,
+		coins = result.coins,
+		respawnIn = result.respawnIn,
+		xp = xpInfo,
+		petLevelUps = petLevelUps,
+		level = data.level,
+	})
+	if xpInfo and xpInfo.leveled then
+		Game.fx.levelUp(session, xpInfo.level)
+	end
+
+	Game.pushSnapshot(session)
+	return true
+end
+
+-- O cliente avisa que entrou/saiu do raio da arena. O servidor usa isso
+-- para saber se o monstro está atacando e se a regeneração está pausada.
+-- Vida é do servidor; só a POSIÇÃO vem do cliente.
+function Game.handlers.setCombat(session, payload)
+	session.inCombat = payload and true or false
+	if session.inCombat then
+		session.sinceHit = 0
+	end
+	return true
+end
 
 function Game.handlers.tap(session, payload)
 	local data = session.data
 	local count = math.clamp(tonumber(payload) or 1, 1, 10)
-	addCoins(session, GameConfig.tapPower(data) * count)
+	local gained = GameConfig.tapPower(data) * count
+	addCoins(session, gained)
 	data.stats.taps += count
+	Game.fx.tap(session, gained)
 	bumpQuest(session)
 	return true
 end
@@ -201,7 +346,6 @@ function Game.handlers.hatch(session, payload)
 	end
 	data.coins -= price
 	data.eggBought[egg.id] = bought + 1
-
 	local pet =
 		GameConfig.rollPet(egg.id, rng:NextNumber(), rng:NextNumber(), GameConfig.SecretChance / GameConfig.luck(data))
 	if not pet then
@@ -216,12 +360,59 @@ function Game.handlers.hatch(session, payload)
 		toast(session, string.format("🪙 %d pets auto-vendidos · +%s", soldCount, Format.number(soldValue)), "info")
 	end
 
+	Progress.awardSource(data, "hatch")
 	bumpQuest(session)
 	remotes.event:FireClient(
 		session.player,
 		Net.EventKind.Hatch,
 		{ petId = pet.id, uid = instance.uid, rarity = pet.rarity }
 	)
+	Game.fx.hatch(session, pet, instance)
+	return true
+end
+
+-- MINA DOS PETS
+-- Recolhe o minério que os pets trouxeram. Sem uid, recolhe todos os prontos.
+function Game.handlers.collectMine(session, uid)
+	local data = session.data
+	local collected, coins = MineServer.collect(session.player, data, tonumber(uid))
+	if #collected == 0 then
+		return fail(session, "nenhum pet voltou ainda")
+	end
+
+	addCoins(session, coins)
+
+	local best = collected[1].ore
+	for _, entry in ipairs(collected) do
+		if entry.ore.value > best.value then
+			best = entry.ore
+		end
+	end
+
+	remotes.event:FireClient(session.player, Net.EventKind.Mine, {
+		ores = (function()
+			local out = {}
+			for _, entry in ipairs(collected) do
+				out[#out + 1] =
+					{ id = entry.ore.id, name = entry.ore.name, color = entry.ore.color, value = entry.ore.value }
+			end
+			return out
+		end)(),
+		coins = coins,
+		best = { id = best.id, name = best.name, color = best.color },
+	})
+	Game.fx.mine(session, best)
+	Game.pushSnapshot(session)
+	return true
+end
+
+-- Apressa um pet que está na mina.
+function Game.handlers.rushMine(session, uid)
+	local ok, reason = MineServer.rush(session.player, session.data, tonumber(uid))
+	if not ok then
+		return fail(session, reason)
+	end
+	Game.pushSnapshot(session)
 	return true
 end
 
@@ -232,11 +423,15 @@ function Game.handlers.equip(session, uid)
 	if not ok then
 		return fail(session, reason)
 	end
+	MineServer.sync(session.player, session.data)
+	Game.fx.equip(session)
 	return true
 end
 
 function Game.handlers.unequip(session, uid)
 	Pets.unequip(session.data, tonumber(uid))
+	MineServer.sync(session.player, session.data)
+	Game.fx.equip(session)
 	return true
 end
 
@@ -264,6 +459,7 @@ function Game.handlers.buyUpgrade(session, kind)
 	end
 	data.coins -= cost
 	data.upgrades[kind] = tier + 1
+	Game.fx.upgrade(session, kind, tier + 1)
 	bumpQuest(session)
 	return true
 end
@@ -317,6 +513,7 @@ function Game.handlers.rebirth(session)
 
 	Pets.autoEquip(data)
 	remotes.event:FireClient(session.player, Net.EventKind.Rebirth, { rebirths = data.rebirths, crystals = crystals })
+	Game.fx.rebirth(session, data.rebirths)
 	return true
 end
 
@@ -343,6 +540,30 @@ end
 
 function Game.handlers.setZone(session, zone)
 	-- o servidor informa ao cliente qual UI abrir; usado pelo mundo
+	return true
+end
+
+-- Viagem entre biomas. O cliente manda o id; o servidor confere o desbloqueio
+-- com os dados da sessao e so entao autoriza. Nunca confiar no cliente: sem
+-- isso um jogador com 0 rebirths abriria a nebulosa cosmica clicando no portal.
+function Game.handlers.travel(session, biomeId)
+	local data = session.data
+	local biome = Biomes.ById[biomeId]
+	if not biome then
+		return false, "Mundo desconhecido"
+	end
+
+	local unlocked = Biomes.unlockedMap({
+		hatched = data.stats and data.stats.hatched or 0,
+		rebirths = data.rebirths or 0,
+	})
+
+	if not unlocked[biomeId] then
+		return false, "🔒 " .. biome.name .. " — " .. Biomes.unlockLabel(biome)
+	end
+
+	data.biome = biomeId
+	Game.arrivalFor(session, biomeId)
 	return true
 end
 

@@ -18,7 +18,7 @@ const prepare = (src) =>
 		.filter((line) => !/^local Shared = /.test(line))
 		.filter(
 			(line) =>
-				!/^local (Sessions|PlayerData|World|Remotes|Game|Net|GameConfig|Pets|Format) = require\(/.test(line),
+				!/^local (Sessions|PlayerData|World|Remotes|Game|Effects|Net|GameConfig|Pets|Format|Mine|MineServer|Combat|Monsters|Progress) = require\(/.test(line),
 		)
 		.join("\n");
 
@@ -31,11 +31,52 @@ local __remoteLog = {}
 Color3 = {
   fromRGB = function(r,g,b) return {r=r,g=g,b=b} end,
 }
+local V3 = {}
+V3.__add = function(a, b) return setmetatable({ X = a.X + b.X, Y = a.Y + b.Y, Z = a.Z + b.Z }, V3) end
+V3.__sub = function(a, b) return setmetatable({ X = a.X - b.X, Y = a.Y - b.Y, Z = a.Z - b.Z }, V3) end
+V3.__mul = function(a, n) return setmetatable({ X = a.X * n, Y = a.Y * n, Z = a.Z * n }, V3) end
+V3.__index = function(v, key)
+  if key == "Magnitude" then return math.sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z) end
+  if key == "Unit" then
+    local m = math.sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
+    if m == 0 then return setmetatable({ X = 0, Y = 0, Z = 0 }, V3) end
+    return setmetatable({ X = v.X/m, Y = v.Y/m, Z = v.Z/m }, V3)
+  end
+  return nil
+end
 Vector3 = {
-  new = function(x,y,z) return {X=x,Y=y,Z=z} end,
+  new = function(x,y,z) return setmetatable({X=x or 0,Y=y or 0,Z=z or 0}, V3) end,
 }
-CFrame = { new = function() return {} end }
-Enum = { Material = {}, SurfaceType = {}, PartType = {} }
+local cfMt = {}
+cfMt.__mul = function(a, b) return setmetatable({ pos = (a.pos or {X=0,Y=0,Z=0}) }, cfMt) end
+CFrame = {
+  new = function(x, y, z)
+    if type(x) == "table" then return setmetatable({ pos = x.pos or x }, cfMt) end
+    return setmetatable({ pos = Vector3.new(x or 0, y or 0, z or 0) }, cfMt)
+  end,
+  Angles = function() return setmetatable({ pos = Vector3.new(0,0,0) }, cfMt) end,
+}
+-- Enum generico: qualquer grupo devolve um valor com Name
+Enum = setmetatable({}, {
+  __index = function(t, group)
+    local g = setmetatable({}, { __index = function(tt, k)
+      local v = { Name = k }
+      rawset(tt, k, v)
+      return v
+    end })
+    rawset(t, group, g)
+    return g
+  end,
+})
+
+-- Servicos usados pelo Effects. Precisam existir ANTES do modulo ser lido.
+TweenInfo = { new = function(...) return { ... } end }
+TweenService = {
+  Create = function(self, part, info, goal) return { Play = function() end } end,
+}
+Debris = { AddItem = function() end }
+RunService = { Heartbeat = { Connect = function() return { Disconnect = function() end } end } }
+UDim2 = { fromOffset = function() return {} end, fromScale = function() return {} end }
 
 Random = {
   new = function()
@@ -55,7 +96,49 @@ Random = {
 }
 
 Players = {}
-Instance = { new = function() error("servidor nao deveria criar Instance aqui") end }
+
+-- Instance minimalista o suficiente para o Effects rodar. Antes este host
+-- dava error() de proposito ("servidor nao deveria criar Instance aqui"),
+-- o que impedia testar qualquer coisa que fabrique objeto no mundo.
+local __imt = {}
+__imt.__index = function(self, key)
+  local props = rawget(self, "__props")
+  if props[key] ~= nil then return props[key] end
+  local kids = rawget(self, "__children")
+  if key == "GetChildren" then return function() return kids end end
+  if key == "FindFirstChild" then
+    return function(_, n)
+      for _, c in ipairs(kids) do if c.Name == n then return c end end
+      return nil
+    end
+  end
+  if key == "Destroy" then return function() end end
+  if key == "SetAttribute" then return function() end end
+  if key == "GetAttribute" then return function() return nil end end
+  if key == "IsA" then return function() return false end end
+  return nil
+end
+__imt.__newindex = function(self, key, value)
+  rawget(self, "__props")[key] = value
+end
+Instance = {
+  new = function(class)
+    local o = setmetatable({}, __imt)
+    rawset(o, "__props", { ClassName = class, Name = class })
+    rawset(o, "__children", {})
+    return o
+  end,
+}
+workspace = Instance.new("Folder")
+workspace.Name = "Workspace"
+game = {
+  GetService = function(_, name)
+    if name == "TweenService" then return TweenService end
+    if name == "Debris" then return Debris end
+    if name == "RunService" then return RunService end
+    return Instance.new("Folder")
+  end,
+}
 
 print = function(...)
   local parts = {}
@@ -84,6 +167,7 @@ const BODY = [
 	mod("Format", "src/shared/Format.luau"),
 	mod("Net", "src/shared/Net.luau"),
 	mod("Pets", "src/shared/Pets.luau"),
+	mod("Biomes", "src/shared/Biomes.luau"),
 	`local Sessions = { byPlayer = {} }
 function Sessions.get(p) return Sessions.byPlayer[p] end
 function Sessions.all() return Sessions.byPlayer end`,
@@ -94,8 +178,46 @@ function Sessions.all() return Sessions.byPlayer end`,
   markDirty = function() end,
   save = function() end,
 }`,
+	mod("Mine", "src/shared/Mine.luau"),
+	mod("Combat", "src/shared/Combat.luau"),
+	`local MineServer = {
+  init = function() end,
+  sync = function() end,
+  forget = function() end,
+  rate = function() return 0 end,
+  snapshot = function() return { trips = {}, ores = {}, best = "", dug = 0, tripSeconds = 7 } end,
+  collect = function() return {}, 0 end,
+  rush = function() return false, "stub" end,
+}`,
+	`local Monsters = {
+  sync = function() end,
+  forget = function() end,
+  tick = function() end,
+  hit = function() return nil, "stub" end,
+  attackPlayer = function(_, _, h) return h end,
+  snapshot = function() return { monsterId = "slime", name = "Gosma", health = 40, maxHealth = 40, alive = true, respawnIn = 0, tier = 1 } end,
+}`,
+	mod("Progress", "src/server/Progress.luau"),
 	mod("Game", "src/server/Game.luau"),
+	mod("Effects", "src/server/Effects.luau"),
 	String.raw`
+-- Wiring dos efeitos, igual ao init.server. O boot antigo montava os modulos
+-- na mao e NUNCA passava por isto: um gancho quebrado (Game.fx.tap virando
+-- nil) passava batido. Agora qualquer acao que chame os ganchos exercita o
+-- caminho real.
+Effects.init(workspace)
+local __fxCalls = { tap = 0, hatch = 0, equip = 0, upgrade = 0, rebirth = 0 }
+Game.fx.tap = function() __fxCalls.tap += 1 end
+Game.fx.hatch = function() __fxCalls.hatch += 1 end
+Game.fx.equip = function() __fxCalls.equip += 1 end
+Game.fx.upgrade = function() __fxCalls.upgrade += 1 end
+Game.fx.rebirth = function() __fxCalls.rebirth += 1 end
+Game.fx.mine = function() __fxCalls.mine = (__fxCalls.mine or 0) + 1 end
+Game.fx.hit = function() __fxCalls.hit = (__fxCalls.hit or 0) + 1 end
+Game.fx.levelUp = function() __fxCalls.levelUp = (__fxCalls.levelUp or 0) + 1 end
+Game.fx.hurt = function() __fxCalls.hurt = (__fxCalls.hurt or 0) + 1 end
+Game.fx.offline = function() end
+
 Game.init(__remoteSet)
 
 local function makePlayer(name, id)
@@ -203,9 +325,47 @@ for _ = 1, 40 do Game.tick(0.25) end
 assert(s1.data.coins > before, "renda parou depois do rebirth")
 print("renda pos-rebirth: +" .. Format.number(s1.data.coins - before))
 
+-- VIAGEM ENTRE BIOMAS
+-- s2 é um jogador novo (0 rebirths): os mundos de rebirth tem que fechar.
+-- Não existe player2 real: forjamos o mínimo que o handler usa (Name).
+local fakePlayer = { Name = "Novato", UserId = 999 }
+local s2 = { player = fakePlayer, data = GameConfig.defaultData(), dirty = false, tapWindow = {}, lastSnapshot = 0 }
+s2.data = GameConfig.defaultData()
+s2.data.stats.hatched = 0
+s2.data.rebirths = 0
+s2.data.biome = "meadow"
+
+local arrived = nil
+Game.arrivalFor = function(session, biomeId) arrived = session.player.Name .. "->" .. biomeId end
+
+local okMeadow = Game.handle(s2, A.Travel, "meadow")
+print("travel meadow: " .. tostring(okMeadow))
+assert(okMeadow, "bioma livre deveria ser acessivel")
+
+local okIce, errIce = Game.handle(s2, A.Travel, "ice")
+print("travel ice (bloqueado): " .. tostring(okIce) .. " " .. tostring(errIce or ""))
+assert(not okIce, "jogador com 0 rebirths NAO pode entrar no gelo")
+assert(errIce and string.find(errIce, "Renascimento"), "erro de bloqueio sem requisito: " .. tostring(errIce))
+
+local okBad, errBad = Game.handle(s2, A.Travel, "nao_existe")
+assert(not okBad and errBad, "bioma inexistente deveria falhar")
+
+-- com rebirths, o gelo abre de verdade
+s2.data.rebirths = 2
+local okIce2 = Game.handle(s2, A.Travel, "ice")
+print("travel ice (liberado): " .. tostring(okIce2) .. " bioma atual: " .. tostring(s2.data.biome))
+assert(okIce2, "rebirth 2 deveria abrir o gelo")
+assert(s2.data.biome == "ice", "bioma atual nao mudou")
+assert(arrived ~= nil, "arrivalFor nao foi chamado — o jogador nao seria teleportado")
+
+-- o snapshot precisa carregar o bioma atual e o mapa de desbloqueio
+local snapTravel = Game.snapshot(s2)
+assert(snapTravel.biome == "ice", "snapshot com bioma errado")
+assert(snapTravel.biomes and snapTravel.biomes.meadow == true, "snapshot sem mapa de desbloqueio")
+
 -- o snapshot que vai pro cliente tem que serializar sem campo quebrado
 local snap = Game.snapshot(s1)
-local required = { "coins","gems","crystals","rebirths","pets","equipped","upgrades","gemUpgrades","selectedEgg","stats","questIndex","income","tapPower","slots","luck","rate","rebirthCost" }
+local required = { "coins","gems","crystals","rebirths","pets","equipped","upgrades","gemUpgrades","selectedEgg","stats","questIndex","income","tapPower","slots","luck","rate","rebirthCost","biome","biomes" }
 for _, key in ipairs(required) do
   assert(snap[key] ~= nil, "snapshot sem campo: " .. key)
 end
@@ -215,6 +375,49 @@ assert(type(snap.rebirthCost) == "number", "rebirthCost nao numerico")
 local static = Game.staticState()
 assert(#static.eggs == #GameConfig.Eggs, "staticState nao mandou todos os ovos")
 assert(#static.pets > 0, "staticState sem pets")
+
+-- ---------------------------------------------------------------------------
+-- GANCHOS DE FEEDBACK
+-- Cada acao do jogador tem que chamar o gancho correspondente. Sem isto a
+-- mecanica roda mas o mundo fica mudo: foi exatamente a reclamacao do
+-- usuario ("ate agora nao vi mecanica nenhuma").
+-- ---------------------------------------------------------------------------
+s1.data.coins = 1e9
+act(A.Tap, 1)
+act(A.Hatch, nil)
+-- precisa ser um pet NAO equipado: Pets.equip devolve "ja equipado" e nao
+-- dispara o gancho. Escolhe o primeiro fora da lista.
+local freeUid = nil
+for _, pet in ipairs(s1.data.pets) do
+  local taken = false
+  for _, uid in ipairs(s1.data.equipped) do
+    if uid == pet.uid then taken = true end
+  end
+  if not taken then freeUid = pet.uid break end
+end
+if not freeUid then
+  -- todos equipados pelo autoEquip: cria um sobrando para exercitar o gancho
+  local extra = Pets.add(s1.data, "chick", false)
+  freeUid = extra and extra.uid
+end
+assert(freeUid, "nao consegui preparar um pet para equipar")
+
+-- Slots cheios e o caso normal (autoEquip preenche tudo ao entrar), entao
+-- "equipar" um pet sobrando falha por design. O caminho que SEMPRE passa e
+-- desequipar: tira um e o gancho roda. Depois equipa de volta.
+local equippedUid = s1.data.equipped[1]
+act(A.Unequip, equippedUid)
+assert(#s1.data.equipped < GameConfig.petSlots(s1.data), "unequip nao liberou slot")
+act(A.Equip, freeUid)
+act(A.BuyUpgrade, "tap")
+
+print(string.format("ganchos: tap=%d hatch=%d equip=%d upgrade=%d",
+  __fxCalls.tap, __fxCalls.hatch, __fxCalls.equip, __fxCalls.upgrade))
+
+assert(__fxCalls.tap > 0, "tap nao disparou efeito no mundo")
+assert(__fxCalls.hatch > 0, "chocar ovo nao disparou efeito no mundo")
+assert(__fxCalls.upgrade > 0, "upgrade nao disparou efeito no mundo")
+assert(__fxCalls.equip > 0, "equipar pet nao disparou efeito no mundo")
 
 print("\nboot ok")
 `,

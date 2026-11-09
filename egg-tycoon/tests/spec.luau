@@ -261,6 +261,139 @@ local fresh = GameConfig.defaultData()
 local seconds = GameConfig.secondsToAfford("starter", fresh)
 check("primeiro ovo acessível", seconds < 60, tostring(seconds))
 
+---------------------------------------------------------------------------
+-- BIOMAS E DESBLOQUEIO
+---------------------------------------------------------------------------
+
+check("7 biomas", #Biomes.List == 7, tostring(#Biomes.List))
+
+local missingEgg = nil
+local seenEgg = {}
+local duplicateEgg = nil
+for _, biome in ipairs(Biomes.List) do
+	if not GameConfig.EggById[biome.eggId] then
+		missingEgg = biome.id .. ":" .. biome.eggId
+	end
+	if seenEgg[biome.eggId] then
+		duplicateEgg = biome.eggId
+	end
+	seenEgg[biome.eggId] = true
+end
+check("todo bioma tem ovo valido", missingEgg == nil, tostring(missingEgg))
+check("ovos nao se repetem entre biomas", duplicateEgg == nil, tostring(duplicateEgg))
+
+local biomeFresh = Biomes.unlockedMap({ hatched = 0, rebirths = 0 })
+check("meadow e livre", biomeFresh.meadow == true)
+local allLocked = true
+for _, biome in ipairs(Biomes.List) do
+	if biome.id ~= "meadow" and biomeFresh[biome.id] then
+		allLocked = false
+	end
+end
+check("os outros comecam bloqueados", allLocked)
+
+local afterHatch = Biomes.unlockedMap({ hatched = 3, rebirths = 0 })
+check("3 ovos abrem a floresta", afterHatch.forest == true)
+check("3 ovos nao abrem o deserto", afterHatch.desert == false)
+
+local oneRebirth = Biomes.unlockedMap({ hatched = 0, rebirths = 1 })
+check("rebirth 1 abre o deserto", oneRebirth.desert == true)
+check("rebirth 1 nao abre o gelo", oneRebirth.ice == false)
+
+-- Rebirths abrem os mundos de rebirth; a floresta depende de ovos chocados.
+local full = Biomes.unlockedMap({ hatched = 99, rebirths = 5 })
+local allOpen = true
+for _, biome in ipairs(Biomes.List) do
+	if not full[biome.id] then
+		allOpen = false
+	end
+end
+check("rebirth 5 + 99 ovos abre tudo", allOpen)
+
+check("forEgg encontra o bioma do ovo", Biomes.forEgg("halloween").id == "halloween")
+
+-- geometria: ilhas longe do hub, chegada dentro da ilha e acima do chao
+local misplaced = nil
+for _, biome in ipairs(Biomes.List) do
+	local c = Biomes.centerVector(biome)
+	local flat = math.sqrt(c.X * c.X + c.Z * c.Z)
+	if biome.id == "cosmos" then
+		if c.Y < 100 then
+			misplaced = "cosmos baixo demais"
+		end
+	elseif flat < 200 then
+		misplaced = biome.id .. " perto do hub"
+	end
+
+	local spawn = Biomes.spawnPoint(biome)
+	local dx, dz = spawn.X - c.X, spawn.Z - c.Z
+	if math.sqrt(dx * dx + dz * dz) >= biome.radius then
+		misplaced = biome.id .. " chegada fora da ilha"
+	end
+	if spawn.Y <= c.Y then
+		misplaced = biome.id .. " chegada abaixo do chao"
+	end
+end
+check("geometria dos biomas coerente", misplaced == nil, tostring(misplaced))
+
+check("rotulo livre", Biomes.unlockLabel(Biomes.get("meadow")) == "Livre")
+check("rotulo de ovos", string.find(Biomes.unlockLabel(Biomes.get("forest")), "3") ~= nil)
+check("rotulo de rebirth", string.find(Biomes.unlockLabel(Biomes.get("ice")), "2") ~= nil)
+
+---------------------------------------------------------------------------
+-- DISTANCIA ENTRE AS ILHAS
+---------------------------------------------------------------------------
+-- As ilhas já ficaram a 68 studs uma da outra e pareciam coladas. Este teste
+-- trava o espaçamento mínimo: se alguém aproximar os centros de novo, a suíte
+-- quebra antes de virar mapa.
+
+local closest, closestPair = math.huge, nil
+for i, a in ipairs(Biomes.List) do
+	for j, b in ipairs(Biomes.List) do
+		if j > i and a.id ~= "cosmos" and b.id ~= "cosmos" then
+			local ca, cb = Biomes.centerVector(a), Biomes.centerVector(b)
+			local dx, dz = ca.X - cb.X, ca.Z - cb.Z
+			local gap = math.sqrt(dx * dx + dz * dz) - a.radius - b.radius
+			if gap < closest then
+				closest = gap
+				closestPair = a.id .. "/" .. b.id
+			end
+		end
+	end
+end
+-- 170 studs: perto o suficiente para caber na tela, longe o bastante para
+-- cada ilha ter horizonte proprio. Abaixo de 120 as silhuetas se encostam.
+check(
+	"ilhas com pelo menos 120 studs de vao",
+	closest >= 120,
+	string.format("%s: %.0f", tostring(closestPair), closest)
+)
+
+local highest = 0
+for _, b in ipairs(Biomes.List) do
+	if b.radius > highest then
+		highest = b.radius
+	end
+end
+check("todas as ilhas tem raio parecido", highest <= 130, tostring(highest))
+
+-- a luz de cada bioma precisa existir e ser distinta o bastante para se notar
+local lightKeys = {}
+local missingLight = nil
+for _, b in ipairs(Biomes.List) do
+	if not b.light or not b.light.ambience or not b.light.glow then
+		missingLight = b.id
+	end
+	if b.light then
+		local key = table.concat(b.light.ambience, ",")
+		if lightKeys[key] then
+			missingLight = b.id .. " repete a luz de " .. lightKeys[key]
+		end
+		lightKeys[key] = b.id
+	end
+end
+check("todo bioma tem luz propria", missingLight == nil, tostring(missingLight))
+
 print(string.format("\n%d passed, %d failed", passed, failed))
 if failed > 0 then
 	error("testes falharam")

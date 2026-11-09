@@ -23,6 +23,9 @@ local PetsPanel = require(script.PetsPanel)
 local ShopPanel = require(script.ShopPanel)
 local Toasts = require(script.Toasts)
 local WorldUI = require(script.WorldUI)
+local BiomesPanel = require(script.BiomesPanel)
+local MinePanel = require(script.MinePanel)
+local CombatPanel = require(script.CombatPanel)
 
 ---------------------------------------------------------------------------
 -- GUI RAIZ
@@ -45,11 +48,16 @@ Toasts.init(gui)
 EggPanel.build(gui)
 PetsPanel.build(gui)
 ShopPanel.build(gui)
+BiomesPanel.build(gui)
+MinePanel.build(gui)
+CombatPanel.build(gui)
 
 local function closeAll()
 	EggPanel.hide()
 	PetsPanel.hide()
 	ShopPanel.hide()
+	BiomesPanel.hide()
+	MinePanel.hide()
 end
 
 local function openEggs(eggId)
@@ -169,12 +177,19 @@ WorldUI.build({
 					Toasts.push("Faltam " .. Format.number(cost - snapshot.coins) .. " moedas", "error")
 				end
 			end
+		elseif zone == Net.Zones.Mine then
+			closeAll()
+			MinePanel.show()
 		elseif zone == Net.Zones.Trade then
 			closeAll()
 			PetsPanel.show()
 		elseif zone == "egg_halloween" then
 			openEggs()
 		end
+	end,
+	-- Portal: o servidor valida o desbloqueio e devolve erro se faltar.
+	travel = function(biomeId)
+		NetClient.action(Net.ActionKind.Travel, biomeId)
 	end,
 })
 
@@ -188,6 +203,9 @@ NetClient.state.OnClientEvent:Connect(function(snapshot)
 	if EggPanel and EggPanel.refresh then
 		EggPanel.refresh()
 	end
+	if BiomesPanel and BiomesPanel.refresh then
+		BiomesPanel.refresh()
+	end
 end)
 
 NetClient.on(function(kind, payload)
@@ -197,6 +215,37 @@ NetClient.on(function(kind, payload)
 		EggPanel.onHatch(payload)
 	elseif kind == Net.EventKind.Rebirth then
 		Toasts.push(string.format("♻️ Rebirth %d! +%d 💎", payload.rebirths, payload.crystals), "success")
+	elseif kind == Net.EventKind.Hit then
+		-- dano no monstro: número voando é o que faz o clique ter peso
+		CombatPanel.update()
+		CombatPanel.step(dt)
+		if payload.killed then
+			Toasts.push(
+				string.format(
+					"⚔️ %s derrotado! +%s moedas",
+					payload.name or "monstro",
+					Format.number(payload.coins or 0)
+				),
+				"success"
+			)
+		end
+		if payload.xp and payload.xp.leveled then
+			Toasts.push(string.format("⭐ Nível %d!", payload.xp.level), "success")
+		end
+	elseif kind == Net.EventKind.LevelUp then
+		Toasts.push(string.format("⭐ SUBIU PARA O NÍVEL %d!", payload.level), "success")
+	elseif kind == Net.EventKind.Mine then
+		-- O que o pet trouxe. Sem este aviso, o jogador recolhe e não vê
+		-- nada: o dinheiro some no HUD e o momento passa batido.
+		local names = {}
+		for _, ore in ipairs(payload.ores or {}) do
+			names[#names + 1] = ore.name
+		end
+		Toasts.push(
+			string.format("⛏️ %s · +%s moedas", table.concat(names, ", "), Format.number(payload.coins)),
+			"success"
+		)
+		MinePanel.update()
 	elseif kind == Net.EventKind.Zone then
 		-- servidor abrindo UI remotamente
 	end
@@ -207,11 +256,25 @@ end)
 ---------------------------------------------------------------------------
 
 local last = os.clock()
+local mineClock = 0
+
 RunService.RenderStepped:Connect(function()
 	local now = os.clock()
 	local dt = math.min(now - last, 0.2)
 	last = now
 	WorldUI.stepPets(dt)
+
+	-- O snapshot vem do servidor a cada tick, então a barrinha ficaria
+	-- congelada entre envios. Aqui ela avança de forma otimista com o
+	-- tempo local: o servidor manda o valor real e corrige. Sem isto a
+	-- mina parece travada, que é pior do que um número levemente errado.
+	CombatPanel.update()
+
+	mineClock = mineClock + dt
+	if mineClock >= 0.1 and MinePanel.isOpen and MinePanel.isOpen() then
+		mineClock = 0
+		MinePanel.tick(dt)
+	end
 end)
 
 ---------------------------------------------------------------------------
@@ -224,7 +287,9 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	end
 	local key = input.KeyCode
 
-	if key == Enum.KeyCode.E then
+	if key == Enum.KeyCode.M then
+		BiomesPanel.toggle()
+	elseif key == Enum.KeyCode.E then
 		openEggs()
 	elseif key == Enum.KeyCode.P then
 		closeAll()

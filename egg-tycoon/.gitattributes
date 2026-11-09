@@ -1,2 +1,4 @@
-* text=auto eol=lf
-*.rbxlx text
+# O lugar pronto é um arquivo grande e gerado: o Git não deve tentar
+# diferenciar nem comprimir linha a linha, senão cada build infla o repo.
+build/*.rbxlx -diff -text
+build/*.rbxmx -diff -text

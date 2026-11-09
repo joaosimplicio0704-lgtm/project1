@@ -239,24 +239,8 @@ function EggPanel.build(parentGui)
 	refs.root = root
 
 	-- cabeçalho com título estilo "Ovos"
-	local header = Instance.new("Frame")
-	header.Size = UDim2.new(1, 0, 0, 78)
-	header.BackgroundColor3 = Color3.fromRGB(255, 196, 90)
-	header.BorderSizePixel = 0
-	header.ZIndex = 26
-	header.Parent = root
-	Theme.corner(header, 28)
 
-	local title = Theme.label(root, {
-		text = "OVOS",
-		size = UDim2.new(1, 0, 0, 60),
-		position = UDim2.fromOffset(0, 8),
-		textSize = 44,
-		color = Color3.fromRGB(255, 255, 255),
-		strokeTransparency = 0,
-		strokeColor = Color3.fromRGB(190, 120, 30),
-		zIndex = 27,
-	})
+	local title = Theme.titleTag(root, "OVOS", { width = 190, offset = -26, zIndex = 25, textSize = 26 })
 
 	local close = Theme.button(root, {
 		text = "✕",

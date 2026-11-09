@@ -49,6 +49,16 @@ function WorldUI.route(instance)
 		return
 	end
 
+	-- Portais: o nome do detector/veu carrega o bioma de destino.
+	if name == "PortalClick" then
+		local parent = instance.Parent
+		local biomeId = parent and parent:GetAttribute("BiomeId")
+		if biomeId and handlers.travel then
+			handlers.travel(biomeId)
+		end
+		return
+	end
+
 	if name:sub(1, 5) == "Zone_" then
 		local zone = name:sub(6)
 		if zone:sub(1, 4) == "egg_" then

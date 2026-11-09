@@ -384,6 +384,9 @@ const SHARED = [
 	"Format",
 	"Net",
 	"Pets",
+	"Noise",
+	"Biomes",
+	"Terrain",
 ]
 	.map((n) => moduleCode(n, `src/shared/${n}.luau`))
 	.join("\n");
@@ -400,6 +403,9 @@ const CLIENT_MODULES = [
 	"EggPanel",
 	"ShopPanel",
 	"WorldUI",
+	"BiomesPanel",
+	"MinePanel",
+	"CombatPanel",
 ]
 	.map((n) => moduleCode(n, `src/client/${n}.luau`))
 	.join("\n");
@@ -414,7 +420,7 @@ const INIT_SCRIPT = (() => {
 		.join("\n")
 		.replace(/localscript/gi, "script")
 		// script.Theme etc. -> Theme (é o que o require daria)
-		.replace(/\bscript\.(Theme|State|NetClient|Hud|TapButton|EggPanel|PetsPanel|ShopPanel|Toasts|WorldUI)\b/g, "$1");
+		.replace(/\bscript\.(Theme|State|NetClient|Hud|TapButton|EggPanel|PetsPanel|ShopPanel|Toasts|WorldUI|MinePanel|CombatPanel)\b/g, "$1");
 	return `-- ===== init.client.luau =====\n${body}\n`;
 })();
 
@@ -478,12 +484,40 @@ assert(#descendants > 60, "GUI praticamente vazia: " .. #descendants)
 
 -- Os 3 painéis de tela cheia precisam começar escondidos, senão o jogo abre
 -- com Ovos + Pets + Loja empilhados por cima do mapa.
-for _, name in ipairs({ "EggPanel", "PetsPanel", "ShopPanel" }) do
+for _, name in ipairs({ "EggPanel", "PetsPanel", "ShopPanel", "BiomesPanel", "MinePanel" }) do
   local panel = gui:FindFirstChild(name)
   assert(panel, "painel ausente na GUI: " .. name)
   assert(panel.Visible == false, name .. " deveria começar invisível, Visible=" .. tostring(panel.Visible))
 end
 print("paineis escondidos ao abrir: ok")
+
+-- O painel de mundos precisa ter um cartao por bioma, com nome e cadeado.
+local biomesPanel = gui:FindFirstChild("BiomesPanel")
+local grid = biomesPanel:FindFirstChild("Card"):FindFirstChild("Grid")
+local cards = 0
+for _, child in ipairs(grid:GetChildren()) do
+  if string.sub(child.Name, 1, 6) == "Biome_" then
+    cards = cards + 1
+    assert(child:FindFirstChild("Lock"), "cartao sem Lock: " .. child.Name)
+  end
+end
+assert(cards == 7, "painel de mundos com " .. cards .. " cartoes (esperado 7)")
+
+-- cada cartao precisa mostrar nome, preco e a descricao do bioma.
+-- Cartao sem texto e o bug classico de "abri o painel e nao tem nada".
+local withText = 0
+for _, child in ipairs(grid:GetChildren()) do
+  if string.sub(child.Name, 1, 6) == "Biome_" then
+    local blurb = child:FindFirstChild("Blurb")
+    local lock = child:FindFirstChild("Lock")
+    assert(blurb, "cartao sem descricao: " .. child.Name)
+    assert(blurb.Text and #blurb.Text > 8, "descricao vazia em " .. child.Name)
+    assert(lock and lock.Text and #lock.Text > 0, "cartao sem status: " .. child.Name)
+    withText = withText + 1
+  end
+end
+assert(withText == 7, "so " .. withText .. " cartoes com texto")
+print("painel de mundos: " .. cards .. " cartoes com descricao ok")
 `;
 
 const SNAPSHOT = String.raw`

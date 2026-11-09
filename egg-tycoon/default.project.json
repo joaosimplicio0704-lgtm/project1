@@ -2,15 +2,16 @@
   "name": "EggTycoon",
   "tree": {
     "$className": "DataModel",
-
     "Workspace": {
       "$className": "Workspace",
       "$properties": {
         "Gravity": 196.2,
         "FilteringEnabled": true
+      },
+      "Map": {
+        "$path": "build/EggTycoonMap.rbxmx"
       }
     },
-
     "SoundService": {
       "$className": "SoundService",
       "$properties": {
@@ -18,35 +19,48 @@
         "RespectFilteringEnabled": true
       }
     },
-
     "Lighting": {
       "$className": "Lighting",
       "$properties": {
-        "Ambient": [0.47, 0.52, 0.6],
-        "OutdoorAmbient": [0.63, 0.7, 0.78],
-        "Brightness": 2.8,
-        "ClockTime": 13.6,
+        "Ambient": [
+          0.4627450980392157,
+          0.5019607843137255,
+          0.5882352941176471
+        ],
+        "OutdoorAmbient": [
+          0.611764705882353,
+          0.6666666666666666,
+          0.7686274509803922
+        ],
+        "Brightness": 1.9,
+        "ClockTime": 15.4,
         "GeographicLatitude": -15,
         "GlobalShadows": true,
-        "EnvironmentDiffuseScale": 0.5,
-        "EnvironmentSpecularScale": 0.3
+        "EnvironmentDiffuseScale": 0.45,
+        "EnvironmentSpecularScale": 0.12,
+        "ShadowSoftness": 0.55,
+        "ExposureCompensation": -0.25,
+        "FogColor": [
+          0.7686274509803922,
+          0.8470588235294118,
+          0.9411764705882353
+        ],
+        "FogStart": 900,
+        "FogEnd": 4000
       }
     },
-
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "Shared": {
         "$path": "src/shared"
       }
     },
-
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "Server": {
         "$path": "src/server"
       }
     },
-
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "StarterPlayerScripts": {
@@ -54,6 +68,13 @@
         "Client": {
           "$path": "src/client"
         }
+      },
+      "$properties": {
+        "CameraMaxZoomDistance": 220,
+        "CameraMinZoomDistance": 16,
+        "CharacterWalkSpeed": 22,
+        "CharacterJumpPower": 60,
+        "EnableMouseLockOption": false
       }
     }
   }
