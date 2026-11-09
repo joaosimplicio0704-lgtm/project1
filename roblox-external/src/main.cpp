@@ -65,6 +65,8 @@ int main() {
         return 1;
     }
 
+    overlay.SetGamePid(esp.Pid());
+
     Detector  detector;
     AimAssist aim;
 
@@ -91,6 +93,8 @@ int main() {
             HandleCleanup::Stop();
             handleWatchRunning = false;
         }
+
+        overlay.SetGamePid(esp.Pid());
 
         overlay.BeginFrame();
 
@@ -125,7 +129,8 @@ int main() {
 
         overlay.EndFrame();
 
-        Sleep(static_cast<DWORD>(settings.tickMs > 0 ? settings.tickMs : 1));
+        // menu aberto: frame curto, sem vsync — widget responde na hora
+        Sleep(overlay.IsInteractive() ? 1u : static_cast<DWORD>(settings.tickMs > 0 ? settings.tickMs : 1));
     }
 
     std::printf("[exit] fechando\n");

@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <cmath>
 #include <cstdio>
 
 #include "../features/detector.h"
@@ -18,6 +19,15 @@ static bool g_pressed[256]{};
 static bool g_prev[256]{};
 
 // transicoes de tecla amostradas uma vez por frame
+// sincroniza o estado sem gerar "press" (usado ao entrar em modo bind,
+// senao o proprio clique que abriu o bind viraria a tecla capturada)
+static void PrimeKeys() {
+    for (int vk = 1; vk < 256; ++vk) {
+        g_prev[vk] = (GetAsyncKeyState(vk) & 0x8000) != 0;
+        g_pressed[vk] = false;
+    }
+}
+
 static void SampleKeys() {
     for (int vk = 1; vk < 256; ++vk) {
         const bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
@@ -101,8 +111,10 @@ static void DrawAimTab(cfg::Settings& settings, Esp& esp) {
             }
         }
     } else {
-        if (ImGui::Button(KeyName(aim.key), ImVec2(120.f, 0.f)))
+        if (ImGui::Button(KeyName(aim.key), ImVec2(120.f, 0.f))) {
             g_binding = true;
+            PrimeKeys();
+        }
         ImGui::SameLine();
         ImGui::TextDisabled("tecla");
     }
@@ -251,14 +263,28 @@ static void DrawConfigTab(cfg::Settings& settings, Esp& esp, Overlay& overlay) {
     ImGui::Text("leitura   %s", esp.Status());
     ImGui::Text("alvos     %d", esp.TargetCount());
     ImGui::Text("fps       %.0f  (%.0fx%.0f)", overlay.Fps(), overlay.Width(), overlay.Height());
+
+    ImGui::Spacing();
+    ImGui::SeparatorText("Input (diagnostico)");
+    POINT cursor{};
+    GetCursorPos(&cursor);
+    const ImGuiIO& io = ImGui::GetIO();
+    ImGui::Text("cursor os     %ld, %ld", cursor.x, cursor.y);
+    ImGui::Text("cursor imgui  %.0f, %.0f", io.MousePos.x, io.MousePos.y);
+    ImGui::Text("dpi           %.0f%%", overlay.DpiScale() * 100.f);
+    if (ImGui::IsMousePosValid() && (std::abs(static_cast<float>(cursor.x) - io.MousePos.x) > 2.f ||
+                                     std::abs(static_cast<float>(cursor.y) - io.MousePos.y) > 2.f)) {
+        ImGui::TextColored(ImVec4(1.f, 0.6f, 0.2f, 1.f), "cursor os e imgui divergem: escala/deslocamento");
+    }
 }
 
 // ------------------------------------------------------------
 void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detector, bool* open) {
-    SampleKeys();
-
     if (!open || !*open)
         return;
+
+    if (g_binding)
+        SampleKeys();
 
     ImGui::SetNextWindowSize(ImVec2(430.f, 430.f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(40.f, 40.f), ImGuiCond_FirstUseEver);

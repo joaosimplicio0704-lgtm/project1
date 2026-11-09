@@ -45,6 +45,20 @@ Mouse 5  aim assist (segurar; rebindável na aba Aim)
 Quatro abas: **ESP**, **Aim**, **Jogo**, **Config**.
 `config.json` e `profiles.json` ficam ao lado do `.exe`.
 
+### Input do menu
+
+- DPI awareness **per-monitor v2** ligado antes de criar a janela — sem isso o Windows
+  virtualiza as coordenadas e o clique cai alguns pixels fora do widget.
+- A janela só vira clicável (sem `WS_EX_TRANSPARENT`) com o menu aberto; ao fechar,
+  o foco volta pro processo do jogo.
+- `WM_MOUSEACTIVATE` responde `MA_ACTIVATE` — sem isso o primeiro clique só serve
+  pra dar foco e o widget não seleciona.
+- Nenhuma cor do tema é preto puro: com color-key, pixel preto é buraco de hit-test
+  e o clique vazaria pro jogo.
+- Menu aberto roda sem vsync com `Sleep(1)`; fechado usa `Present(1,0)` + tick.
+- `Config → Input (diagnostico)` mostra cursor do OS vs cursor do ImGui e o DPI —
+  se os dois divergirem, o número aparece em laranja.
+
 ## Aim assist
 
 Externo de verdade: lê a posição do osso (`Head` / peito / `HumanoidRootPart`),
@@ -142,6 +156,8 @@ Tudo em `src/offsets.h`, dentro de `namespace rbx`. Cola o dump novo por cima, r
 - transparência por **color-key**: pixel preto é vazado.
 - "Melhorar precisão do ponteiro" do Windows afeta `MOUSEEVENTF_MOVE` — desligar
   para o aim ter ganho constante entre sessões.
+- overlay cobre o **monitor primário** inteiro; multi-monitor com o jogo no secundário
+  não é coberto.
 - `Live` protegido por Hyperion: leitura no cliente de produção tende a derrubar
   o processo. **Testar em Studio ou em VM.**
 

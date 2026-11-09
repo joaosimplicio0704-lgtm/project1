@@ -27,10 +27,14 @@ public:
     void ToggleInteractive() { SetInteractive(!m_interactive); }
     bool IsInteractive() const { return m_interactive; }
 
+    // pid do jogo — usado pra devolver o foco quando o menu fecha
+    void SetGamePid(DWORD pid) { m_gamePid = pid; }
+
     HWND  Window() const { return m_window; }
     float Width() const { return static_cast<float>(m_width); }
     float Height() const { return static_cast<float>(m_height); }
     float Fps() const { return m_fps; }
+    float DpiScale() const;
 
     static LRESULT CALLBACK WindowProc(HWND, UINT, WPARAM, LPARAM);
 
@@ -39,6 +43,8 @@ private:
     bool CreateDevice();
     void CreateRenderTarget();
     void DestroyRenderTarget();
+    void KeepOnTop();
+    void RestoreGameFocus();
 
     HWND                    m_window = nullptr;
     ID3D11Device*           m_device = nullptr;
@@ -48,10 +54,15 @@ private:
 
     int   m_width = 0;
     int   m_height = 0;
+    int   m_originX = 0;
+    int   m_originY = 0;
     bool  m_interactive = false;
     bool  m_quit = false;
+    float m_dpiScale = 1.f;
     float m_fps = 0.f;
 
+    DWORD     m_gamePid = 0;
+    ULONGLONG m_lastTopmost = 0;
     ULONGLONG m_lastFpsSample = 0;
     int       m_framesSinceSample = 0;
 };
