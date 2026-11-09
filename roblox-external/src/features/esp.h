@@ -1,7 +1,12 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "../config.h"
@@ -10,7 +15,7 @@
 
 struct ImDrawList;
 
-// estado do jogador local, resolvido automaticamente no Tick
+// estado do jogador local, resolvido automaticamente
 struct LocalState {
     uintptr_t dataModel = 0;
     uintptr_t workspace = 0;
@@ -40,54 +45,105 @@ struct Target {
     std::string name;
     Vector3     head{};
     Vector3     root{};
-    float       health = 0.f;
+    Vector3     velocity{};
+    float       health = 100.f;
     float       maxHealth = 100.f;
     float       distance = 0.f;
 };
 
+// quadro imutavel publicado pelo leitor: render e aim so leem isto,
+// nunca tocam em ReadProcessMemory
+struct SceneSnapshot {
+    Matrix4x4 view{};
+    std::vector<Target> targets;
+    LocalState local{};
+    uintptr_t  dataModel = 0;
+    std::string status = "iniciando";
+    uint64_t   stamp = 0;
+    bool       attached = false;
+    int        frame = 0;
+};
+
 class Esp {
 public:
-    bool Initialize(cfg::Settings& settings);
+    Esp() = default;
+    ~Esp();
+
+    Esp(const Esp&) = delete;
+    Esp& operator=(const Esp&) = delete;
+
+    bool Initialize(const cfg::Settings& settings);
     void Shutdown();
 
-    // le a cena inteira (RPM only). devolve false se a cadeia nao resolveu.
-    bool Tick();
+    // copia os campos que o leitor precisa (thread-safe, barato)
+    void UpdateSettings(const cfg::Settings& settings);
 
-    void Draw(ImDrawList* list, float width, float height) const;
+    std::shared_ptr<const SceneSnapshot> Snapshot() const;
 
-    const char* Status() const { return m_status; }
-    int  TargetCount() const { return static_cast<int>(m_targets.size()); }
-    bool Attached() const { return m_memory.Ready(); }
-    unsigned long Pid() const { return m_memory.Pid(); }
-    unsigned long long Base() const { return m_memory.Base(); }
-    uintptr_t DataModel() const { return m_dataModel; }
-    const Memory& Mem() const { return m_memory; }
-    const Matrix4x4& ViewMatrix() const { return m_view; }
-    const std::vector<Target>& Targets() const { return m_targets; }
-    const LocalState& Local() const { return m_local; }
+    void Draw(ImDrawList* list, const cfg::Settings& settings, float width, float height) const;
+
     Memory& Mem() { return m_memory; }
-    void RequestReattach() { m_forceReattach = true; }
+    const Memory& Mem() const { return m_memory; }
+    DWORD Pid() const { return m_memory.Pid(); }
+    uintptr_t Base() const { return m_memory.Base(); }
+
+    void RequestReattach() { m_reattach.store(true, std::memory_order_relaxed); }
 
 private:
-    const std::vector<uintptr_t>& Children(uintptr_t instance);
-    bool Attach();
-
-    cfg::Settings* m_settings = nullptr;
-    Memory         m_memory;
-
-    Matrix4x4          m_view{};
-    std::vector<Target> m_targets;
-
-    uintptr_t m_dataModel = 0;
-    LocalState m_local{};
-    Vector3   m_localRoot{};
-    bool      m_forceReattach = false;
-    uint64_t  m_lastAttachAttempt = 0;
-    const char* m_status = "idle";
+    struct ReaderSettings {
+        bool  teamCheck = true;
+        float maxDistance = 2000.f;
+        bool  stealthOpen = true;
+        bool  wantWrite = false;
+        int   tickMs = 4;
+    };
 
     struct CacheEntry {
         std::vector<uintptr_t> kids;
         uint64_t stamp = 0;
     };
-    std::unordered_map<uintptr_t, CacheEntry> m_cache;
+
+    struct TextEntry {
+        std::string text;
+        uint64_t stamp = 0;
+    };
+
+    struct PartEntry {
+        uintptr_t rootPart = 0;
+        uintptr_t headPart = 0;
+        uintptr_t humanoid = 0;
+        uint64_t  stamp = 0;
+    };
+
+    void Loop();
+    bool Attach(const ReaderSettings& reader);
+    void ReadScene(SceneSnapshot& scene, const ReaderSettings& reader);
+    void ResetCaches();
+
+    const std::vector<uintptr_t>& Children(uintptr_t instance, uint64_t now);
+    const std::string& NameOf(uintptr_t instance, uint64_t now);
+    const std::string& ClassOf(uintptr_t instance, uint64_t now);
+    const PartEntry& PartsOf(uintptr_t character, uint64_t now);
+
+    Memory m_memory;
+
+    std::thread        m_thread;
+    std::atomic<bool>  m_stop{false};
+    std::atomic<bool>  m_reattach{false};
+
+    mutable std::mutex m_snapshotMutex;
+    std::shared_ptr<const SceneSnapshot> m_snapshot;
+
+    mutable std::mutex m_settingsMutex;
+    ReaderSettings     m_reader;
+
+    // --- estado do worker (so a thread de leitura toca) ---
+    uintptr_t m_dataModel = 0;
+    uint64_t  m_lastAttachAttempt = 0;
+    uint64_t  m_tick = 4;
+
+    std::unordered_map<uintptr_t, CacheEntry> m_children;
+    std::unordered_map<uintptr_t, TextEntry>  m_names;
+    std::unordered_map<uintptr_t, TextEntry>  m_classes;
+    std::unordered_map<uintptr_t, PartEntry>  m_parts;
 };

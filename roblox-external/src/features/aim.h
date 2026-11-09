@@ -2,7 +2,7 @@
 #include "../config.h"
 
 struct ImDrawList;
-class Esp;
+struct SceneSnapshot;
 
 // ============================================================
 // Aim assist externo.
@@ -17,7 +17,8 @@ class AimAssist {
 public:
     // blocked = overlay interativo (menu aberto) ou qualquer coisa que
     // nao deva roubar o mouse
-    void Tick(const cfg::Settings& settings, const Esp& esp, float width, float height, bool blocked);
+    void Tick(const cfg::Settings& settings, const SceneSnapshot& scene, unsigned long pid,
+              float width, float height, bool blocked);
 
     void DrawFov(ImDrawList* list, const cfg::Settings& settings, float width, float height) const;
 

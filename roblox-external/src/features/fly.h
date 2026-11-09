@@ -1,7 +1,8 @@
 #pragma once
 #include "../config.h"
 
-class Esp;
+struct LocalState;
+class Memory;
 
 // ============================================================
 // Voo externo.
@@ -19,7 +20,7 @@ class Esp;
 
 class Fly {
 public:
-    void Tick(const cfg::Settings& settings, Esp& esp, bool blocked);
+    void Tick(const cfg::Settings& settings, Memory& memory, const LocalState& local, bool blocked);
     void Reset();
 
     bool Active() const { return m_active; }

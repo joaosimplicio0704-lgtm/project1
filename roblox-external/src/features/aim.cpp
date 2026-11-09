@@ -44,7 +44,7 @@ int Jitter(float amount) {
     seed ^= seed >> 17;
     seed ^= seed << 5;
 
-    const float unit = static_cast<float>(seed & 0xFFFF) / 65535.f; // 0..1
+    const float unit = static_cast<float>(seed & 0xFFFF) / 65535.f;
     return static_cast<int>((unit * 2.f - 1.f) * amount);
 }
 
@@ -74,12 +74,13 @@ void AimAssist::Reset() {
     m_lastDown = false;
 }
 
-void AimAssist::Tick(const cfg::Settings& settings, const Esp& esp, float width, float height, bool blocked) {
+void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, unsigned long pid,
+                     float width, float height, bool blocked) {
     m_hasTarget = false;
 
     const cfg::AimSettings& aim = settings.aim;
 
-    if (width <= 0.f || height <= 0.f || !esp.Attached()) {
+    if (width <= 0.f || height <= 0.f || !scene.attached) {
         m_accumX = m_accumY = 0.f;
         return;
     }
@@ -89,15 +90,25 @@ void AimAssist::Tick(const cfg::Settings& settings, const Esp& esp, float width,
     m_fovCenterX = centerX;
     m_fovCenterY = centerY;
 
+    // antecipacao: alvo em movimento, projetar onde ele vai estar
+    const float lead = aim.leadMs > 0.f ? aim.leadMs / 1000.f : 0.f;
+
     // ---- alvo mais perto do crosshair, sempre calculado:
     //      o trigger le isso mesmo com o aim assist desligado ----
     bool found = false;
     float bestDistance = aim.fovPx;
     Vector2 bestScreen{};
 
-    for (const Target& target : esp.Targets()) {
+    for (const Target& target : scene.targets) {
+        Vector3 point = BonePoint(target, aim.bone);
+        if (lead > 0.f) {
+            point.x += target.velocity.x * lead;
+            point.y += target.velocity.y * lead;
+            point.z += target.velocity.z * lead;
+        }
+
         Vector2 screen{};
-        if (!WorldToScreen(BonePoint(target, aim.bone), screen, esp.ViewMatrix(), width, height))
+        if (!WorldToScreen(point, screen, scene.view, width, height))
             continue;
 
         const float dx = screen.x - centerX;
@@ -129,7 +140,7 @@ void AimAssist::Tick(const cfg::Settings& settings, const Esp& esp, float width,
         return;
     }
 
-    if (aim.requireForeground && !ForegroundIsPid(esp.Pid())) {
+    if (aim.requireForeground && !ForegroundIsPid(static_cast<DWORD>(pid))) {
         m_accumX = m_accumY = 0.f;
         return;
     }
@@ -153,7 +164,6 @@ void AimAssist::Tick(const cfg::Settings& settings, const Esp& esp, float width,
     if (std::fabs(errorX) <= aim.deadzonePx && std::fabs(errorY) <= aim.deadzonePx)
         return;
 
-    // quanto a mira puxa: strength / smoothing
     const float gain = aim.strength / (aim.smoothing < 1.f ? 1.f : aim.smoothing);
 
     float stepX = errorX * gain + m_accumX;

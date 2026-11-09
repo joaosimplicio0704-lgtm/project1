@@ -11,11 +11,35 @@ Nada é escrito em memória do jogo, nada é injetado, nenhum driver.
 ```
 processo   RobloxPlayerBeta.exe
 handle     StealthyOpenProcess (HWBP + VEH) — fallback OpenProcess
-leitura    ReadProcessMemory, PROCESS_VM_READ | PROCESS_QUERY_INFORMATION
+leitura    ReadProcessMemory em THREAD PROPRIA, snapshot imutavel por quadro
 input      SendInput / INPUT_MOUSE / MOUSEEVENTF_MOVE (relativo)
 render     D3D11 swapchain + ImGui, janela layered topmost
 toolchain  MSVC v143 (C++20) ou zig/clang cross-compile
 ```
+
+### Arquitetura
+
+```
+thread de leitura  ->  ReadProcessMemory + caches  ->  SceneSnapshot (imutavel)
+                                                          |
+render (60+fps)  -----------------------------------------+-- ESP, aim, trigger, menu
+```
+
+O render nunca chama `ReadProcessMemory`. Ele lê o último `shared_ptr<const SceneSnapshot>`
+publicado. Antes disso o loop de memória rodava no frame e cada leitura segurava o
+menu — era a causa real do "clique meio travado".
+
+Caches por endereço no leitor (todos limpos quando o DataModel muda):
+
+| cache | TTL | o que evita |
+|---|---|---|
+| filhos de instância | 500ms | reler o `std::vector` de children toda hora |
+| nome de instância | 3s | string read por child por frame |
+| classe de instância | 3s | 2 RPM por child por frame |
+| partes do personagem (`HumanoidRootPart`/`Head`/`Humanoid`) | 2s | varrer o modelo inteiro por player por frame |
+
+`Memory` é serializado por mutex: leitor e voo podem usar o mesmo handle sem
+`CloseHandle` no meio de um `ReadProcessMemory`.
 
 ## Build
 
@@ -81,6 +105,7 @@ passo = clamp(passo, passo_max)
 | `Passo max (px)` | teto de movimento por tick, evita flick |
 | `Zona morta (px)` | para de mexer quando já está em cima |
 | `Jitter (px)` | ruído no delta |
+| `Antecipação (ms)` | projeta o alvo pela velocidade dele (`AssemblyLinearVelocity`) — lead de alvo em movimento |
 | `FOV (raio px)` | círculo do alcance, desenhado na tela |
 | `Osso` | cabeça / peito / raiz |
 | `Tecla` | botão `Bind` captura a próxima tecla; modo segurar ou toggle |
@@ -243,6 +268,8 @@ Tudo em `src/offsets.h`, dentro de `namespace rbx`. Cola o dump novo por cima, r
   para o aim ter ganho constante entre sessões.
 - overlay cobre o **monitor primário** inteiro; multi-monitor com o jogo no secundário
   não é coberto.
+- a varredura de valor roda na thread de render: pode dar um engasgo de ~1s no
+  frame em que você clica em **Novo scan**. É o único trabalho pesado síncrono.
 - `Live` protegido por Hyperion: leitura no cliente de produção tende a derrubar
   o processo. **Testar em Studio ou em VM.**
 

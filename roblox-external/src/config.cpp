@@ -90,6 +90,7 @@ static bool SaveConfig(const Settings& s) {
     out << "  \"aimMaxStep\": "        << a.maxStepPx << ",\n";
     out << "  \"aimDeadzone\": "       << a.deadzonePx << ",\n";
     out << "  \"aimJitter\": "         << a.jitterPx << ",\n";
+    out << "  \"aimLead\": "           << a.leadMs << ",\n";
     out << "  \"aimDrawFov\": "        << Bool(a.drawFov) << ",\n";
     out << "  \"aimRequireForeground\": " << Bool(a.requireForeground) << ",\n";
     const TriggerSettings& f = s.fire;
@@ -145,6 +146,7 @@ static bool LoadConfig(Settings& s) {
     a.maxStepPx   = AsFloat(ValueOf(text, "aimMaxStep"), a.maxStepPx);
     a.deadzonePx  = AsFloat(ValueOf(text, "aimDeadzone"), a.deadzonePx);
     a.jitterPx    = AsFloat(ValueOf(text, "aimJitter"), a.jitterPx);
+    a.leadMs      = AsFloat(ValueOf(text, "aimLead"), a.leadMs);
     a.drawFov     = AsBool(ValueOf(text, "aimDrawFov"), a.drawFov);
     a.requireForeground = AsBool(ValueOf(text, "aimRequireForeground"), a.requireForeground);
 

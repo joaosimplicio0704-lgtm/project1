@@ -2,9 +2,12 @@
 
 #include <tlhelp32.h>
 
+#include "../stealth/StealthyOpenProcess.h"
+#include "../offsets.h"
+
 namespace {
 
-// compara szExeFile (WCHAR) com o nome ASCII que a gente usa
+// szExeFile/szModule sao WCHAR; o nome que a gente usa e ASCII
 bool SameExe(const WCHAR* exe, const char* name) {
     char buffer[MAX_PATH]{};
     WideCharToMultiByte(CP_ACP, 0, exe, -1, buffer, MAX_PATH - 1, nullptr, nullptr);
@@ -12,9 +15,6 @@ bool SameExe(const WCHAR* exe, const char* name) {
 }
 
 } // namespace
-
-#include "../stealth/StealthyOpenProcess.h"
-#include "../offsets.h"
 
 bool Memory::IsUserAddress(uintptr_t address, size_t size) {
     if (!address || address < 0x10000)
@@ -47,7 +47,17 @@ DWORD Memory::FindPid(const char* process_name) {
 }
 
 bool Memory::Attach(const char* process_name, bool stealth, bool write) {
-    Detach();
+    std::lock_guard<std::mutex> lock(m_guard);
+
+    // limpa estado anterior sem re-lock (Detach pega o mutex)
+    if (m_handle) {
+        CloseHandle(m_handle);
+        m_handle = nullptr;
+    }
+    m_base = 0;
+    m_baseSize = 0;
+    m_canWrite = false;
+    m_pid = 0;
 
     m_pid = FindPid(process_name);
     if (!m_pid)
@@ -57,18 +67,16 @@ bool Memory::Attach(const char* process_name, bool stealth, bool write) {
     if (write)
         access |= PROCESS_VM_WRITE | PROCESS_VM_OPERATION;
 
-    if (stealth) {
+    if (stealth)
         m_handle = StealthyOpenProcess::Execute(m_pid, access);
-    }
-    if (!m_handle) {
+    if (!m_handle)
         m_handle = OpenProcess(access, FALSE, m_pid);
-    }
     if (!m_handle) {
         m_pid = 0;
         return false;
     }
 
-    // SNAPMODULE precisa de QUERY_INFORMATION alem de VM_READ.
+    // SNAPMODULE precisa de QUERY_INFORMATION alem de VM_READ
     HANDLE modules = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, m_pid);
     if (modules != INVALID_HANDLE_VALUE) {
         MODULEENTRY32 entry{};
@@ -87,7 +95,12 @@ bool Memory::Attach(const char* process_name, bool stealth, bool write) {
     }
 
     if (!m_base) {
-        Detach();
+        if (m_handle) {
+            CloseHandle(m_handle);
+            m_handle = nullptr;
+        }
+        m_pid = 0;
+        m_baseSize = 0;
         return false;
     }
 
@@ -96,26 +109,47 @@ bool Memory::Attach(const char* process_name, bool stealth, bool write) {
 }
 
 void Memory::Detach() {
+    std::lock_guard<std::mutex> lock(m_guard);
+
+    m_base = 0;
     m_baseSize = 0;
     m_canWrite = false;
+    m_pid = 0;
+
     if (m_handle) {
         CloseHandle(m_handle);
         m_handle = nullptr;
     }
-    m_pid = 0;
-    m_base = 0;
 }
 
 bool Memory::Alive() const {
+    std::lock_guard<std::mutex> lock(m_guard);
     if (!m_handle)
         return false;
     return WaitForSingleObject(m_handle, 0) == WAIT_TIMEOUT;
 }
 
+uintptr_t Memory::Base() const {
+    std::lock_guard<std::mutex> lock(m_guard);
+    return m_base;
+}
+
+size_t Memory::BaseSize() const {
+    std::lock_guard<std::mutex> lock(m_guard);
+    return m_baseSize;
+}
+
+bool Memory::CanWrite() const {
+    std::lock_guard<std::mutex> lock(m_guard);
+    return m_canWrite;
+}
+
 bool Memory::Read(uintptr_t address, void* out, size_t size) const {
-    if (!m_handle || !out || !size)
+    if (!out || !size || !IsUserAddress(address, size))
         return false;
-    if (!IsUserAddress(address, size))
+
+    std::lock_guard<std::mutex> lock(m_guard);
+    if (!m_handle)
         return false;
 
     SIZE_T read = 0;
@@ -125,9 +159,11 @@ bool Memory::Read(uintptr_t address, void* out, size_t size) const {
 }
 
 bool Memory::Write(uintptr_t address, const void* data, size_t size) const {
-    if (!m_handle || !m_canWrite || !data || !size)
+    if (!data || !size || !IsUserAddress(address, size))
         return false;
-    if (!IsUserAddress(address, size))
+
+    std::lock_guard<std::mutex> lock(m_guard);
+    if (!m_handle || !m_canWrite)
         return false;
 
     SIZE_T written = 0;

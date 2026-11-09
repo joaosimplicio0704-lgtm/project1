@@ -42,6 +42,7 @@ struct AimSettings {
     float maxStepPx = 45.f;            // limite de movimento por tick
     float deadzonePx = 2.f;            // nao mexe abaixo disso
     float jitterPx = 0.f;              // ruido no delta (humano)
+    float leadMs = 0.f;                // antecipa alvo em movimento (0..200)
 
     bool  drawFov = true;
     bool  requireForeground = true;    // so age com a janela do jogo na frente

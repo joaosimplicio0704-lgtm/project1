@@ -196,9 +196,15 @@ static void RowAddress(const char* label, uintptr_t address) {
 }
 
 void MemView::DrawAuto(const Esp& esp) {
-    const LocalState& local = esp.Local();
+    const auto scene = esp.Snapshot();
+    if (!scene) {
+        ImGui::TextDisabled("leitor iniciando");
+        return;
+    }
 
-    if (!esp.Attached()) {
+    const LocalState& local = scene->local;
+
+    if (!scene->attached) {
         ImGui::TextDisabled("sem processo — procurando RobloxPlayerBeta.exe");
         return;
     }

@@ -1,6 +1,7 @@
 #include <windows.h>
 
 #include <cstdio>
+#include <memory>
 
 #include "config.h"
 #include "features/aim.h"
@@ -46,7 +47,7 @@ int main() {
     SetConsoleTitleA("roblox-external");
     std::printf("roblox-external — offsets %s\n", rbx::kVersion);
     std::printf("INSERT menu | F1 esp | F2 caixa | END sair\n");
-    std::printf("aim: configurar tecla/FOV/forca na aba Aim\n\n");
+    std::printf("aim/tiro/voo: configurar nas abas\n\n");
 
     cfg::Settings settings;
     if (cfg::Load(settings))
@@ -60,13 +61,10 @@ int main() {
         std::printf("[handle] monitor de handles orfaos ativo\n");
     }
 
+    // o leitor roda em thread propria: nada de ReadProcessMemory no frame
     Esp esp;
-    if (esp.Initialize(settings))
-        std::printf("[mem] conectado (pid %lu, base 0x%llX)\n",
-                    static_cast<unsigned long>(esp.Pid()),
-                    static_cast<unsigned long long>(esp.Base()));
-    else
-        std::printf("[mem] %s — o loop tenta reatachar a cada segundo\n", esp.Status());
+    if (!esp.Initialize(settings))
+        std::printf("[mem] leitor iniciado, sem processo ainda\n");
 
     Overlay overlay;
     if (!overlay.Initialize()) {
@@ -86,8 +84,8 @@ int main() {
     Trigger   trigger;
     Fly       fly;
 
-    bool  menuOpen = false;
-    bool  running = true;
+    bool     menuOpen = false;
+    bool     running = true;
     uint64_t lastPlaceId = 0;
 
     while (running && overlay.Pump()) {
@@ -110,12 +108,18 @@ int main() {
             handleWatchRunning = false;
         }
 
+        esp.UpdateSettings(settings);
+        const auto scene = esp.Snapshot();
+        static const SceneSnapshot kEmptyScene;
+
         overlay.SetGamePid(esp.Pid());
 
         overlay.BeginFrame();
 
-        esp.Tick();
-        detector.Tick(esp.Mem(), esp.DataModel(), esp.TargetCount());
+        const SceneSnapshot& view = scene ? *scene : kEmptyScene;
+        const bool focused = ForegroundIsPid(esp.Pid());
+
+        detector.Tick(esp.Mem(), view.dataModel, static_cast<int>(view.targets.size()));
 
         // entrou em outro jogo: aplica o perfil salvo daquele PlaceId, se existir
         const GameInfo& game = detector.Info();
@@ -132,18 +136,19 @@ int main() {
         }
 
         ImDrawList* drawList = ImGui::GetBackgroundDrawList();
-        esp.Draw(drawList, overlay.Width(), overlay.Height());
+        esp.Draw(drawList, settings, overlay.Width(), overlay.Height());
 
-        aim.Tick(settings, esp, overlay.Width(), overlay.Height(), overlay.IsInteractive());
+        aim.Tick(settings, view, static_cast<unsigned long>(esp.Pid()),
+                 overlay.Width(), overlay.Height(), overlay.IsInteractive());
         aim.DrawFov(drawList, settings, overlay.Width(), overlay.Height());
 
         trigger.Tick(settings, aim,
                      overlay.IsInteractive() ||
-                     (settings.fire.requireForeground && !ForegroundIsPid(esp.Pid())));
+                     (settings.fire.requireForeground && !focused));
 
-        fly.Tick(settings, esp,
+        fly.Tick(settings, esp.Mem(), view.local,
                  overlay.IsInteractive() ||
-                 (settings.fly.requireForeground && !ForegroundIsPid(esp.Pid())));
+                 (settings.fly.requireForeground && !focused));
 
         memView.Tick(esp.Mem());
 
@@ -155,7 +160,6 @@ int main() {
 
         overlay.EndFrame();
 
-        // menu aberto: frame curto, sem vsync — widget responde na hora
         Sleep(overlay.IsInteractive() ? 1u : static_cast<DWORD>(settings.tickMs > 0 ? settings.tickMs : 1));
     }
 

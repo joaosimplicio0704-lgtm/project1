@@ -119,7 +119,7 @@ static void DrawEspTab(cfg::Settings& settings) {
 }
 
 // ------------------------------------------------------------
-static void DrawAimTab(cfg::Settings& settings, Esp& esp) {
+static void DrawAimTab(cfg::Settings& settings, bool attached) {
     cfg::AimSettings& aim = settings.aim;
 
     ImGui::Checkbox("Aim assist", &aim.enabled);
@@ -160,6 +160,11 @@ static void DrawAimTab(cfg::Settings& settings, Esp& esp) {
     ImGui::SetNextItemWidth(180.f);
     ImGui::SliderFloat("Jitter (px)", &aim.jitterPx, 0.f, 5.f, "%.1f");
 
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderFloat("Antecipacao (ms)", &aim.leadMs, 0.f, 200.f, "%.0f");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("projeta o alvo pela velocidade dele (AssemblyLinearVelocity)");
+
     ImGui::SeparatorText("FOV");
     ImGui::SetNextItemWidth(180.f);
     ImGui::SliderFloat("Raio (px)", &aim.fovPx, 20.f, 600.f, "%.0f");
@@ -168,7 +173,7 @@ static void DrawAimTab(cfg::Settings& settings, Esp& esp) {
 
     ImGui::Spacing();
     ImGui::TextDisabled("ganho real por tick: %.3f", aim.strength / (aim.smoothing < 1.f ? 1.f : aim.smoothing));
-    if (!esp.Attached())
+    if (!attached)
         ImGui::TextDisabled("sem processo: nada e enviado");
 }
 
@@ -210,6 +215,8 @@ static void DrawFireTab(cfg::Settings& settings, const AimAssist& aim, const Tri
 
 // ------------------------------------------------------------
 static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) {
+    const auto scene = esp.Snapshot();
+    const LocalState local = scene ? scene->local : LocalState{};
     cfg::FlySettings& v = settings.fly;
 
     ImGui::Checkbox("Voo", &v.enabled);
@@ -234,7 +241,7 @@ static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) 
     ImGui::Spacing();
     ImGui::Text("handle     %s", esp.Mem().CanWrite() ? "VM_WRITE ok" : "read-only (reatacha ao ligar)");
     ImGui::Text("estado     %s", fly.Active() ? "voando" : "parado");
-    ImGui::Text("posicao    %.1f, %.1f, %.1f", esp.Local().position.x, esp.Local().position.y, esp.Local().position.z);
+    ImGui::Text("posicao    %.1f, %.1f, %.1f", local.position.x, local.position.y, local.position.z);
 }
 
 // ------------------------------------------------------------
@@ -311,6 +318,7 @@ static void DrawGameTab(cfg::Settings& settings, Detector& detector) {
 
 // ------------------------------------------------------------
 static void DrawConfigTab(cfg::Settings& settings, Esp& esp, Overlay& overlay) {
+    const auto scene = esp.Snapshot();
     ImGui::SeparatorText("Handle");
     ImGui::Checkbox("Abrir via StealthyOpenProcess", &settings.stealthOpen);
     ImGui::Checkbox("Fechar handles de thread orfaos", &settings.handleWatch);
@@ -332,9 +340,10 @@ static void DrawConfigTab(cfg::Settings& settings, Esp& esp, Overlay& overlay) {
     ImGui::Spacing();
     ImGui::SeparatorText("Estado");
     ImGui::Text("offsets   %s", rbx::kVersion);
-    ImGui::Text("processo  %s", esp.Attached() ? "conectado" : "offline");
-    ImGui::Text("leitura   %s", esp.Status());
-    ImGui::Text("alvos     %d", esp.TargetCount());
+    ImGui::Text("processo  %s", (scene && scene->attached) ? "conectado" : "offline");
+    ImGui::Text("leitura   %s", scene ? scene->status.c_str() : "iniciando");
+    ImGui::Text("alvos     %d", scene ? static_cast<int>(scene->targets.size()) : 0);
+    ImGui::Text("quadro    %d", scene ? scene->frame : 0);
     ImGui::Text("fps       %.0f  (%.0fx%.0f)", overlay.Fps(), overlay.Width(), overlay.Height());
 
     ImGui::Spacing();
@@ -374,7 +383,8 @@ void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detecto
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Aim")) {
-            DrawAimTab(settings, esp);
+            const auto scene = esp.Snapshot();
+            DrawAimTab(settings, scene && scene->attached);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Tiros")) {

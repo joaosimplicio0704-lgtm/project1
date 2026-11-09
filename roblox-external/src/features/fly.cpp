@@ -22,21 +22,16 @@ void Fly::Reset() {
     m_lastTick = 0;
 }
 
-void Fly::Tick(const cfg::Settings& settings, Esp& esp, bool blocked) {
+void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& local, bool blocked) {
     const cfg::FlySettings& fly = settings.fly;
 
-    if (!fly.enabled || blocked) {
+    if (!fly.enabled || blocked || !local.Valid() || !local.primitive) {
         m_active = false;
         return;
     }
 
-    if (!esp.Attached() || !esp.Local().Valid() || !esp.Local().primitive) {
-        m_active = false;
-        return;
-    }
-
-    if (!esp.Mem().CanWrite()) {
-        // handle ainda sem VM_WRITE — o Esp reabre no proximo tick
+    // handle ainda sem VM_WRITE — o leitor reabre no proximo ciclo
+    if (!memory.CanWrite()) {
         m_active = false;
         return;
     }
@@ -54,14 +49,15 @@ void Fly::Tick(const cfg::Settings& settings, Esp& esp, bool blocked) {
     }
 
     const uint64_t now = GetTickCount64();
-    const float dt = m_lastTick ? static_cast<float>(now - m_lastTick) / 1000.f : static_cast<float>(settings.tickMs) / 1000.f;
+    const float dt = m_lastTick
+        ? static_cast<float>(now - m_lastTick) / 1000.f
+        : static_cast<float>(settings.tickMs) / 1000.f;
     m_lastTick = now;
     m_active = true;
 
     if (dt <= 0.f || dt > 0.25f)
         return;
 
-    const LocalState& local = esp.Local();
     const float* r = local.cameraRotation;   // 3x3 row-major da CFrame da camera
 
     // Roblox: LookVector = -(coluna 3), RightVector = coluna 1
@@ -89,7 +85,6 @@ void Fly::Tick(const cfg::Settings& settings, Esp& esp, bool blocked) {
     if (!next.Finite())
         return;
 
-    Memory& memory = esp.Mem();
     memory.Write(local.primitive + rbx::Primitive::Position, next);
 
     if (fly.zeroVelocity) {
