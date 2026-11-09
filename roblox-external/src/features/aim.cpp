@@ -69,6 +69,7 @@ Vector3 BonePoint(const Target& target, int bone) {
 void AimAssist::Reset() {
     m_hasTarget = false;
     m_targetError = 0.f;
+    m_lockedPlayer = 0;
     m_accumX = 0.f;
     m_accumY = 0.f;
     m_lastDown = false;
@@ -82,22 +83,37 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
 
     if (width <= 0.f || height <= 0.f || !scene.attached) {
         m_accumX = m_accumY = 0.f;
+        m_lockedPlayer = 0;
         return;
     }
 
     const float centerX = width * 0.5f;
     const float centerY = height * 0.5f;
-    m_fovCenterX = centerX;
-    m_fovCenterY = centerY;
 
-    // antecipacao: alvo em movimento, projetar onde ele vai estar
+    // ---- tecla: segurar ou toggle ----
+    const bool down = (GetAsyncKeyState(aim.key) & 0x8000) != 0;
+    if (aim.toggleMode && down && !m_lastDown)
+        m_toggled = !m_toggled;
+    m_lastDown = down;
+
+    const bool active = aim.enabled && !blocked &&
+                        (aim.toggleMode ? m_toggled : down) &&
+                        (!aim.requireForeground || ForegroundIsPid(static_cast<DWORD>(pid)));
+
+    if (!active) {
+        m_lockedPlayer = 0;
+        m_accumX = m_accumY = 0.f;
+    }
+
     const float lead = aim.leadMs > 0.f ? aim.leadMs / 1000.f : 0.f;
 
-    // ---- alvo mais perto do crosshair, sempre calculado:
-    //      o trigger le isso mesmo com o aim assist desligado ----
-    bool found = false;
+    // ---- seleção: alvo travado tem prioridade; senão o mais perto do crosshair ----
+    bool found = false, lockFound = false;
     float bestDistance = aim.fovPx;
-    Vector2 bestScreen{};
+    float lockDistance = aim.fovPx;
+    Vector2 bestScreen{}, lockScreen{};
+    uintptr_t bestPlayer = 0, lockPlayer = 0;
+    Vector3 bestVelocity{}, lockVelocity{};
 
     for (const Target& target : scene.targets) {
         Vector3 point = BonePoint(target, aim.bone);
@@ -117,41 +133,48 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
 
         if (distance > aim.fovPx)
             continue;
+
+        if (active && m_lockedPlayer && target.player == m_lockedPlayer && !lockFound) {
+            lockFound = true;
+            lockDistance = distance;
+            lockScreen = screen;
+            lockPlayer = target.player;
+            lockVelocity = target.velocity;
+        }
+
         if (found && distance >= bestDistance)
             continue;
 
         found = true;
         bestDistance = distance;
         bestScreen = screen;
+        bestPlayer = target.player;
+        bestVelocity = target.velocity;
+    }
+
+    // alvo travado vale mesmo se outro ficou mais perto, desde que siga no FOV
+    if (lockFound) {
+        found = true;
+        bestDistance = lockDistance;
+        bestScreen = lockScreen;
+        bestPlayer = lockPlayer;
+        bestVelocity = lockVelocity;
     }
 
     if (!found) {
+        m_lockedPlayer = 0;
         m_accumX = m_accumY = 0.f;
         return;
     }
+
+    if (active)
+        m_lockedPlayer = bestPlayer;
 
     m_hasTarget = true;
     m_targetX = bestScreen.x;
     m_targetY = bestScreen.y;
     m_targetError = bestDistance;
 
-    if (!aim.enabled || blocked) {
-        m_accumX = m_accumY = 0.f;
-        return;
-    }
-
-    if (aim.requireForeground && !ForegroundIsPid(static_cast<DWORD>(pid))) {
-        m_accumX = m_accumY = 0.f;
-        return;
-    }
-
-    // ---- tecla: segurar ou toggle ----
-    const bool down = (GetAsyncKeyState(aim.key) & 0x8000) != 0;
-    if (aim.toggleMode && down && !m_lastDown)
-        m_toggled = !m_toggled;
-    m_lastDown = down;
-
-    const bool active = aim.toggleMode ? m_toggled : down;
     if (!active) {
         m_accumX = m_accumY = 0.f;
         return;

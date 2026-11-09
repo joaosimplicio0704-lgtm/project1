@@ -10,15 +10,12 @@ void Detector::Reset() {
     m_info = GameInfo{};
     m_lastDataModel = 0;
     m_lastRead = 0;
-    m_changed = false;
 }
 
 void Detector::Tick(const Memory& memory, uintptr_t dataModel, int playerCount) {
     if (!dataModel) {
-        if (m_info.valid) {
+        if (m_info.valid)
             m_info = GameInfo{};
-            m_changed = true;
-        }
         return;
     }
 
@@ -46,10 +43,6 @@ void Detector::Tick(const Memory& memory, uintptr_t dataModel, int playerCount) 
     }
 
     info.valid = info.placeId != 0 || info.gameId != 0;
-
-    // mudou de lugar/servidor? recarrega tudo (cache de instancia morre junto)
-    if (rejoin || info.placeId != m_info.placeId || info.jobId != m_info.jobId)
-        m_changed = true;
 
     m_info = std::move(info);
     m_lastDataModel = dataModel;

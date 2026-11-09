@@ -14,6 +14,45 @@ constexpr ImU32 kBoxColor      = IM_COL32(0, 255, 130, 210);
 constexpr ImU32 kNameColor     = IM_COL32(235, 235, 235, 255);
 constexpr ImU32 kDistanceColor = IM_COL32(180, 180, 180, 255);
 constexpr ImU32 kBarBack       = IM_COL32(20, 20, 20, 180);
+constexpr ImU32 kSkeletonColor = IM_COL32(255, 255, 255, 170);
+constexpr ImU32 kTracerColor   = IM_COL32(0, 255, 130, 70);
+
+constexpr const char* kBoneNames[kBoneCount] = {
+    "Head", "UpperTorso", "LowerTorso",
+    "LeftUpperArm", "LeftLowerArm", "LeftHand",
+    "RightUpperArm", "RightLowerArm", "RightHand",
+    "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
+    "RightUpperLeg", "RightLowerLeg", "RightFoot"
+};
+
+// R6: um part cobre o membro inteiro
+struct BoneAlias { const char* name; int bone; };
+constexpr BoneAlias kR6Aliases[] = {
+    { "Torso", kBoneUpperTorso },
+    { "Torso", kBoneLowerTorso },
+    { "Left Arm", kBoneLeftUpperArm },
+    { "Right Arm", kBoneRightUpperArm },
+    { "Left Leg", kBoneLeftUpperLeg },
+    { "Right Leg", kBoneRightUpperLeg },
+};
+
+struct BoneLink { int a; int b; };
+constexpr BoneLink kBoneLinks[] = {
+    { kBoneHead, kBoneUpperTorso },
+    { kBoneUpperTorso, kBoneLowerTorso },
+    { kBoneUpperTorso, kBoneLeftUpperArm },
+    { kBoneLeftUpperArm, kBoneLeftLowerArm },
+    { kBoneLeftLowerArm, kBoneLeftHand },
+    { kBoneUpperTorso, kBoneRightUpperArm },
+    { kBoneRightUpperArm, kBoneRightLowerArm },
+    { kBoneRightLowerArm, kBoneRightHand },
+    { kBoneLowerTorso, kBoneLeftUpperLeg },
+    { kBoneLeftUpperLeg, kBoneLeftLowerLeg },
+    { kBoneLeftLowerLeg, kBoneLeftFoot },
+    { kBoneLowerTorso, kBoneRightUpperLeg },
+    { kBoneRightUpperLeg, kBoneRightLowerLeg },
+    { kBoneRightLowerLeg, kBoneRightFoot },
+};
 
 constexpr uint64_t kChildrenTtl = 500;
 constexpr uint64_t kTextTtl     = 3000;
@@ -138,6 +177,7 @@ void Esp::Shutdown() {
 void Esp::UpdateSettings(const cfg::Settings& settings) {
     std::lock_guard<std::mutex> lock(m_settingsMutex);
     m_reader.teamCheck = settings.teamCheck;
+    m_reader.skeleton = settings.espSkeleton;
     m_reader.maxDistance = settings.maxDistance;
     m_reader.stealthOpen = settings.stealthOpen;
     m_reader.wantWrite = settings.fly.enabled;
@@ -299,17 +339,31 @@ const Esp::PartEntry& Esp::PartsOf(uintptr_t character, uint64_t now) {
     entry.rootPart = 0;
     entry.headPart = 0;
     entry.humanoid = 0;
+    for (int bone = 0; bone < kBoneCount; ++bone)
+        entry.bones[bone] = 0;
 
     const std::vector<uintptr_t> kids = Children(character, now); // copia: cache pode ser limpo
 
     for (uintptr_t child : kids) {
-        if (!entry.rootPart && NameOf(child, now) == "HumanoidRootPart")
+        const std::string& name = NameOf(child, now);
+
+        if (!entry.rootPart && name == "HumanoidRootPart")
             entry.rootPart = child;
-        else if (!entry.headPart && NameOf(child, now) == "Head")
+        else if (!entry.headPart && name == "Head")
             entry.headPart = child;
 
         if (!entry.humanoid && ClassOf(child, now) == "Humanoid")
             entry.humanoid = child;
+
+        for (int bone = 0; bone < kBoneCount; ++bone) {
+            if (!entry.bones[bone] && name == kBoneNames[bone])
+                entry.bones[bone] = child;
+        }
+
+        for (const BoneAlias& alias : kR6Aliases) {
+            if (!entry.bones[alias.bone] && name == alias.name)
+                entry.bones[alias.bone] = child;
+        }
     }
 
     return entry;
@@ -409,11 +463,17 @@ void Esp::ReadScene(SceneSnapshot& scene, const ReaderSettings& reader) {
     // varredura de players
     std::vector<Target> found;
     const std::vector<uintptr_t> players = Children(playersService, now);
+    int playerCount = 0;
 
     for (uintptr_t player : players) {
-        if (!player || player == local.localPlayer)
+        if (!player)
             continue;
         if (ClassOf(player, now) != "Player")
+            continue;
+
+        ++playerCount;
+
+        if (player == local.localPlayer)
             continue;
 
         if (reader.teamCheck && localTeam) {
@@ -455,6 +515,18 @@ void Esp::ReadScene(SceneSnapshot& scene, const ReaderSettings& reader) {
         if (primitive)
             m_memory.Read(primitive + rbx::Primitive::AssemblyLinearVelocity, target.velocity);
 
+        if (reader.skeleton) {
+            for (int bone = 0; bone < kBoneCount; ++bone) {
+                if (!parts.bones[bone])
+                    continue;
+                Vector3 point{};
+                if (ReadPartPosition(m_memory, parts.bones[bone], point)) {
+                    target.bones[bone] = point;
+                    target.boneValid[bone] = true;
+                }
+            }
+        }
+
         target.player = player;
         target.name = NameOf(player, now);
         if (target.name == "?")
@@ -464,8 +536,16 @@ void Esp::ReadScene(SceneSnapshot& scene, const ReaderSettings& reader) {
     }
 
     scene.targets = std::move(found);
+    scene.playerCount = playerCount;
     scene.status = "ok";
     ++scene.frame;
+
+    if (m_lastScene && now > m_lastScene) {
+        const float instant = 1000.f / static_cast<float>(now - m_lastScene);
+        m_tickRate = m_tickRate > 0.f ? m_tickRate * 0.9f + instant * 0.1f : instant;
+    }
+    m_lastScene = now;
+    scene.tickRate = m_tickRate;
 }
 
 // ------------------------------------------------------------
@@ -526,6 +606,28 @@ void Esp::Draw(ImDrawList* list, const cfg::Settings& settings, float width, flo
             std::snprintf(buffer, sizeof(buffer), "%d studs", static_cast<int>(target.distance));
             const ImVec2 size = ImGui::CalcTextSize(buffer);
             list->AddText(ImVec2(centerX - size.x * 0.5f, bottom + 2.f), kDistanceColor, buffer);
+        }
+
+        if (settings.espHeadDot)
+            list->AddCircleFilled(ImVec2(head.x, head.y), 3.f, kBoxColor, 8);
+
+        if (settings.espTracer) {
+            list->AddLine(ImVec2(width * 0.5f, height), ImVec2(root.x, bottom), kTracerColor, 1.0f);
+        }
+
+        if (settings.espSkeleton) {
+            for (const BoneLink& link : kBoneLinks) {
+                if (!target.boneValid[link.a] || !target.boneValid[link.b])
+                    continue;
+
+                Vector2 a{}, b{};
+                if (!WorldToScreen(target.bones[link.a], a, view, width, height))
+                    continue;
+                if (!WorldToScreen(target.bones[link.b], b, view, width, height))
+                    continue;
+
+                list->AddLine(ImVec2(a.x, a.y), ImVec2(b.x, b.y), kSkeletonColor, 1.2f);
+            }
         }
     }
 }

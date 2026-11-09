@@ -63,6 +63,8 @@ Saída: `build/RobloxExternal.exe`. Binário pronto em `dist/RobloxExternal.exe`
 INSERT   abre/fecha o menu e devolve o mouse pro jogo
 F1       ESP on/off
 F2       caixa on/off
+F5       salva config.json + profiles.json
+F9       carrega config.json + profiles.json
 END      sai
 Mouse 5  aim assist (segurar; rebindável na aba Aim)
 ```
@@ -106,6 +108,10 @@ passo = clamp(passo, passo_max)
 | `Zona morta (px)` | para de mexer quando já está em cima |
 | `Jitter (px)` | ruído no delta |
 | `Antecipação (ms)` | projeta o alvo pela velocidade dele (`AssemblyLinearVelocity`) — lead de alvo em movimento |
+
+Alvo é **travado** enquanto você segura a tecla: se outro inimigo passar mais perto do
+crosshair no meio da puxada, o aim continua no mesmo. Solta a tecla (ou sai do FOV) e
+destrava.
 | `FOV (raio px)` | círculo do alcance, desenhado na tela |
 | `Osso` | cabeça / peito / raiz |
 | `Tecla` | botão `Bind` captura a próxima tecla; modo segurar ou toggle |
@@ -132,6 +138,15 @@ tecla é rebindável igual à do aim. Menu aberto ou jogo fora de foco = não at
 ## Leitor de memória
 
 Três camadas, da mais automática pra mais manual.
+
+### ESP — o que desenha
+
+| opção | nota |
+|---|---|
+| caixa, nome, barra de vida, distância | base, custo zero extra |
+| esqueleto | R15 por nome de parte com fallback R6; **custa 15 leituras por alvo**, por isso é opt-in |
+| traçador | linha do centro da tela até o alvo |
+| ponto na cabeça | marcador de 3px no osso da cabeça |
 
 ### Ao vivo (automático)
 
@@ -268,8 +283,6 @@ Tudo em `src/offsets.h`, dentro de `namespace rbx`. Cola o dump novo por cima, r
   para o aim ter ganho constante entre sessões.
 - overlay cobre o **monitor primário** inteiro; multi-monitor com o jogo no secundário
   não é coberto.
-- a varredura de valor roda na thread de render: pode dar um engasgo de ~1s no
-  frame em que você clica em **Novo scan**. É o único trabalho pesado síncrono.
 - `Live` protegido por Hyperion: leitura no cliente de produção tende a derrubar
   o processo. **Testar em Studio ou em VM.**
 

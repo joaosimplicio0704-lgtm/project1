@@ -17,7 +17,7 @@ constexpr ImU32 kZeroColor = IM_COL32(110, 110, 120, 255);
 constexpr ImU32 kChangedColor = IM_COL32(120, 255, 140, 255);
 constexpr ImU32 kAsciiColor = IM_COL32(170, 190, 170, 255);
 
-constexpr size_t kScanChunk = 1u << 20;   // 1MB por leitura
+constexpr size_t kScanChunk = 1u << 16;   // 64KB por leitura (falha barata)
 constexpr size_t kScanLimit = 1000;       // teto de resultados
 
 const char* TypeName(int type) {
@@ -239,80 +239,92 @@ void MemView::DrawAuto(const Esp& esp) {
 // varredura
 // ============================================================
 void MemView::ScanReset() {
-    m_scan.clear();
-    m_scanTruncated = false;
+    Stop();
+    {
+        std::lock_guard<std::mutex> lock(m_scanMutex);
+        m_scan.clear();
+        m_scanPending.clear();
+    }
     m_scanStatus[0] = '\0';
+    m_scanDone.store(0);
+    m_scanTotal.store(0);
+}
+
+void MemView::Stop() {
+    m_scanCancel.store(true);
+    if (m_scanThread.joinable())
+        m_scanThread.join();
+    m_scanCancel.store(false);
+    m_scanRunning.store(false);
+}
+
+// roda fora da thread de render: a UI continua desenhando enquanto varre
+void MemView::ScanWorker(const Memory* memory, int type, double value, uintptr_t begin, uintptr_t end) {
+    const size_t typeSize = ScanTypeSize(type);
+    std::vector<uint8_t> buffer(kScanChunk);
+    std::vector<uintptr_t> hits;
+    hits.reserve(kScanLimit);
+
+    m_scanDone.store(0);
+
+    for (uintptr_t cursor = begin; cursor < end && hits.size() < kScanLimit; cursor += kScanChunk) {
+        if (m_scanCancel.load(std::memory_order_relaxed))
+            break;
+
+        const size_t remaining = static_cast<size_t>(end - cursor);
+        const size_t toRead = remaining < kScanChunk ? remaining : kScanChunk;
+
+        // Memory::Read ja serializa o handle e valida a faixa
+        if (!memory->Read(cursor, buffer.data(), toRead)) {
+            m_scanDone.fetch_add(1, std::memory_order_relaxed);
+            continue;
+        }
+
+        for (size_t offset = 0; offset + typeSize <= toRead; offset += typeSize) {
+            if (!Matches(buffer.data() + offset, type, value))
+                continue;
+
+            hits.push_back(cursor + offset);
+            if (hits.size() >= kScanLimit)
+                break;
+        }
+
+        m_scanDone.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(m_scanMutex);
+        m_scanPending = std::move(hits);
+        m_scanPendingValid = true;
+    }
+
+    m_scanRunning.store(false);
 }
 
 void MemView::ScanStart(const Memory& memory) {
-    m_scan.clear();
-    m_scanTruncated = false;
+    Stop();
 
-    const HANDLE handle = memory.Handle();
     const uintptr_t base = memory.Base();
     const size_t size = memory.BaseSize();
 
-    if (!handle || !base || !size) {
+    if (!base || !size) {
         std::snprintf(m_scanStatus, sizeof(m_scanStatus), "sem modulo para varrer");
         return;
     }
 
-    const size_t typeSize = ScanTypeSize(m_scanType);
+    const int chunks = static_cast<int>((size + kScanChunk - 1) / kScanChunk);
+    m_scanTotal.store(chunks);
+    m_scanDone.store(0);
+    m_scanCancel.store(false);
+    m_scanRunning.store(true);
+    m_scanStatus[0] = '\0';
+
     const double value = std::atof(m_scanValue);
-
-    std::vector<uint8_t> buffer(kScanChunk);
-    uintptr_t address = base;
-    const uintptr_t limit = base + size;
-
-    while (address < limit && m_scan.size() < kScanLimit) {
-        MEMORY_BASIC_INFORMATION region{};
-        if (!VirtualQueryEx(handle, reinterpret_cast<LPCVOID>(address), &region, sizeof(region)))
-            break;
-
-        const uintptr_t regionBase = reinterpret_cast<uintptr_t>(region.BaseAddress);
-        const uintptr_t regionEnd = regionBase + region.RegionSize;
-        const uintptr_t nextRegion = regionEnd > address ? regionEnd : address + 0x1000;
-
-        const bool readable = region.State == MEM_COMMIT &&
-                              !(region.Protect & PAGE_GUARD) &&
-                              !(region.Protect & PAGE_NOACCESS) &&
-                              (region.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
-                                                 PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE));
-
-        if (!readable) {
-            address = nextRegion;
-            continue;
-        }
-
-        for (uintptr_t cursor = address; cursor < regionEnd && m_scan.size() < kScanLimit; cursor += kScanChunk) {
-            const size_t remaining = static_cast<size_t>(regionEnd - cursor);
-            const size_t toRead = remaining < kScanChunk ? remaining : kScanChunk;
-
-            SIZE_T got = 0;
-            if (!ReadProcessMemory(handle, reinterpret_cast<LPCVOID>(cursor), buffer.data(), toRead, &got) || got < typeSize) {
-                continue;
-            }
-
-            for (size_t offset = 0; offset + typeSize <= got; offset += typeSize) {
-                if (!Matches(buffer.data() + offset, m_scanType, value))
-                    continue;
-
-                m_scan.push_back(cursor + offset);
-                if (m_scan.size() >= kScanLimit) {
-                    m_scanTruncated = true;
-                    break;
-                }
-            }
-        }
-
-        address = nextRegion;
-    }
-
-    std::snprintf(m_scanStatus, sizeof(m_scanStatus), "%d resultado(s)%s",
-                  static_cast<int>(m_scan.size()), m_scanTruncated ? " (teto atingido)" : "");
+    m_scanThread = std::thread(&MemView::ScanWorker, this, &memory, m_scanType, value, base, base + size);
 }
 
 void MemView::ScanFilter(const Memory& memory) {
+    std::lock_guard<std::mutex> lock(m_scanMutex);
     if (m_scan.empty())
         return;
 
@@ -336,6 +348,21 @@ void MemView::ScanFilter(const Memory& memory) {
 }
 
 void MemView::DrawScanner(const Memory& memory) {
+    // varredura terminou: transplanta o resultado
+    if (!m_scanRunning.load()) {
+        if (m_scanThread.joinable())
+            m_scanThread.join();
+
+        std::lock_guard<std::mutex> lock(m_scanMutex);
+        if (m_scanPendingValid) {
+            m_scan = std::move(m_scanPending);
+            m_scanPending.clear();
+            m_scanPendingValid = false;
+            std::snprintf(m_scanStatus, sizeof(m_scanStatus), "%d resultado(s)",
+                          static_cast<int>(m_scan.size()));
+        }
+    }
+
     ImGui::TextDisabled("acha o endereco de um valor que voce ve no jogo");
 
     ImGui::SetNextItemWidth(110.f);
@@ -347,7 +374,10 @@ void MemView::DrawScanner(const Memory& memory) {
         ImGui::EndCombo();
     }
 
+    const bool running = m_scanRunning.load();
+
     ImGui::SameLine();
+    ImGui::BeginDisabled(running);
     ImGui::SetNextItemWidth(140.f);
     ImGui::InputText("##scanvalue", m_scanValue, sizeof(m_scanValue));
 
@@ -363,17 +393,37 @@ void MemView::DrawScanner(const Memory& memory) {
     if (ImGui::Button("Limpar"))
         ScanReset();
     ImGui::EndDisabled();
+    ImGui::EndDisabled();
+
+    if (running) {
+        const int total = m_scanTotal.load();
+        const int done = m_scanDone.load();
+        const float fraction = total > 0 ? static_cast<float>(done) / static_cast<float>(total) : 0.f;
+
+        char overlay[48]{};
+        std::snprintf(overlay, sizeof(overlay), "%d%%", static_cast<int>(fraction * 100.f));
+        ImGui::ProgressBar(fraction, ImVec2(220.f, 0.f), overlay);
+        ImGui::SameLine();
+        if (ImGui::Button("Cancelar"))
+            m_scanCancel.store(true);
+    }
 
     if (m_scanStatus[0])
         ImGui::TextDisabled("%s", m_scanStatus);
 
-    if (!m_scan.empty()) {
+    std::vector<uintptr_t> results;
+    {
+        std::lock_guard<std::mutex> lock(m_scanMutex);
+        results = m_scan;   // copia: desenho nao segura o mutex
+    }
+
+    if (!results.empty()) {
         ImGui::BeginChild("##scan", ImVec2(0.f, 180.f), true);
         ImGuiListClipper clipper;
-        clipper.Begin(static_cast<int>(m_scan.size()));
+        clipper.Begin(static_cast<int>(results.size()));
         while (clipper.Step()) {
             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
-                const uintptr_t address = m_scan[static_cast<size_t>(i)];
+                const uintptr_t address = results[static_cast<size_t>(i)];
                 ImGui::PushID(i);
 
                 ImGui::TextColored(ImVec4(0.62f, 0.62f, 0.68f, 1.f), "0x%llX",
@@ -402,9 +452,6 @@ void MemView::DrawScanner(const Memory& memory) {
     }
 }
 
-// ============================================================
-// watches / dump
-// ============================================================
 void MemView::ReadWatch(const Memory& memory, Watch& watch) {
     watch.changed = false;
     watch.value[0] = '\0';

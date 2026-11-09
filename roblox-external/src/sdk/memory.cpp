@@ -122,6 +122,11 @@ void Memory::Detach() {
     }
 }
 
+bool Memory::Ready() const {
+    std::lock_guard<std::mutex> lock(m_guard);
+    return m_handle != nullptr && m_base != 0;
+}
+
 bool Memory::Alive() const {
     std::lock_guard<std::mutex> lock(m_guard);
     if (!m_handle)
@@ -170,16 +175,6 @@ bool Memory::Write(uintptr_t address, const void* data, size_t size) const {
     if (!WriteProcessMemory(m_handle, reinterpret_cast<LPVOID>(address), data, size, &written))
         return false;
     return written == size;
-}
-
-uintptr_t Memory::Resolve(uintptr_t base, std::initializer_list<uintptr_t> chain) const {
-    uintptr_t current = base;
-    for (uintptr_t offset : chain) {
-        current = ReadPtr(current + offset);
-        if (!current)
-            return 0;
-    }
-    return current;
 }
 
 std::string Memory::ReadString(uintptr_t string_address, size_t max_length) const {

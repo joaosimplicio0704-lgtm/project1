@@ -92,6 +92,9 @@ struct Settings {
     bool  names       = true;
     bool  healthBar   = true;
     bool  distance    = true;
+    bool  espSkeleton = false;   // custa 15 leituras por alvo
+    bool  espTracer   = false;
+    bool  espHeadDot  = false;
     bool  teamCheck   = true;
     bool  stealthOpen = true;
     bool  handleWatch = true;

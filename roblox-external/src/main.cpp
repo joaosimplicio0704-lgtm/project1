@@ -100,6 +100,10 @@ int main() {
             settings.espEnabled = !settings.espEnabled;
         if (PressedOnce(cfg::kBoxKey))
             settings.boxes = !settings.boxes;
+        if (PressedOnce(VK_F5))
+            std::printf("[cfg] salvar: %s\n", cfg::Save(settings) ? "ok" : "falhou");
+        if (PressedOnce(VK_F9))
+            std::printf("[cfg] carregar: %s\n", cfg::Load(settings) ? "ok" : "config nao existe");
 
         if (settings.handleWatch && !handleWatchRunning) {
             handleWatchRunning = HandleCleanup::Start();
@@ -119,7 +123,7 @@ int main() {
         const SceneSnapshot& view = scene ? *scene : kEmptyScene;
         const bool focused = ForegroundIsPid(esp.Pid());
 
-        detector.Tick(esp.Mem(), view.dataModel, static_cast<int>(view.targets.size()));
+        detector.Tick(esp.Mem(), view.dataModel, view.playerCount);
 
         // entrou em outro jogo: aplica o perfil salvo daquele PlaceId, se existir
         const GameInfo& game = detector.Info();

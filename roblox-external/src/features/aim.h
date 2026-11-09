@@ -33,9 +33,8 @@ private:
     bool  m_hasTarget = false;
     float m_targetX = 0.f;
     float m_targetY = 0.f;
-    float m_targetError = 0.f;
-    float m_fovCenterX = 0.f;
-    float m_fovCenterY = 0.f;
+    float     m_targetError = 0.f;
+    uintptr_t m_lockedPlayer = 0;   // alvo travado ate soltar a tecla
 
     float m_accumX = 0.f;   // resto fracionario do delta
     float m_accumY = 0.f;

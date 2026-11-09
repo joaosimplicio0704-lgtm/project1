@@ -106,6 +106,13 @@ static void DrawEspTab(cfg::Settings& settings) {
     ImGui::Checkbox("Nome", &settings.names);
     ImGui::Checkbox("Barra de vida", &settings.healthBar);
     ImGui::Checkbox("Distancia", &settings.distance);
+    ImGui::Checkbox("Esqueleto", &settings.espSkeleton);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("R15/R6 por nome de parte — custa 15 leituras por alvo");
+    ImGui::SameLine();
+    ImGui::Checkbox("Tracador", &settings.espTracer);
+    ImGui::SameLine();
+    ImGui::Checkbox("Ponto na cabeca", &settings.espHeadDot);
 
     ImGui::Spacing();
     ImGui::SeparatorText("Filtro");
@@ -343,7 +350,8 @@ static void DrawConfigTab(cfg::Settings& settings, Esp& esp, Overlay& overlay) {
     ImGui::Text("processo  %s", (scene && scene->attached) ? "conectado" : "offline");
     ImGui::Text("leitura   %s", scene ? scene->status.c_str() : "iniciando");
     ImGui::Text("alvos     %d", scene ? static_cast<int>(scene->targets.size()) : 0);
-    ImGui::Text("quadro    %d", scene ? scene->frame : 0);
+    ImGui::Text("players   %d", scene ? scene->playerCount : 0);
+    ImGui::Text("quadro    %d  (%.0f Hz)", scene ? scene->frame : 0, scene ? scene->tickRate : 0.f);
     ImGui::Text("fps       %.0f  (%.0fx%.0f)", overlay.Fps(), overlay.Width(), overlay.Height());
 
     ImGui::Spacing();

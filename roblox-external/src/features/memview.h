@@ -1,6 +1,9 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "../sdk/memory.h"
@@ -11,9 +14,9 @@ class Esp;
 // Leitor de memoria.
 //
 // 1) Automatico: resolve a cadeia do jogador sozinho e mostra os valores
-//    ao vivo. Nenhum endereco, nenhum comando — abre a aba e esta la.
-// 2) Varredura: acha endereco a partir de um valor (primeiro scan +
-//    filtro), no range do modulo.
+//    ao vivo. Nenhum endereco, nenhum comando.
+// 2) Varredura: acha endereco a partir de um valor, em thread propria
+//    (a UI continua respondendo) com progresso e cancelamento.
 // 3) Manual: watch por expressao + hexdump.
 // ============================================================
 
@@ -44,8 +47,16 @@ struct Watch {
 
 class MemView {
 public:
+    MemView() = default;
+    ~MemView() { Stop(); }
+
+    MemView(const MemView&) = delete;
+    MemView& operator=(const MemView&) = delete;
+
     void Tick(const Memory& memory);
     void Draw(const Memory& memory, const Esp& esp);
+
+    void Stop();
 
 private:
     void DrawAuto(const Esp& esp);
@@ -57,21 +68,26 @@ private:
     void ScanStart(const Memory& memory);
     void ScanFilter(const Memory& memory);
     void ScanReset();
-
-    // automatico
-    uintptr_t m_autoTick = 0;
+    void ScanWorker(const Memory* memory, int type, double value, uintptr_t begin, uintptr_t end);
 
     // manual
     std::vector<Watch> m_watches;
     char        m_input[96] = "base+0x8EB6960>0x1F8";
     int         m_inputType = kPointer;
 
-    // varredura
-    int         m_scanType = kScanFloat;
-    char        m_scanValue[32] = "100";
+    // varredura (thread)
+    std::thread            m_scanThread;
+    std::atomic<bool>      m_scanRunning{ false };
+    std::atomic<bool>      m_scanCancel{ false };
+    std::atomic<int>       m_scanDone{ 0 };
+    std::atomic<int>       m_scanTotal{ 0 };
+    std::mutex             m_scanMutex;
+    std::vector<uintptr_t> m_scanPending;   // preenchido pela thread
+    bool                   m_scanPendingValid = false;
     std::vector<uintptr_t> m_scan;
-    char        m_scanStatus[96]{};
-    bool        m_scanTruncated = false;
+    int                    m_scanType = kScanFloat;
+    char                   m_scanValue[32] = "100";
+    char                   m_scanStatus[96]{};
 
     // dump
     uintptr_t   m_dumpAddress = 0;

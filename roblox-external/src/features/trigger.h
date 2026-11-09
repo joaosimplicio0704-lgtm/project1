@@ -20,7 +20,6 @@ public:
     void Tick(const cfg::Settings& settings, const AimAssist& aim, bool blocked);
     void Reset();
 
-    bool Firing() const { return m_pressed; }
     int  ShotsFired() const { return m_shots; }
 
 private:

@@ -75,6 +75,9 @@ static bool SaveConfig(const Settings& s) {
     out << "  \"names\": "       << Bool(s.names)       << ",\n";
     out << "  \"healthBar\": "   << Bool(s.healthBar)   << ",\n";
     out << "  \"distance\": "    << Bool(s.distance)    << ",\n";
+    out << "  \"espSkeleton\": " << Bool(s.espSkeleton) << ",\n";
+    out << "  \"espTracer\": "   << Bool(s.espTracer)   << ",\n";
+    out << "  \"espHeadDot\": "  << Bool(s.espHeadDot)  << ",\n";
     out << "  \"teamCheck\": "   << Bool(s.teamCheck)   << ",\n";
     out << "  \"stealthOpen\": " << Bool(s.stealthOpen) << ",\n";
     out << "  \"handleWatch\": " << Bool(s.handleWatch) << ",\n";
@@ -128,6 +131,9 @@ static bool LoadConfig(Settings& s) {
     s.names       = AsBool(ValueOf(text, "names"),       s.names);
     s.healthBar   = AsBool(ValueOf(text, "healthBar"),   s.healthBar);
     s.distance    = AsBool(ValueOf(text, "distance"),    s.distance);
+    s.espSkeleton = AsBool(ValueOf(text, "espSkeleton"), s.espSkeleton);
+    s.espTracer   = AsBool(ValueOf(text, "espTracer"),   s.espTracer);
+    s.espHeadDot  = AsBool(ValueOf(text, "espHeadDot"),  s.espHeadDot);
     s.teamCheck   = AsBool(ValueOf(text, "teamCheck"),   s.teamCheck);
     s.stealthOpen = AsBool(ValueOf(text, "stealthOpen"), s.stealthOpen);
     s.handleWatch = AsBool(ValueOf(text, "handleWatch"), s.handleWatch);

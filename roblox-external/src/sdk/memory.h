@@ -22,7 +22,7 @@ public:
     void Detach();
 
     bool Alive() const;
-    bool Ready() const { return m_handle != nullptr && m_base != 0; }
+    bool Ready() const;
 
     uintptr_t Base() const;
     size_t BaseSize() const;
@@ -46,7 +46,6 @@ public:
     }
 
     uintptr_t ReadPtr(uintptr_t address) const { return ReadOr<uintptr_t>(address, 0); }
-    uintptr_t Resolve(uintptr_t base, std::initializer_list<uintptr_t> chain) const;
     std::string ReadString(uintptr_t string_address, size_t max_length = 128) const;
 
     static DWORD FindPid(const char* process_name);

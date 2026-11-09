@@ -40,6 +40,26 @@ struct LocalState {
     bool Valid() const { return localPlayer != 0; }
 };
 
+// ordem dos ossos lidos por personagem (R15; R6 mapeia no subset)
+enum BoneIndex : int {
+    kBoneHead = 0,
+    kBoneUpperTorso,
+    kBoneLowerTorso,
+    kBoneLeftUpperArm,
+    kBoneLeftLowerArm,
+    kBoneLeftHand,
+    kBoneRightUpperArm,
+    kBoneRightLowerArm,
+    kBoneRightHand,
+    kBoneLeftUpperLeg,
+    kBoneLeftLowerLeg,
+    kBoneLeftFoot,
+    kBoneRightUpperLeg,
+    kBoneRightLowerLeg,
+    kBoneRightFoot,
+    kBoneCount
+};
+
 struct Target {
     uintptr_t   player = 0;
     std::string name;
@@ -49,6 +69,9 @@ struct Target {
     float       health = 100.f;
     float       maxHealth = 100.f;
     float       distance = 0.f;
+
+    Vector3     bones[kBoneCount]{};
+    bool        boneValid[kBoneCount]{};
 };
 
 // quadro imutavel publicado pelo leitor: render e aim so leem isto,
@@ -62,6 +85,8 @@ struct SceneSnapshot {
     uint64_t   stamp = 0;
     bool       attached = false;
     int        frame = 0;
+    int        playerCount = 0;   // todo mundo no Players, incluindo voce
+    float      tickRate = 0.f;    // Hz real do leitor
 };
 
 class Esp {
@@ -92,6 +117,7 @@ public:
 private:
     struct ReaderSettings {
         bool  teamCheck = true;
+        bool  skeleton = false;
         float maxDistance = 2000.f;
         bool  stealthOpen = true;
         bool  wantWrite = false;
@@ -112,6 +138,7 @@ private:
         uintptr_t rootPart = 0;
         uintptr_t headPart = 0;
         uintptr_t humanoid = 0;
+        uintptr_t bones[kBoneCount]{};
         uint64_t  stamp = 0;
     };
 
@@ -141,6 +168,8 @@ private:
     uintptr_t m_dataModel = 0;
     uint64_t  m_lastAttachAttempt = 0;
     uint64_t  m_tick = 4;
+    uint64_t  m_lastScene = 0;
+    float     m_tickRate = 0.f;
 
     std::unordered_map<uintptr_t, CacheEntry> m_children;
     std::unordered_map<uintptr_t, TextEntry>  m_names;

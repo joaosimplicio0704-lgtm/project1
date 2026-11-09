@@ -25,7 +25,6 @@ public:
     void Tick(const Memory& memory, uintptr_t dataModel, int playerCount);
 
     const GameInfo& Info() const { return m_info; }
-    bool Changed() { const bool c = m_changed; m_changed = false; return c; }
 
     void Reset();
 
@@ -33,5 +32,4 @@ private:
     GameInfo m_info{};
     uintptr_t m_lastDataModel = 0;
     uint64_t  m_lastRead = 0;
-    bool      m_changed = false;
 };
