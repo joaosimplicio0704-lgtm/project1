@@ -25,6 +25,8 @@ Net.ActionKind = {
 	Travel = "travel",
 	CollectMine = "collectMine",
 	RushMine = "rushMine",
+	Hit = "hit",
+	SetCombat = "setCombat",
 }
 
 Net.EventKind = {
@@ -34,6 +36,8 @@ Net.EventKind = {
 	Zone = "zone",
 	Travel = "travel",
 	Mine = "mine",
+	Hit = "hit",
+	LevelUp = "levelUp",
 }
 
 -- Zonas interativas do mapa (click detector -> abre UI no cliente)

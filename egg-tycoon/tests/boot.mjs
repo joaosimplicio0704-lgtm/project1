@@ -18,7 +18,7 @@ const prepare = (src) =>
 		.filter((line) => !/^local Shared = /.test(line))
 		.filter(
 			(line) =>
-				!/^local (Sessions|PlayerData|World|Remotes|Game|Effects|Net|GameConfig|Pets|Format|Mine|MineServer) = require\(/.test(line),
+				!/^local (Sessions|PlayerData|World|Remotes|Game|Effects|Net|GameConfig|Pets|Format|Mine|MineServer|Combat|Monsters|Progress) = require\(/.test(line),
 		)
 		.join("\n");
 
@@ -179,6 +179,7 @@ function Sessions.all() return Sessions.byPlayer end`,
   save = function() end,
 }`,
 	mod("Mine", "src/shared/Mine.luau"),
+	mod("Combat", "src/shared/Combat.luau"),
 	`local MineServer = {
   init = function() end,
   sync = function() end,
@@ -188,6 +189,15 @@ function Sessions.all() return Sessions.byPlayer end`,
   collect = function() return {}, 0 end,
   rush = function() return false, "stub" end,
 }`,
+	`local Monsters = {
+  sync = function() end,
+  forget = function() end,
+  tick = function() end,
+  hit = function() return nil, "stub" end,
+  attackPlayer = function(_, _, h) return h end,
+  snapshot = function() return { monsterId = "slime", name = "Gosma", health = 40, maxHealth = 40, alive = true, respawnIn = 0, tier = 1 } end,
+}`,
+	mod("Progress", "src/server/Progress.luau"),
 	mod("Game", "src/server/Game.luau"),
 	mod("Effects", "src/server/Effects.luau"),
 	String.raw`
@@ -203,6 +213,10 @@ Game.fx.equip = function() __fxCalls.equip += 1 end
 Game.fx.upgrade = function() __fxCalls.upgrade += 1 end
 Game.fx.rebirth = function() __fxCalls.rebirth += 1 end
 Game.fx.mine = function() __fxCalls.mine = (__fxCalls.mine or 0) + 1 end
+Game.fx.hit = function() __fxCalls.hit = (__fxCalls.hit or 0) + 1 end
+Game.fx.levelUp = function() __fxCalls.levelUp = (__fxCalls.levelUp or 0) + 1 end
+Game.fx.hurt = function() __fxCalls.hurt = (__fxCalls.hurt or 0) + 1 end
+Game.fx.offline = function() end
 
 Game.init(__remoteSet)
 

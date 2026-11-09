@@ -239,21 +239,77 @@ def render(parts, out_path, yaw=40, pitch=30, width=1600, height=900, label=None
         x, y, z = p["pos"]
         sx, sy, sz = p["size"]
         depth = cam.project(x, y, z)[2]
-        # Chão = laje fina e larga, em QUALQUER eixo. Cilindro deitado tem a
-        # espessura em X, não em Y; a regra antiga (sx>90 e sz>90 e sy<14)
-        # jogava a ilha redonda no monte de objetos e o anel de terra
-        # (mais baixo, mais largo) era desenhado por cima da grama.
-        dims = sorted((sx, sy, sz))
-        thickness, extent = dims[0], dims[2]
-        if extent > 90 and thickness < 14:
-            floors.append((y + thickness * 0.5, depth, p))
+        # Chão = laje: fina na VERTICAL e larga nos dois eixos horizontais.
+        #
+        # A regra antiga usava "extensão em qualquer eixo > 90". Isso deixava
+        # a ArenaFloor (91.8 de lado) como chão por 1.7 stud, mas as células
+        # de terreno (21 de lado) ficavam como objeto e eram pintadas DEPOIS,
+        # por cima da arena — a arena existia no build e não aparecia no
+        # render. O caso não era o limiar estar no valor errado: era a regra
+        # olhar o eixo errado.
+        #
+        # Fina na vertical (sy) separa laje de tronco de árvore e de parede.
+        # Larga nos dois horizontais separa laje de poste e de cerca.
+        # Ordenar por face de cima resolve terreno em degraus: a célula mais
+        # alta é pintada depois da mais baixa.
+        # Espessura e extensão medidas NO MUNDO, não no tamanho local.
+        #
+        # Um cilindro deitado (o chão do bioma, os anéis de terra) tem a
+        # espessura no X LOCAL: size = (7, 203.7, 203.7) com a rotação
+        # trocando X por Y. Lendo o `size` cru, sy=203.7 parecia uma parede
+        # de 200 studs e a peça ia para "objetos" — era pintada por último e
+        # cobria a arena inteira. Medindo no mundo dá 203.7 x 7 x 203.7:
+        # laje fina e larga, como no jogo.
+        rot = p.get("rot")
+        if rot:
+            extent_x = abs(rot[0][0]) * sx + abs(rot[0][1]) * sy + abs(rot[0][2]) * sz
+            extent_y = abs(rot[1][0]) * sx + abs(rot[1][1]) * sy + abs(rot[1][2]) * sz
+            extent_z = abs(rot[2][0]) * sx + abs(rot[2][1]) * sy + abs(rot[2][2]) * sz
+        else:
+            extent_x, extent_y, extent_z = sx, sy, sz
+        # A face de cima da laje: o centro MAIS a meia-espessura no mundo.
+        # O cilindro deitado tem a espessura no X local, então metade dele
+        # fica acima do centro e metade abaixo; extent_y/2 é exatamente a
+        # meia-espessura no mundo depois de aplicada a rotação.
+        # LAJE = espessura menor que METADE de cada lado horizontal.
+        #
+        # Não serve limiar absoluto: as células de terreno têm 10 de lado
+        # (e 3.2 de espessura) e um limiar de "> 15" as jogava para objetos,
+        # onde eram pintadas por profundidade — as células da frente cobriam
+        # a arena, que fica no meio delas. Proporção é o que define laje, em
+        # qualquer escala: chão do bioma (203x7), arena (92x1.4), célula
+        # (10x3.2) entram; tronco, poste e pedra (mais alto que largo) não.
+        if extent_y < extent_x * 0.5 and extent_y < extent_z * 0.5 and extent_x > 6 and extent_z > 6:
+            floors.append((y + extent_y * 0.5, depth, p))
         else:
             items.append((depth, p))
 
+    # ORDEM DE PINTURA
+    #
+    # Painter's algorithm adaptado a um mapa feito de camadas horizontais.
+    #
+    # Histórico de tentativas (todas quebraram em algo real):
+    #   1. só profundidade do centro — a Base da ilha (centro 17 studs
+    #      abaixo da arena, mas mais perto da câmera) cobria a arena.
+    #   2. só face de cima — as 976 células de terreno vinham depois por
+    #      causa do desempate e cobriam a arena.
+    #   3. camadas de altura fixas (floor(y/6)) — a praia caía na mesma
+    #      camada das árvores e o bioma virava um disco liso.
+    #   4. dois grupos (subsolo/superfície) por profundidade — o GroundDisc,
+    #      que é um CILINDRO DEITADO de 200 de diâmetro em Y 2.9, tem o
+    #      centro no subsolo e era pintado por cima da arena em Y 5.2.
+    #
+    # O que resolve: chão é uma pilha de lajes, então se ordena por FACE DE
+    # CIMA — a laje mais alta cobre a mais baixa, é exatamente o que se vê
+    # no jogo. Objetos (tronco, pedra, monstro) se ordenam por PROFUNDIDADE,
+    # porque ficam em pé e não se sobrepõem verticalmente.
+    #
+    # A arena fica em 5.9 e o GroundDisc em 3.24: arena depois, arena
+    # aparece. O terreno em degraus (4.8) fica abaixo da arena e é coberto
+    # por ela, como no Roblox.
     floors.sort(key=lambda t: (t[0], t[1]))
     items.sort(key=lambda t: t[0])
     ordered = [p for _, _, p in floors] + [p for _, p in items]
-
     for p in ordered:
         x, y, z = p["pos"]
         sx, sy, sz = p["size"]
@@ -288,14 +344,34 @@ def render(parts, out_path, yaw=40, pitch=30, width=1600, height=900, label=None
         right = shade(base, 0.76 if glow else 0.56 * gain)
 
         # topo (4,5,6,7) / esquerda (0,3,7,4) / direita (1,2,6,5)
-        if p["shape"] == 0:  # Ball: círculo achatado
-            cx, cy2, _ = cam.to_screen(x, y, z)
+        if p["shape"] == 0:  # Ball: esfera ou disco achatado
+            cx, cyTop, _ = cam.to_screen(x, y + hy, z)
+            _, cyBot, _ = cam.to_screen(x, y - hy, z)
             r = max(1.0, hx * cam.scale * 1.05)
-            ry = max(1.0, hy * cam.scale * (1.0 - math.sin(math.radians(pitch)) * 0.25))
-            d.ellipse([float(cx - r), float(cy2 - ry), float(cx + r), float(cy2 + ry)],
+            # Altura da elipse: esfera vista de cima continua sendo círculo
+            # (ry ~ r); disco deitado (hy << hx) vira elipse achatada pelo
+            # ângulo da câmera — um disco de 92 de diâmetro visto a 30 graus
+            # ocupa 92*sin(30) = 46 studs na vertical. Antes o ry vinha da
+            # ESPESSURA, então o chão da arena saía como faixa de 6 px e
+            # sumia no meio do mato: a arena existia no build e não aparecia.
+            flatten = hy / max(hx, 0.0001)
+            ry = max(1.0, r * (cam.sp + (1.0 - cam.sp) * min(1.0, flatten)))
+            # BOLA ACHATADA PRECISA DE LATERAL.
+            # Sem isto, um disco de 92 de diâmetro e 1.4 de espessura (o chão
+            # da arena, os anéis de terra) virava uma elipse de 2 px de altura
+            # e sumia do render — a arena existia no build e não aparecia.
+            # Só entra em bola achatada (hy bem menor que hx): esfera de
+            # olho de monstro continua sendo só a elipse.
+            if hy < hx * 0.6 and cyBot - cyTop > 1:
+                fill_left = tuple(int(v) for v in (top if glow else left))
+                d.rectangle([float(cx - r), float(cyTop), float(cx + r), float(cyBot)],
+                            fill=fill_left)
+                d.ellipse([float(cx - r), float(cyBot - ry), float(cx + r), float(cyBot + ry)],
+                          fill=fill_left)
+            d.ellipse([float(cx - r), float(cyTop - ry), float(cx + r), float(cyTop + ry)],
                       fill=tuple(int(v) for v in (top if glow else left)))
-            d.ellipse([float(cx - r * 0.92), float(cy2 - ry * 0.92),
-                       float(cx - r * 0.15), float(cy2 - ry * 0.1)],
+            d.ellipse([float(cx - r * 0.92), float(cyTop - ry * 0.92),
+                       float(cx - r * 0.15), float(cyTop - ry * 0.1)],
                       fill=tuple(int(v) for v in shade(top, 1.15)))
         elif p["shape"] == 2:  # Cylinder: eixo no X local
             # Desenhar como caixa fazia o disco da praia virar um "muro".

@@ -7,6 +7,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared.GameConfig)
 local Net = require(Shared.Net)
+local Combat = require(Shared.Combat)
+local Pets = require(Shared.Pets)
 
 local World = require(script.World)
 local Remotes = require(script.Remotes)
@@ -14,6 +16,8 @@ local PlayerData = require(script.PlayerData)
 local Sessions = require(script.Sessions)
 local Game = require(script.Game)
 local Effects = require(script.Effects)
+local Progress = require(script.Progress)
+local Monsters = require(script.Monsters)
 
 World.build()
 Effects.init(workspace)
@@ -134,6 +138,48 @@ Game.fx.mine = function(session, ore)
 	Effects.shockwave(at, color, 18, 0.55)
 end
 
+-- COMBATE: bater precisa deixar rastro. Sem isso o jogador clica no monstro
+-- e não acontece nada visível — foi exatamente a queixa da rodada 3.
+Game.fx.hit = function(session, result, killed)
+	local character = session.player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+	local at = root.Position + Vector3.new(0, 4, 0)
+	local color = killed and Color3.fromRGB(255, 210, 90) or Color3.fromRGB(255, 120, 120)
+	Effects.burst(at, color, killed and 30 or 10, killed and 26 or 14, killed and 3.4 or 2.0)
+	if killed then
+		Effects.shockwave(at, color, 22, 0.6)
+	end
+end
+
+-- Subir de nível: anel grande, cor de ouro. É o momento mais importante do
+-- jogo — tem que ser visível de longe.
+Game.fx.levelUp = function(session, level)
+	local character = session.player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+	local at = root.Position + Vector3.new(0, 3, 0)
+	local gold = Color3.fromRGB(255, 214, 90)
+	Effects.shockwave(at, gold, 34, 1.0)
+	Effects.burst(at + Vector3.new(0, 6, 0), gold, 40, 30, 3.6)
+	remotes.event:FireClient(session.player, Net.EventKind.LevelUp, { level = level })
+end
+
+Game.fx.hurt = function(session)
+	local character = session.player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+	Effects.burst(root.Position + Vector3.new(0, 4, 0), Color3.fromRGB(200, 60, 60), 14, 16, 2.4)
+end
+
+Game.fx.offline = function() end
+
 Game.fx.rebirth = function(session, rebirths)
 	local pos = feetPosition(session)
 	if not pos then
@@ -169,8 +215,27 @@ local function startSession(player)
 	}
 	Sessions.byPlayer[player] = session
 
+	-- RENDA OFFLINE
+	-- Guarda o horário de saída e credita o tempo fora ao voltar. É o que
+	-- faz o jogador abrir o jogo de novo no dia seguinte em vez de esquecer
+	-- que existe. Teto de 8h para não quebrar a economia.
+	Progress.ensure(data)
+	if (data.lastOnline or 0) > 0 then
+		local secondsAway = os.time() - data.lastOnline
+		if secondsAway > 60 then
+			local incomePerSecond = Pets.income(data) * Combat.levelBonus(data.level).income
+			local reward = Combat.offlineReward(secondsAway, incomePerSecond)
+			if reward.coins > 0 then
+				data.coins = data.coins + reward.coins
+				data.stats.coinsEarned = (data.stats.coinsEarned or 0) + reward.coins
+				session.pendingOffline = reward
+			end
+		end
+	end
+	data.lastOnline = os.time()
+
 	-- auto-equipa o melhor em slot livre ao entrar
-	require(Shared.Pets).autoEquip(data)
+	Pets.autoEquip(data)
 
 	local character = player.Character or player.CharacterAdded:Wait()
 	local root = character and character:WaitForChild("HumanoidRootPart", 10)
@@ -183,6 +248,12 @@ local function endSession(player)
 	local session = Sessions.get(player)
 	if not session then
 		return
+	end
+	-- marca a saída ANTES de soltar o save: a renda offline do próximo
+	-- login é contada a partir daqui
+	if session.data then
+		session.data.lastOnline = os.time()
+		PlayerData.markDirty(player.UserId)
 	end
 	Sessions.byPlayer[player] = nil
 	PlayerData.release(player.UserId)
@@ -237,6 +308,21 @@ for name, binding in pairs(zoneBindings) do
 			elseif err then
 				remotes.event:FireClient(player, Net.EventKind.Toast, { text = err, kind = "error" })
 			end
+		end)
+	end
+end
+
+-- CLIQUE NO MONSTRO: bate. Cada ilha tem o seu ClickDetector.
+-- O dano é calculado no servidor (Game.handlers.hit), então clicar mil vezes
+-- por segundo não vira dano infinito: o limite é o tick.
+for biomeId, binding in pairs(World.getMonsterBindings()) do
+	if binding.detector then
+		binding.detector.MouseClick:Connect(function(player)
+			local session = Sessions.get(player)
+			if not session then
+				return
+			end
+			Game.handlers.hit(session, nil)
 		end)
 	end
 end

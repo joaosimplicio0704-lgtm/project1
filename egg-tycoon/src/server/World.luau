@@ -12,6 +12,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local Biomes = require(ReplicatedStorage.Shared.Biomes)
 local Terrain = require(ReplicatedStorage.Shared.Terrain)
 local Style = require(ReplicatedStorage.Shared.Style)
+local Combat = require(ReplicatedStorage.Shared.Combat)
 
 local World = {}
 
@@ -642,6 +643,8 @@ local function makeSign(position, text, color, parent, facing)
 end
 
 local zoneBindings = {}
+-- [biomeId] = { arena, monster, target, detector } — o init.server liga o clique
+local monsterBindings = {}
 
 local function makeZone(name, position, size, color)
 	local hitbox = part({
@@ -666,6 +669,10 @@ end
 
 function World.getZoneBindings()
 	return zoneBindings
+end
+
+function World.getMonsterBindings()
+	return monsterBindings
 end
 
 ---------------------------------------------------------------------------
@@ -804,6 +811,187 @@ end
 ---------------------------------------------------------------------------
 -- CRIAÇÃO DOURADA (o "oven" dourado dos prints)
 ---------------------------------------------------------------------------
+
+---------------------------------------------------------------------------
+-- ARENA DE COMBATE
+---------------------------------------------------------------------------
+
+-- Cada ilha ganha uma arena: um círculo de chão batido com o monstro no meio.
+-- A arena existe para o jogador SABER onde a briga acontece sem ler nada.
+-- Chão de cor diferente é o sinal mais barato e mais legível que existe.
+-- Frações do raio do bioma. Ver buildArena e decorateBiome.
+World.ArenaRadiusFraction = 0.46
+World.ArenaOffsetFraction = 0.40
+
+-- Deslocamento local (x, z) do centro da arena, relativo ao centro do bioma.
+--
+-- É a ÚNICA fonte dessa conta. Antes estava repetida em buildArena,
+-- decorateBiome e themedDecor, e cada cópia usou um sinal diferente — a
+-- arena ia para um lado e o "não plante aqui" para o outro, então nasciam
+-- árvores exatamente sobre o monstro.
+function World.arenaCenterOffset(biome)
+	local center = biome.center
+	local toHub = Vector3.new(center.x * -1, 0, center.z * -1)
+	if toHub.Magnitude < 0.01 then
+		toHub = Vector3.new(1, 0, 0)
+	end
+	toHub = toHub.Unit
+	local d = World.ArenaOffsetFraction * biome.radius
+	return Vector3.new(toHub.X * d, 0, toHub.Z * d)
+end
+
+function World.buildArena(biome, center, groundY, parent, cells)
+	local monsterId = Combat.BiomeMonster[biome.id]
+	if not monsterId then
+		return nil
+	end
+	local spec = Combat.monsterById[monsterId]
+	if not spec then
+		return nil
+	end
+
+	-- fica no lado oposto ao portal, para o jogador ver a briga ao chegar.
+	-- As frações moram em World.* porque decorateBiome também precisa delas
+	-- para não plantar árvore dentro da arena: dois números soltos em dois
+	-- lugares divergem na primeira vez que alguém mexer em um só.
+	local arenaRadius = World.ArenaRadiusFraction * biome.radius
+	local offset = World.ArenaOffsetFraction * biome.radius
+
+	-- A ARENA FICA NO LADO OPOSTO AO SPAWN.
+	--
+	-- O ArrivalPad (onde o jogador nasce ao entrar no bioma) fica a 0.42 do
+	-- raio na direção do hub. A arena ficava a 0.40 na direção +X, então em
+	-- meadow as duas caíam praticamente no mesmo lugar (x 422 e x 424): o
+	-- jogador nascia dentro da arena. Aqui a arena vai para o lado da
+	-- direção do spawn, com o sinal invertido.
+	local arenaCenter = World.arenaCenterOffset(biome)
+	local arenaOffsetX, arenaOffsetZ = arenaCenter.X, arenaCenter.Z
+
+	-- altura do terreno ONDE a arena fica. Mede num ponto DENTRO do raio
+	-- (0.72 do deslocamento): perto da borda o heightAtCell pode cair fora
+	-- da célula e devolver o platô.
+	local arenaGroundY
+	if cells then
+		local probe = 0.72
+		arenaGroundY = Terrain.heightAtCell(biome, cells, arenaOffsetX * probe, arenaOffsetZ * probe) + 0.12
+	else
+		arenaGroundY = groundY + 0.12
+	end
+
+	local arena = Instance.new("Model")
+	arena.Name = "Arena"
+	arena.Parent = parent
+
+	-- chão batido: círculo achatado, cor de terra
+	local floor = ball({
+		Name = "ArenaFloor",
+		Size = Vector3.new(arenaRadius * 1.9, 1.4, arenaRadius * 1.9),
+		-- ALTURA MEDIDA NO LUGAR DA ARENA, não no centro do bioma.
+		--
+		-- groundY é a altura do topo do terreno em (0,0) — o platô do ovo.
+		-- A arena fica a 0.40 do raio de distância, onde o relevo em degraus
+		-- já desceu; usar groundY ali deixava a arena flutuando sobre uma
+		-- plataforma, ou enterrada, dependendo do bioma.
+		--
+		-- Soma 0.12: encostada E acima. Coplanar com o terreno dá z-fighting
+		-- no Roblox (as duas faces brigam pelo mesmo pixel e piscam).
+		Position = center + Vector3.new(arenaOffsetX, arenaGroundY - 0.7, arenaOffsetZ),
+		Color = Style.color.dirt,
+		Material = Style.flat,
+		CanCollide = false,
+	}, arena)
+
+	-- anel de pedras em volta: fecha a arena visualmente
+	for i = 1, 14 do
+		local angle = (i / 14) * math.pi * 2
+		ball({
+			Name = "ArenaStone",
+			Size = Vector3.new(3, 2.2, 3),
+			Position = center + Vector3.new(
+				arenaOffsetX + math.cos(angle) * arenaRadius * 0.95,
+				arenaGroundY + 0.2,
+				arenaOffsetZ + math.sin(angle) * arenaRadius * 0.95
+			),
+			Color = i % 2 == 0 and Style.color.rockDark or Style.color.rock,
+			Material = Style.rock,
+		}, arena)
+	end
+
+	-- o MONSTRO. Ele é um modelo solto no mundo (não é NPC com Humanoid:
+	-- Humanoid gasta muito e não precisamos de física, só de alvo).
+	-- `MonsterTarget` é a peça que o jogador clica.
+	local monster = Instance.new("Model")
+	monster.Name = "Monster"
+	monster.Parent = arena
+
+	local bodyColor = {
+		slime = Color3.fromRGB(120, 210, 120),
+		bat = Color3.fromRGB(120, 106, 160),
+		golem = Color3.fromRGB(150, 140, 128),
+		wraith = Color3.fromRGB(150, 120, 200),
+		titan = Color3.fromRGB(220, 120, 90),
+	}
+	local color = bodyColor[monsterId] or Style.color.purple
+	-- O MONSTRO PISA NO CHÃO DA ARENA.
+	--
+	-- `arenaGroundY` é o TOPO do terreno; a arena soma 0.12 e tem 1.4 de
+	-- espessura com o centro em arenaGroundY - 0.7, então o piso da arena
+	-- fica em arenaGroundY + 0.12 - 0.7 + 0.7 = arenaGroundY + 0.12.
+	-- O corpo tem 11 de altura: o centro vai meia altura acima do piso.
+	-- Antes era arenaGroundY + 0.2 + 6 = 6 studs acima do chão, e o monstro
+	-- flutuava com as patas no ar.
+	local MONSTER_HEIGHT = 11
+	local arenaFloorY = arenaGroundY + 0.12
+	local base = center + Vector3.new(arenaOffsetX, arenaFloorY + MONSTER_HEIGHT * 0.5, arenaOffsetZ)
+
+	local target = ball({
+		Name = "MonsterTarget",
+		Size = Vector3.new(13, MONSTER_HEIGHT, 13),
+		Position = base,
+		Color = color,
+		Material = Style.flat,
+	}, monster)
+
+	-- olhos: dois buracos escuros. Dá personalidade com 2 peças.
+	for _, side in ipairs({ -1, 1 }) do
+		ball({
+			Name = "Eye",
+			Size = Vector3.new(2.2, 2.6, 1.4),
+			Position = base + Vector3.new(side * 2.6, 2.4, -5.6),
+			Color = Style.color.black,
+			Material = Style.flat,
+			CanCollide = false,
+		}, monster)
+	end
+
+	-- chifres/espinhos por tier: o monstro do cosmos parece mais perigoso
+	for i = 1, math.min(spec.tier + 1, 6) do
+		local angle = (i / (math.min(spec.tier + 1, 6))) * math.pi * 2
+		part({
+			Name = "Horn",
+			Size = Vector3.new(1.6, 4.5, 1.6),
+			Position = base + Vector3.new(math.cos(angle) * 5, 5.4, math.sin(angle) * 5),
+			Color = Style.darken(color, 0.3),
+			Material = Style.flat,
+			CanCollide = false,
+		}, monster)
+	end
+
+	-- ClickDetector: clicar no monstro bate nele
+	local detector = Instance.new("ClickDetector")
+	detector.MaxActivationDistance = 40
+	detector.Parent = target
+
+	return {
+		arena = arena,
+		monster = monster,
+		target = target,
+		detector = detector,
+		biome = biome.id,
+		monsterId = monsterId,
+		spec = spec,
+	}
+end
 
 ---------------------------------------------------------------------------
 -- MINA DOS PETS
@@ -2056,12 +2244,45 @@ local function themedDecor(biome, cells, home, center, rng)
 		return center + Vector3.new(lx, Terrain.heightAtCell(biome, cells, lx, lz), lz)
 	end
 
+	-- A ARENA É SAGRADA: nada temático nasce dentro dela.
+	--
+	-- O desvio do decorateBiome não cobre este bloco: themedDecor sorteia em
+	-- outro anel (0.42–0.78 do raio) e estava plantando cerejeira e banco
+	-- dentro da arena — a gosma ficava atrás de um tronco. Aqui o filtro é
+	-- aplicado no próprio groundAt, então TODO tema herda a regra.
+	local arenaOffX = World.arenaCenterOffset(biome).X
+	local arenaOffZ = World.arenaCenterOffset(biome).Z
+	local clearRadius = World.ArenaRadiusFraction * biome.radius * 1.18
+
+	local function inArena(lx, lz)
+		local dx, dz = lx - arenaOffX, lz - arenaOffZ
+		return dx * dx + dz * dz < clearRadius * clearRadius
+	end
+
+	-- EMPURRA para fora da arena, em vez de descartar.
+	--
+	-- Descartar quebrava o teste do mundo: forest exige 5 toras caídas
+	-- (FallenLog) e algumas caíam dentro da arena, então o bioma ficava com
+	-- menos peças do que a especificação pede. Empurrar preserva a
+	-- quantidade e ainda tira o obstáculo da frente do monstro.
+	local function safeSpot(angle, radius)
+		local lx, lz = math.cos(angle) * radius, math.sin(angle) * radius
+		local dx, dz = lx - arenaOffX, lz - arenaOffZ
+		local d = math.sqrt(dx * dx + dz * dz)
+		if d < clearRadius and d > 0.001 then
+			local push = (clearRadius - d) + 1
+			lx = lx + (dx / d) * push
+			lz = lz + (dz / d) * push
+		end
+		return center + Vector3.new(lx, Terrain.heightAtCell(biome, cells, lx, lz), lz)
+	end
+
 	local function meadow()
 		-- cerejeiras cor-de-rosa e bancos de madeira
 		for i = 1, 7 do
 			local angle = rng:NextNumber() * math.pi * 2
 			local radius = biome.radius * (0.42 + rng:NextNumber() * 0.36)
-			local pos = groundAt(angle, radius)
+			local pos = safeSpot(angle, radius)
 			local scale = 0.8 + rng:NextNumber() * 0.4
 			part({
 				Name = "CherryTrunk",
@@ -2082,7 +2303,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		end
 		for i = 1, 4 do
 			local angle = (i / 4) * math.pi * 2 + 0.4
-			local pos = groundAt(angle, biome.radius * 0.4)
+			local pos = safeSpot(angle, biome.radius * 0.4)
 			part({
 				Name = "Bench",
 				Size = Vector3.new(10, 1.2, 4),
@@ -2107,7 +2328,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		for i = 1, 12 do
 			local angle = rng:NextNumber() * math.pi * 2
 			local radius = biome.radius * (0.3 + rng:NextNumber() * 0.5)
-			local pos = groundAt(angle, radius)
+			local pos = safeSpot(angle, radius)
 			local scale = 0.5 + rng:NextNumber() * 0.9
 			part({
 				Name = "ShroomStem",
@@ -2135,7 +2356,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		for i = 1, 5 do
 			local angle = rng:NextNumber() * math.pi * 2
 			local radius = biome.radius * (0.35 + rng:NextNumber() * 0.45)
-			local pos = groundAt(angle, radius)
+			local pos = safeSpot(angle, radius)
 			local log = part({
 				Name = "FallenLog",
 				Size = Vector3.new(4, 4, 18),
@@ -2152,7 +2373,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		for i = 1, 11 do
 			local angle = rng:NextNumber() * math.pi * 2
 			local radius = biome.radius * (0.3 + rng:NextNumber() * 0.5)
-			local pos = groundAt(angle, radius)
+			local pos = safeSpot(angle, radius)
 			local scale = 0.7 + rng:NextNumber() * 0.8
 			part({
 				Name = "Cactus",
@@ -2173,7 +2394,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		end
 		for i = 1, 3 do
 			local angle = (i / 3) * math.pi * 2
-			local pos = groundAt(angle, biome.radius * 0.55)
+			local pos = safeSpot(angle, biome.radius * 0.55)
 			local rib = part({
 				Name = "BoneRib",
 				Size = Vector3.new(14, 1.2, 1.2),
@@ -2189,7 +2410,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		-- boneco de neve e pinheiros pequenos de gelo
 		for i = 1, 3 do
 			local angle = (i / 3) * math.pi * 2 + 0.5
-			local pos = groundAt(angle, biome.radius * 0.42)
+			local pos = safeSpot(angle, biome.radius * 0.42)
 			ball({
 				Name = "SnowBase",
 				Size = Vector3.new(11, 9, 11),
@@ -2238,7 +2459,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		for i = 1, 8 do
 			local angle = rng:NextNumber() * math.pi * 2
 			local radius = biome.radius * (0.32 + rng:NextNumber() * 0.5)
-			local pos = groundAt(angle, radius)
+			local pos = safeSpot(angle, radius)
 			local scale = 0.6 + rng:NextNumber() * 0.7
 			part({
 				Name = "IceTreeTrunk",
@@ -2265,7 +2486,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		for i = 1, 10 do
 			local angle = rng:NextNumber() * math.pi * 2
 			local radius = biome.radius * (0.28 + rng:NextNumber() * 0.55)
-			local pos = groundAt(angle, radius)
+			local pos = safeSpot(angle, radius)
 			local stone = part({
 				Name = "Grave",
 				Size = Vector3.new(5, 9, 1.6),
@@ -2286,7 +2507,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		for i = 1, 6 do
 			local angle = rng:NextNumber() * math.pi * 2
 			local radius = biome.radius * (0.34 + rng:NextNumber() * 0.4)
-			local pos = groundAt(angle, radius)
+			local pos = safeSpot(angle, radius)
 			part({
 				Name = "LanternPost",
 				Size = Vector3.new(1.2, 9, 1.2),
@@ -2315,7 +2536,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		for i = 1, 14 do
 			local angle = rng:NextNumber() * math.pi * 2
 			local radius = biome.radius * (0.28 + rng:NextNumber() * 0.5)
-			local pos = groundAt(angle, radius)
+			local pos = safeSpot(angle, radius)
 			local scale = 0.5 + rng:NextNumber() * 0.8
 			ball({
 				Name = "SmallPumpkin",
@@ -2335,7 +2556,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		for i = 1, 5 do
 			local angle = rng:NextNumber() * math.pi * 2
 			local radius = biome.radius * (0.4 + rng:NextNumber() * 0.35)
-			local pos = groundAt(angle, radius)
+			local pos = safeSpot(angle, radius)
 			local candle = ball({
 				Name = "GhostCandle",
 				Size = Vector3.new(3.2, 5, 3.2),
@@ -2357,7 +2578,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		for i = 1, 10 do
 			local angle = rng:NextNumber() * math.pi * 2
 			local radius = biome.radius * (0.3 + rng:NextNumber() * 0.55)
-			local pos = groundAt(angle, radius)
+			local pos = safeSpot(angle, radius)
 			local scale = 0.6 + rng:NextNumber() * 1.1
 			local rock = ball({
 				Name = "Asteroid",
@@ -2372,7 +2593,7 @@ local function themedDecor(biome, cells, home, center, rng)
 		for i = 1, 7 do
 			local angle = rng:NextNumber() * math.pi * 2
 			local radius = biome.radius * (0.35 + rng:NextNumber() * 0.45)
-			local pos = groundAt(angle, radius)
+			local pos = safeSpot(angle, radius)
 			local star = ball({
 				Name = "FallenStar",
 				Size = Vector3.new(3.6, 3.6, 3.6),
@@ -2422,11 +2643,44 @@ local function decorateBiome(biome, cells, home, center)
 	local placeable = biome.radius * 0.74
 	local innerRing = biome.radius * 0.30
 
-	-- árvores (ou pinheiros / abóboras, conforme o tema)
-	for i = 1, spec.trees do
+	-- ZONA DA ARENA: nada de decoração aqui dentro.
+	--
+	-- A arena fica centrada em +0.40 do raio no eixo X com 0.46 de raio, então
+	-- ocupa de -0.06 a 0.86 do raio. O anel de decoração sorteia de 0.30 a
+	-- 0.74 — quase todo dentro da arena. Sem esta exclusão nasciam árvores
+	-- em cima do monstro, e o jogador tinha que bater na gosma escondida
+	-- atrás de um tronco. (Achado no render: a arena existia no build, mas
+	-- ficava coberta pelo mato.)
+	local arenaRadius = World.ArenaRadiusFraction * biome.radius
+	-- 1.18: a copa mais larga chega a ~10 studs, então a folga tem de ser
+	-- generosa. Abaixo disso a árvore nasce fora do disco mas a copa cobre
+	-- o monstro do mesmo jeito.
+	local clearRadius = arenaRadius * 1.18
+	local arenaCenter = World.arenaCenterOffset(biome)
+	local arenaOffX, arenaOffZ = arenaCenter.X, arenaCenter.Z
+
+	-- Sorteia uma posição e EMPURRA para fora da arena.
+	--
+	-- Empurrar em vez de descartar (e em vez de tentar de novo) porque
+	-- descartar mudava a QUANTIDADE de peças e quebrava o teste do mundo,
+	-- que exige um número mínimo de árvores e enfeites por bioma.
+	local function scatter(rng)
 		local angle = rng:NextNumber() * math.pi * 2
 		local radius = innerRing + (placeable - innerRing) * rng:NextNumber()
-		local x, z, y = groundAt(angle, radius)
+		local lx, lz, y = groundAt(angle, radius)
+		local dx, dz = lx - arenaOffX, lz - arenaOffZ
+		local d = math.sqrt(dx * dx + dz * dz)
+		if d < clearRadius and d > 0.001 then
+			local push = (clearRadius - d) + 1
+			lx, lz = lx + (dx / d) * push, lz + (dz / d) * push
+			y = Terrain.heightAtCell(biome, cells, lx, lz)
+		end
+		return lx, lz, y, angle, radius
+	end
+
+	-- árvores (ou pinheiros / abóboras, conforme o tema)
+	for i = 1, spec.trees do
+		local x, z, y, angle, radius = scatter(rng)
 		local scale = 0.7 + rng:NextNumber() * 0.8
 
 		if biome.id == "halloween" then
@@ -2486,9 +2740,7 @@ local function decorateBiome(biome, cells, home, center)
 
 	-- pedras
 	for i = 1, spec.rocks do
-		local angle = rng:NextNumber() * math.pi * 2
-		local radius = innerRing + (placeable - innerRing) * rng:NextNumber()
-		local x, z, y = groundAt(angle, radius)
+		local x, z, y, angle, radius = scatter(rng)
 		local scale = 0.8 + rng:NextNumber() * 1.4
 		ball({
 			Name = "Rock",
@@ -2501,9 +2753,7 @@ local function decorateBiome(biome, cells, home, center)
 
 	-- flores (só bioma de grama)
 	for i = 1, spec.flowers do
-		local angle = rng:NextNumber() * math.pi * 2
-		local radius = innerRing + (placeable - innerRing) * rng:NextNumber()
-		local x, z, y = groundAt(angle, radius)
+		local x, z, y, angle, radius = scatter(rng)
 		flower(center + Vector3.new(x, y, z), home)
 	end
 
@@ -2511,9 +2761,7 @@ local function decorateBiome(biome, cells, home, center)
 
 	-- cristais brilhantes (gelo, sombrio, cosmos, deserto)
 	for i = 1, spec.crystals do
-		local angle = rng:NextNumber() * math.pi * 2
-		local radius = innerRing + (placeable - innerRing) * rng:NextNumber()
-		local x, z, y = groundAt(angle, radius)
+		local x, z, y, angle, radius = scatter(rng)
 		local height = 4 + rng:NextNumber() * 9
 		local crystal = part({
 			Name = "Crystal",
@@ -2700,7 +2948,15 @@ function World.buildBiome(biome, portalPosition, parent)
 	-- Esta laje única, logo abaixo do relevo, fecha todos os vãos de uma vez.
 	-- Material "Ground" e cor da terra: se aparecer em alguma fresta, lê
 	-- como solo, não como buraco.
-	local floorTop = groundY - Terrain.CellThickness * 0.6
+	-- `groundY` NÃO é a base do terreno: Terrain.heightAtCell já devolve o
+	-- TOPO (y + thickness/2). Este disco é a laje maciça que fecha os vãos
+	-- entre as células, então ele fica um pouco ABAIXO do topo — senão tapa
+	-- a grama e vira um disco liso.
+	--
+	-- O disco tem CellThickness*2.2 de espessura, e a posição é o CENTRO:
+	-- centro = topo - meia espessura - 0.05 de folga põe a face de cima
+	-- logo abaixo do terreno, sem furar e sem sumir.
+	local floorTop = groundY - Terrain.CellThickness * 1.1 - 0.05
 	local groundDisc = part({
 		Name = "GroundDisc",
 		Size = Vector3.new(Terrain.CellThickness * 2.2, biome.radius * 1.94, biome.radius * 1.94),
@@ -2729,6 +2985,12 @@ function World.buildBiome(biome, portalPosition, parent)
 	end
 
 	decorateBiome(biome, cells, home, center)
+
+	-- ARENA: o chão da briga + o monstro. Ver World.buildArena.
+	local arena = World.buildArena(biome, center, groundY, home, cells)
+	if arena then
+		monsterBindings[biome.id] = arena
+	end
 
 	-- BARREIRA
 	-- A cerca vai na borda da grama (0.92 do raio: dentro do terreno, fora
@@ -2786,11 +3048,25 @@ function World.buildBiome(biome, portalPosition, parent)
 	}, home)
 
 	-- postes: um anel de luzes na borda da ilha, virados para o centro
+	--
+	-- O anel é a 0.62 do raio, e a arena ocupa de 0.06 a 0.86 — um poste
+	-- caía dentro da arena e ficava na frente do monstro. Aqui o poste é
+	-- EMPURRADO para fora do círculo da arena, na direção oposta ao centro
+	-- dela. Empurrar (em vez de pular) preserva o anel completo de luz.
+	local arenaCenter = World.arenaCenterOffset(biome)
+	local arenaClear = World.ArenaRadiusFraction * biome.radius * 1.15
 	local postCount = biome.id == "cosmos" and 6 or 8
 	for i = 1, postCount do
 		local angle = (i / postCount) * math.pi * 2
 		local radius = biome.radius * 0.62
 		local lx, lz = math.cos(angle) * radius, math.sin(angle) * radius
+		local dx, dz = lx - arenaCenter.X, lz - arenaCenter.Z
+		local dist = math.sqrt(dx * dx + dz * dz)
+		if dist < arenaClear and dist > 0.001 then
+			local push = (arenaClear - dist) + 2
+			lx = lx + (dx / dist) * push
+			lz = lz + (dz / dist) * push
+		end
 		local gy = Terrain.heightAtCell(biome, cells, lx, lz)
 		local base = Vector3.new(center.X + lx, center.Y + gy, center.Z + lz)
 

@@ -25,6 +25,7 @@ local Toasts = require(script.Toasts)
 local WorldUI = require(script.WorldUI)
 local BiomesPanel = require(script.BiomesPanel)
 local MinePanel = require(script.MinePanel)
+local CombatPanel = require(script.CombatPanel)
 
 ---------------------------------------------------------------------------
 -- GUI RAIZ
@@ -49,6 +50,7 @@ PetsPanel.build(gui)
 ShopPanel.build(gui)
 BiomesPanel.build(gui)
 MinePanel.build(gui)
+CombatPanel.build(gui)
 
 local function closeAll()
 	EggPanel.hide()
@@ -213,6 +215,25 @@ NetClient.on(function(kind, payload)
 		EggPanel.onHatch(payload)
 	elseif kind == Net.EventKind.Rebirth then
 		Toasts.push(string.format("♻️ Rebirth %d! +%d 💎", payload.rebirths, payload.crystals), "success")
+	elseif kind == Net.EventKind.Hit then
+		-- dano no monstro: número voando é o que faz o clique ter peso
+		CombatPanel.update()
+		CombatPanel.step(dt)
+		if payload.killed then
+			Toasts.push(
+				string.format(
+					"⚔️ %s derrotado! +%s moedas",
+					payload.name or "monstro",
+					Format.number(payload.coins or 0)
+				),
+				"success"
+			)
+		end
+		if payload.xp and payload.xp.leveled then
+			Toasts.push(string.format("⭐ Nível %d!", payload.xp.level), "success")
+		end
+	elseif kind == Net.EventKind.LevelUp then
+		Toasts.push(string.format("⭐ SUBIU PARA O NÍVEL %d!", payload.level), "success")
 	elseif kind == Net.EventKind.Mine then
 		-- O que o pet trouxe. Sem este aviso, o jogador recolhe e não vê
 		-- nada: o dinheiro some no HUD e o momento passa batido.
@@ -247,6 +268,8 @@ RunService.RenderStepped:Connect(function()
 	-- congelada entre envios. Aqui ela avança de forma otimista com o
 	-- tempo local: o servidor manda o valor real e corrige. Sem isto a
 	-- mina parece travada, que é pior do que um número levemente errado.
+	CombatPanel.update()
+
 	mineClock = mineClock + dt
 	if mineClock >= 0.1 and MinePanel.isOpen and MinePanel.isOpen() then
 		mineClock = 0

@@ -17,9 +17,11 @@
     "mapfile": "node tests/mapfile.mjs",
     "sim": "node tests/simulate.mjs",
     "fmt": "stylua src tests",
-    "verify": "npm run check && npm run test && npm run boot && npm run client && npm run world && npm run lighting && npm run effects && npm run mine && npm run sim && npm run build && npm run mapfile",
+    "verify": "npm run check && npm run test && npm run boot && npm run client && npm run world && npm run lighting && npm run effects && npm run mine && npm run combat && npm run progress && npm run sim && npm run build && npm run mapfile",
     "effects": "node tests/effects.mjs",
     "mine": "node tests/mine.mjs",
+    "combat": "node tests/combat.mjs",
+    "progress": "node tests/progress.mjs",
     "lighting": "node tests/lighting.mjs"
   },
   "devDependencies": {

@@ -405,6 +405,7 @@ const CLIENT_MODULES = [
 	"WorldUI",
 	"BiomesPanel",
 	"MinePanel",
+	"CombatPanel",
 ]
 	.map((n) => moduleCode(n, `src/client/${n}.luau`))
 	.join("\n");
@@ -419,7 +420,7 @@ const INIT_SCRIPT = (() => {
 		.join("\n")
 		.replace(/localscript/gi, "script")
 		// script.Theme etc. -> Theme (é o que o require daria)
-		.replace(/\bscript\.(Theme|State|NetClient|Hud|TapButton|EggPanel|PetsPanel|ShopPanel|Toasts|WorldUI|MinePanel)\b/g, "$1");
+		.replace(/\bscript\.(Theme|State|NetClient|Hud|TapButton|EggPanel|PetsPanel|ShopPanel|Toasts|WorldUI|MinePanel|CombatPanel)\b/g, "$1");
 	return `-- ===== init.client.luau =====\n${body}\n`;
 })();
 
