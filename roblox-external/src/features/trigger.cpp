@@ -69,7 +69,8 @@ void Trigger::Tick(const cfg::Settings& settings, const AimAssist& aim, bool blo
         return;
     }
 
-    const bool held = (GetAsyncKeyState(fire.key) & 0x8000) != 0;
+    // key 0 = "Nenhuma": so o modo automatico atira nesse caso
+    const bool held = fire.key > 0 && (GetAsyncKeyState(fire.key) & 0x8000) != 0;
 
     // rajada = tiros por aperto; auto = mantem enquanto o portao estiver aberto
     if (fire.autoFire) {

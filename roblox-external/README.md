@@ -72,6 +72,23 @@ Mouse 5  aim assist (segurar; rebindável na aba Aim)
 Sete abas: **ESP**, **Aim**, **Tiros**, **Voo**, **Jogo**, **Memória**, **Config**.
 `config.json` e `profiles.json` ficam ao lado do `.exe`.
 
+### Bind de tecla (aim / tiro / voo)
+
+Cada módulo tem um botão de bind. Clica, aperta **qualquer** tecla ou botão do mouse
+e o valor é gravado na hora (`cfg::Save`), com o nome legível (`Mouse 4`, `Space`,
+`F7`, `Num 3`, `Esquerda`, `;`…). `ESC` cancela, o `x` ao lado limpa o bind
+(`Nenhuma` = módulo não responde a tecla; no tiro ainda existe o modo automático).
+
+Regras da captura, em `menu.cpp`:
+
+| Detalhe | Por quê |
+| --- | --- |
+| varredura `0x08..0xFF` e só depois `0x01..0x06` | o laço antigo dava `break` no `VK_ESCAPE` (0x1B) e só enxergava VK 0x01..0x1A — na prática, só os botões do mouse. Espaço, letras, números, F1..F12 e setas nunca eram capturadas |
+| teclado tem prioridade sobre o mouse | apertar uma tecla junto com um clique não pode virar `Mouse 1` |
+| `PrimeKeys()` no clique do botão | a transição que abriu o bind não vira a tecla escolhida |
+| aviso em laranja para INSERT/F1/F2/END/F5/F9 | são atalhos globais: a mesma tecla faria as duas coisas |
+| bind limpo ao fechar o menu | não fica armado esperando tecla com o menu escondido |
+
 ### Input do menu
 
 - DPI awareness **per-monitor v2** ligado antes de criar a janela — sem isso o Windows

@@ -18,52 +18,110 @@
 namespace menu {
 
 static char g_status[128] = "";
-static int g_binding = 0;   // 0 = nenhum, 1 = tecla do aim, 2 = tecla do tiro
+static int g_binding = 0;   // 0 = nenhum, 1 = tecla do aim, 2 = tecla do tiro, 3 = voo
 static bool g_pressed[256]{};
 static bool g_prev[256]{};
+
+// botoes fisicos do mouse: VK_LBUTTON(01) RBUTTON(02) MBUTTON(04) XBUTTON1(05) XBUTTON2(06)
+static constexpr int kMouseFirst = 0x01;
+static constexpr int kMouseLast  = 0x06;
+// teclado comeca depois do bloco do mouse (0x03 e 0x07 sao VK_CANCEL/indefinido)
+static constexpr int kKeyFirst   = 0x08;
 
 // transicoes de tecla amostradas uma vez por frame
 // sincroniza o estado sem gerar "press" (usado ao entrar em modo bind,
 // senao o proprio clique que abriu o bind viraria a tecla capturada)
 static void PrimeKeys() {
-    for (int vk = 1; vk < 256; ++vk) {
+    for (int vk = 0; vk < 256; ++vk) {
         g_prev[vk] = (GetAsyncKeyState(vk) & 0x8000) != 0;
         g_pressed[vk] = false;
     }
 }
 
 static void SampleKeys() {
-    for (int vk = 1; vk < 256; ++vk) {
+    for (int vk = 0; vk < 256; ++vk) {
         const bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
         g_pressed[vk] = down && !g_prev[vk];
         g_prev[vk] = down;
     }
 }
 
+// tecla apertada neste frame. 0 = nenhuma.
+// o teclado e varrido inteiro (0x08..0xFF) e so depois o mouse: antes o laco
+// parava no ESC e as teclas acima de 0x1A (espaco, letras, numeros, F1..F12,
+// setas) nunca eram capturadas — so os botoes do mouse, que ficam em 0x01..0x06.
+static int CapturedKey() {
+    for (int vk = kKeyFirst; vk < 256; ++vk)
+        if (g_pressed[vk])
+            return vk;
+
+    for (int vk = kMouseFirst; vk <= kMouseLast; ++vk)
+        if (g_pressed[vk])
+            return vk;
+
+    return 0;
+}
+
+// teclas que o menu ja usa como atalho global
+static bool ReservedKey(int vk) {
+    return vk == cfg::kMenuKey || vk == cfg::kEspKey || vk == cfg::kBoxKey ||
+           vk == cfg::kExitKey || vk == VK_F5 || vk == VK_F9;
+}
+
 static const char* KeyName(int vk) {
     switch (vk) {
+    case 0x00: return "Nenhuma";
     case 0x01: return "Mouse 1";
     case 0x02: return "Mouse 2";
     case 0x04: return "Mouse 3";
     case 0x05: return "Mouse 4";
     case 0x06: return "Mouse 5";
-    case VK_SHIFT: case VK_LSHIFT: return "Shift";
-    case VK_CONTROL: case VK_LCONTROL: return "Ctrl";
-    case VK_MENU: case VK_LMENU: return "Alt";
-    case VK_SPACE: return "Space";
+    case VK_BACK: return "Backspace";
     case VK_TAB: return "Tab";
+    case VK_RETURN: return "Enter";
+    case VK_SHIFT: case VK_LSHIFT: case VK_RSHIFT: return "Shift";
+    case VK_CONTROL: case VK_LCONTROL: case VK_RCONTROL: return "Ctrl";
+    case VK_MENU: case VK_LMENU: case VK_RMENU: return "Alt";
+    case VK_PAUSE: return "Pause";
     case VK_CAPITAL: return "CapsLock";
-    case VK_INSERT: return "Insert";
-    case VK_HOME: return "Home";
-    case VK_END: return "End";
+    case VK_ESCAPE: return "Esc";
+    case VK_SPACE: return "Space";
     case VK_PRIOR: return "PageUp";
     case VK_NEXT: return "PageDown";
+    case VK_END: return "End";
+    case VK_HOME: return "Home";
+    case VK_INSERT: return "Insert";
+    case VK_DELETE: return "Delete";
+    case VK_LWIN: case VK_RWIN: return "Win";
+    case VK_APPS: return "Menu";
+    case VK_NUMLOCK: return "NumLock";
+    case VK_SCROLL: return "ScrollLock";
+    case VK_SNAPSHOT: return "PrintScreen";
+    case VK_LEFT: return "Esquerda";
+    case VK_RIGHT: return "Direita";
+    case VK_UP: return "Cima";
+    case VK_DOWN: return "Baixo";
+    case VK_OEM_1: return ";";
+    case VK_OEM_PLUS: return "=";
+    case VK_OEM_COMMA: return ",";
+    case VK_OEM_MINUS: return "-";
+    case VK_OEM_PERIOD: return ".";
+    case VK_OEM_2: return "/";
+    case VK_OEM_3: return "`";
+    case VK_OEM_4: return "[";
+    case VK_OEM_5: return "\\";
+    case VK_OEM_6: return "]";
+    case VK_OEM_7: return "'";
     default: break;
     }
 
     static char buffer[16];
-    if (vk >= VK_F1 && vk <= VK_F12) {
+    if (vk >= VK_F1 && vk <= VK_F24) {
         std::snprintf(buffer, sizeof(buffer), "F%d", vk - VK_F1 + 1);
+        return buffer;
+    }
+    if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9) {
+        std::snprintf(buffer, sizeof(buffer), "Num %d", vk - VK_NUMPAD0);
         return buffer;
     }
     if ((vk >= '0' && vk <= '9') || (vk >= 'A' && vk <= 'Z')) {
@@ -75,28 +133,60 @@ static const char* KeyName(int vk) {
     return buffer;
 }
 
-static void KeyBindButton(int slot, int& key) {
+// slot: 1 = aim, 2 = tiro, 3 = voo
+static void KeyBindButton(int slot, int& key, cfg::Settings& settings) {
+    ImGui::PushID(slot);
+
+    // largura fixa nos dois estados: o layout nao pula ao entrar em captura
+    constexpr float kWidth = 170.f;
+
     if (g_binding == slot) {
-        ImGui::Button("apertar tecla...", ImVec2(120.f, 0.f));
-        for (int vk = 1; vk < 256; ++vk) {
-            if (vk == VK_ESCAPE) {
-                if (g_pressed[vk]) g_binding = 0;
-                break;
-            }
-            if (g_pressed[vk]) {
-                key = vk;
-                g_binding = 0;
-                break;
-            }
+        // nao e botao de verdade: qualquer clique dentro da area serve de tecla
+        ImGui::Button("aperte uma tecla... (ESC)", ImVec2(kWidth, 0.f));
+
+        const int vk = CapturedKey();
+        if (vk == VK_ESCAPE) {
+            g_binding = 0;
+        } else if (vk != 0) {
+            key = vk;
+            g_binding = 0;
+            cfg::Save(settings);
+            std::snprintf(g_status, sizeof(g_status), "tecla salva: %s", KeyName(vk));
         }
     } else {
-        if (ImGui::Button(KeyName(key), ImVec2(120.f, 0.f))) {
+        char label[64];
+        std::snprintf(label, sizeof(label), "%s###bind", KeyName(key));
+        if (ImGui::Button(label, ImVec2(kWidth, 0.f))) {
             g_binding = slot;
             PrimeKeys();
         }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("clique e aperte qualquer tecla ou botao do mouse");
     }
+
+    // limpar o bind (0 = nenhuma tecla; o tiro ainda tem o modo automatico)
+    ImGui::SameLine();
+    if (ImGui::SmallButton("x")) {
+        key = 0;
+        g_binding = 0;
+        cfg::Save(settings);
+        std::snprintf(g_status, sizeof(g_status), "bind limpo (Nenhuma)");
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("limpar: fica sem tecla");
+
     ImGui::SameLine();
     ImGui::TextDisabled("tecla");
+
+    if (g_binding == slot)
+        ImGui::TextDisabled("aperte qualquer tecla: letras, numeros, F1..F12, setas ou mouse");
+    else if (key == 0)
+        ImGui::TextDisabled("sem tecla: este modulo nao responde a bind");
+    else if (ReservedKey(key))
+        ImGui::TextColored(ImVec4(1.f, 0.6f, 0.2f, 1.f),
+                           "%s e atalho do menu: vai ligar/desligar as duas coisas", KeyName(key));
+
+    ImGui::PopID();
 }
 
 // ------------------------------------------------------------
@@ -132,7 +222,7 @@ static void DrawAimTab(cfg::Settings& settings, bool attached) {
     ImGui::Checkbox("Aim assist", &aim.enabled);
 
     ImGui::SameLine(200.f);
-    KeyBindButton(1, aim.key);
+    KeyBindButton(1, aim.key, settings);
 
     ImGui::Checkbox("Modo toggle", &aim.toggleMode);
     ImGui::SameLine();
@@ -190,7 +280,7 @@ static void DrawFireTab(cfg::Settings& settings, const AimAssist& aim, const Tri
 
     ImGui::Checkbox("Disciplina de tiro", &fire.enabled);
     ImGui::SameLine(200.f);
-    KeyBindButton(2, fire.key);
+    KeyBindButton(2, fire.key, settings);
 
     ImGui::Checkbox("Auto (sem tecla)", &fire.autoFire);
     ImGui::Checkbox("So com o jogo em foco", &fire.requireForeground);
@@ -228,7 +318,7 @@ static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) 
 
     ImGui::Checkbox("Voo", &v.enabled);
     ImGui::SameLine(200.f);
-    KeyBindButton(3, v.key);
+    KeyBindButton(3, v.key, settings);
 
     ImGui::TextColored(ImVec4(1.f, 0.55f, 0.35f, 1.f),
                        "unico modulo que ESCREVE em memoria (VM_WRITE)");
@@ -371,8 +461,10 @@ static void DrawConfigTab(cfg::Settings& settings, Esp& esp, Overlay& overlay) {
 // ------------------------------------------------------------
 void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detector,
           MemView& memView, const AimAssist& aim, const Trigger& trigger, const Fly& fly, bool* open) {
-    if (!open || !*open)
+    if (!open || !*open) {
+        g_binding = 0;   // fecha o menu no meio do bind: nao pode ficar armado
         return;
+    }
 
     if (g_binding)
         SampleKeys();

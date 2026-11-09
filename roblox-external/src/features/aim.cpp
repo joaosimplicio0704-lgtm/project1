@@ -91,7 +91,8 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
     const float centerY = height * 0.5f;
 
     // ---- tecla: segurar ou toggle ----
-    const bool down = (GetAsyncKeyState(aim.key) & 0x8000) != 0;
+    // key 0 = "Nenhuma": sem bind o modulo nunca arma sozinho
+    const bool down = aim.key > 0 && (GetAsyncKeyState(aim.key) & 0x8000) != 0;
     if (aim.toggleMode && down && !m_lastDown)
         m_toggled = !m_toggled;
     m_lastDown = down;

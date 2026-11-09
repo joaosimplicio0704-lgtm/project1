@@ -10,7 +10,7 @@
 namespace {
 
 bool Down(int vk) {
-    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+    return vk > 0 && (GetAsyncKeyState(vk) & 0x8000) != 0;
 }
 
 } // namespace
