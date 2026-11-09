@@ -216,7 +216,7 @@ static void DrawEspTab(cfg::Settings& settings) {
 }
 
 // ------------------------------------------------------------
-static void DrawAimTab(cfg::Settings& settings, bool attached) {
+static void DrawAimTab(cfg::Settings& settings, AimAssist& aimAssist, bool attached) {
     cfg::AimSettings& aim = settings.aim;
 
     ImGui::Checkbox("Aim assist", &aim.enabled);
@@ -261,6 +261,23 @@ static void DrawAimTab(cfg::Settings& settings, bool attached) {
     ImGui::SliderFloat("Antecipacao (ms)", &aim.leadMs, 0.f, 200.f, "%.0f");
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("projeta o alvo pela velocidade dele (AssemblyLinearVelocity)");
+
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderFloat("Mira exata (px)", &aim.snapPx, 0.f, 80.f, "%.0f");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("dentro desse raio a correcao e quase total (o crosshair encosta no osso "
+                          "em 1-2 ticks, que e o que faz o tiro sair na direcao do inimigo). 0 = desliga");
+
+    ImGui::Spacing();
+    ImGui::SeparatorText("Sensibilidade do mouse");
+    if (aimAssist.Calibrated())
+        ImGui::TextColored(ImVec4(0.55f, 0.9f, 0.55f, 1.f), "calibrado: %.2f counts por pixel",
+                           aimAssist.CountsPerPixel());
+    else
+        ImGui::TextDisabled("calibrando... segure a tecla da mira e puxe o alvo");
+    ImGui::TextDisabled("mede o giro real da camera por count (independe da sensibilidade do jogo)");
+    if (ImGui::Button("Recalibrar mira"))
+        aimAssist.ResetCalibration();
 
     ImGui::SeparatorText("FOV");
     ImGui::SetNextItemWidth(180.f);
@@ -332,13 +349,20 @@ static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) 
     ImGui::SameLine();
     ImGui::TextDisabled("(gravidade nao briga)");
 
+    ImGui::Checkbox("Paira parado", &v.hoverOnIdle);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("sem WASD segura a altura (zera a velocidade todo tick) em vez de cair");
+
     ImGui::Checkbox("Modo toggle", &v.toggleMode);
     ImGui::Checkbox("So com o jogo em foco", &v.requireForeground);
 
     ImGui::Spacing();
     ImGui::Text("handle     %s", esp.Mem().CanWrite() ? "VM_WRITE ok" : "read-only (reatacha ao ligar)");
-    ImGui::Text("estado     %s", fly.Active() ? "voando" : "parado");
-    ImGui::Text("posicao    %.1f, %.1f, %.1f", local.position.x, local.position.y, local.position.z);
+    ImGui::Text("estado     %s", !fly.Active() ? "parado"
+                            : (fly.Hovering() ? "pairando" : "voando"));
+    const Vector3 shown = fly.Active() && fly.HasPosition() ? fly.Position() : local.position;
+    ImGui::Text("posicao    %.1f, %.1f, %.1f", shown.x, shown.y, shown.z);
+    ImGui::Text("passo      %.1f studs/s (dt limitado a 50 ms)", v.speed);
 }
 
 // ------------------------------------------------------------
@@ -460,7 +484,7 @@ static void DrawConfigTab(cfg::Settings& settings, Esp& esp, Overlay& overlay) {
 
 // ------------------------------------------------------------
 void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detector,
-          MemView& memView, const AimAssist& aim, const Trigger& trigger, const Fly& fly, bool* open) {
+          MemView& memView, AimAssist& aim, const Trigger& trigger, const Fly& fly, bool* open) {
     if (!open || !*open) {
         g_binding = 0;   // fecha o menu no meio do bind: nao pode ficar armado
         return;
@@ -484,7 +508,7 @@ void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detecto
         }
         if (ImGui::BeginTabItem("Aim")) {
             const auto scene = esp.Snapshot();
-            DrawAimTab(settings, scene && scene->attached);
+            DrawAimTab(settings, aim, scene && scene->attached);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Tiros")) {

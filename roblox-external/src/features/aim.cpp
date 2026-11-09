@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cmath>
 
 #include "../features/esp.h"
@@ -11,6 +12,8 @@ namespace {
 
 constexpr ImU32 kFovColor = IM_COL32(255, 255, 255, 70);
 constexpr ImU32 kTargetColor = IM_COL32(255, 80, 80, 220);
+
+constexpr float kPi = 3.14159265358979f;
 
 bool ForegroundIsPid(DWORD pid) {
     const HWND foreground = GetForegroundWindow();
@@ -48,6 +51,26 @@ int Jitter(float amount) {
     return static_cast<int>((unit * 2.f - 1.f) * amount);
 }
 
+// yaw/pitch da camera a partir da matriz de rotacao (row-major, colunas = eixos)
+bool CameraAngles(const float r[9], float& yaw, float& pitch) {
+    // LookVector = -coluna 3; coluna 3 comeca em r[2]
+    const float lx = -r[2], ly = -r[5], lz = -r[8];
+
+    const float len = std::sqrt(lx * lx + ly * ly + lz * lz);
+    if (!(len > 0.5f) || !std::isfinite(len))
+        return false;
+
+    yaw = std::atan2(-lx, -lz);
+    pitch = std::asin(std::clamp(ly / len, -1.f, 1.f));
+    return std::isfinite(yaw) && std::isfinite(pitch);
+}
+
+float WrapPi(float a) {
+    while (a > kPi) a -= 2.f * kPi;
+    while (a < -kPi) a += 2.f * kPi;
+    return a;
+}
+
 Vector3 BonePoint(const Target& target, int bone) {
     switch (bone) {
     case cfg::kRoot:
@@ -73,6 +96,16 @@ void AimAssist::Reset() {
     m_accumX = 0.f;
     m_accumY = 0.f;
     m_lastDown = false;
+    m_probeLeft = 0;
+}
+
+void AimAssist::ResetCalibration() {
+    m_radPerCountYaw = 0.f;
+    m_radPerCountPitch = 0.f;
+    m_countsPerPx = 0.f;
+    m_samples = 0;
+    m_calibrated = false;
+    m_probeLeft = 0;
 }
 
 void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, unsigned long pid,
@@ -84,11 +117,53 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
     if (width <= 0.f || height <= 0.f || !scene.attached) {
         m_accumX = m_accumY = 0.f;
         m_lockedPlayer = 0;
+        m_probeLeft = 0;
         return;
     }
 
     const float centerX = width * 0.5f;
     const float centerY = height * 0.5f;
+
+    // ---- calibracao: giro da camera medido desde o ultimo SendInput ----
+    float yawNow = 0.f, pitchNow = 0.f;
+    const bool haveAngles = CameraAngles(scene.local.cameraRotation, yawNow, pitchNow);
+
+    if (m_probeLeft > 0 && haveAngles && scene.frame != m_probeFrame) {
+        // o snapshot avancou: o giro lido ja inclui os deltas que enviamos
+        const float dyaw = WrapPi(yawNow - m_probeYaw);
+        const float dpitch = pitchNow - m_probePitch;
+
+        const int ax = m_probeAccumX < 0 ? -m_probeAccumX : m_probeAccumX;
+        const int ay = m_probeAccumY < 0 ? -m_probeAccumY : m_probeAccumY;
+
+        // so aceita amostra com delta grande o bastante pra nao ser ruido
+        if (ax >= 4 && std::fabs(dyaw) > 1e-5f) {
+            const float ratio = std::fabs(dyaw) / static_cast<float>(ax);
+            if (ratio > 1e-7f && ratio < 0.05f) {
+                m_radPerCountYaw = m_samples ? (m_radPerCountYaw * 0.65f + ratio * 0.35f) : ratio;
+                ++m_samples;
+            }
+        }
+        if (ay >= 4 && std::fabs(dpitch) > 1e-5f) {
+            const float ratio = std::fabs(dpitch) / static_cast<float>(ay);
+            if (ratio > 1e-7f && ratio < 0.05f)
+                m_radPerCountPitch = m_radPerCountPitch > 0.f
+                    ? (m_radPerCountPitch * 0.65f + ratio * 0.35f)
+                    : ratio;
+        }
+
+        m_probeLeft = 0;
+
+        // radianos por pixel: FOV vertical / altura da tela
+        if (m_radPerCountYaw > 0.f && scene.local.fov > 1.f && height > 0.f) {
+            const float radPerPx = (scene.local.fov * kPi / 180.f) / height;
+            m_countsPerPx = radPerPx / m_radPerCountYaw;
+            m_countsPerPx = std::clamp(m_countsPerPx, 0.05f, 20.f);
+            m_calibrated = m_samples >= 2;
+        }
+    } else if (m_probeLeft > 0) {
+        --m_probeLeft;   // snapshot ainda nao virou: espera mais um tick
+    }
 
     // ---- tecla: segurar ou toggle ----
     // key 0 = "Nenhuma": sem bind o modulo nunca arma sozinho
@@ -114,7 +189,6 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
     float lockDistance = aim.fovPx;
     Vector2 bestScreen{}, lockScreen{};
     uintptr_t bestPlayer = 0, lockPlayer = 0;
-    Vector3 bestVelocity{}, lockVelocity{};
 
     for (const Target& target : scene.targets) {
         Vector3 point = BonePoint(target, aim.bone);
@@ -140,7 +214,6 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
             lockDistance = distance;
             lockScreen = screen;
             lockPlayer = target.player;
-            lockVelocity = target.velocity;
         }
 
         if (found && distance >= bestDistance)
@@ -150,7 +223,6 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
         bestDistance = distance;
         bestScreen = screen;
         bestPlayer = target.player;
-        bestVelocity = target.velocity;
     }
 
     // alvo travado vale mesmo se outro ficou mais perto, desde que siga no FOV
@@ -159,7 +231,6 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
         bestDistance = lockDistance;
         bestScreen = lockScreen;
         bestPlayer = lockPlayer;
-        bestVelocity = lockVelocity;
     }
 
     if (!found) {
@@ -184,20 +255,36 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
     // ---- delta ----
     const float errorX = bestScreen.x - centerX;
     const float errorY = bestScreen.y - centerY;
+    const float error = std::sqrt(errorX * errorX + errorY * errorY);
 
     if (std::fabs(errorX) <= aim.deadzonePx && std::fabs(errorY) <= aim.deadzonePx)
         return;
 
-    const float gain = aim.strength / (aim.smoothing < 1.f ? 1.f : aim.smoothing);
+    // perto do alvo a correcao e quase total; longe continua suave
+    const bool snapping = aim.snapPx > 0.f && error <= aim.snapPx;
+    float gain = 0.f;
+    if (snapping)
+        gain = m_calibrated ? 0.7f : 0.35f;
+    else
+        gain = aim.strength / (aim.smoothing < 1.f ? 1.f : aim.smoothing);
 
-    float stepX = errorX * gain + m_accumX;
-    float stepY = errorY * gain + m_accumY;
+    // converte erro em pixels para counts de mouse (1:1 ate calibrar)
+    const float toCounts = m_calibrated ? m_countsPerPx : 1.f;
 
-    const float magnitude = std::sqrt(stepX * stepX + stepY * stepY);
-    if (magnitude > aim.maxStepPx && magnitude > 0.f) {
-        const float scale = aim.maxStepPx / magnitude;
-        stepX *= scale;
-        stepY *= scale;
+    float stepX = errorX * gain * toCounts + m_accumX;
+    float stepY = errorY * gain * toCounts + m_accumY;
+
+    // passo exato (calibrado + perto do alvo) nao leva corte: cortar ali
+    // e justamente o que impedia o crosshair de encostar no osso
+    const bool exactStep = snapping && m_calibrated;
+    if (!exactStep) {
+        const float maxStep = aim.maxStepPx * toCounts;
+        const float magnitude = std::sqrt(stepX * stepX + stepY * stepY);
+        if (magnitude > maxStep && magnitude > 0.f) {
+            const float scale = maxStep / magnitude;
+            stepX *= scale;
+            stepY *= scale;
+        }
     }
 
     int dx = static_cast<int>(stepX);
@@ -208,6 +295,26 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
 
     dx += Jitter(aim.jitterPx);
     dy += Jitter(aim.jitterPx);
+
+    if (!dx && !dy)
+        return;
+
+    // guarda o giro antes do input: a proxima leitura mede a resposta.
+    // o acumulado conta TODOS os deltas enviados dentro da janela, senao a
+    // janela com varios SendInput por frame de leitura mede giro de 4 movimentos
+    // contra 1 delta e a calibracao sai pela metade.
+    if (haveAngles) {
+        if (m_probeLeft == 0) {
+            m_probeYaw = yawNow;
+            m_probePitch = pitchNow;
+            m_probeAccumX = 0;
+            m_probeAccumY = 0;
+            m_probeFrame = scene.frame;
+            m_probeLeft = 16;
+        }
+        m_probeAccumX += dx;
+        m_probeAccumY += dy;
+    }
 
     MoveMouse(dx, dy);
 }

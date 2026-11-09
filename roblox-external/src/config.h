@@ -43,6 +43,7 @@ struct AimSettings {
     float deadzonePx = 2.f;            // nao mexe abaixo disso
     float jitterPx = 0.f;              // ruido no delta (humano)
     float leadMs = 0.f;                // antecipa alvo em movimento (0..200)
+    float snapPx = 12.f;               // abaixo disso a correcao e exata (0 = desliga)
 
     bool  drawFov = true;
     bool  requireForeground = true;    // so age com a janela do jogo na frente
@@ -71,6 +72,7 @@ struct FlySettings {
     int   key = 0x46;              // VK_F
     float speed = 60.f;            // studs por segundo
     bool  zeroVelocity = true;     // zera AssemblyLinearVelocity pra gravidade nao brigar
+    bool  hoverOnIdle = true;      // sem WASD: segura a altura em vez de cair
     bool  requireForeground = true;
 };
 

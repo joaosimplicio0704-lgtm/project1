@@ -94,6 +94,7 @@ static bool SaveConfig(const Settings& s) {
     out << "  \"aimDeadzone\": "       << a.deadzonePx << ",\n";
     out << "  \"aimJitter\": "         << a.jitterPx << ",\n";
     out << "  \"aimLead\": "           << a.leadMs << ",\n";
+    out << "  \"aimSnapPx\": "         << a.snapPx << ",\n";
     out << "  \"aimDrawFov\": "        << Bool(a.drawFov) << ",\n";
     out << "  \"aimRequireForeground\": " << Bool(a.requireForeground) << ",\n";
     const TriggerSettings& f = s.fire;
@@ -111,6 +112,7 @@ static bool SaveConfig(const Settings& s) {
     out << "  \"flyToggle\": "         << Bool(v.toggleMode) << ",\n";
     out << "  \"flySpeed\": "          << v.speed << ",\n";
     out << "  \"flyZeroVelocity\": "   << Bool(v.zeroVelocity) << ",\n";
+    out << "  \"flyHoverOnIdle\": "    << Bool(v.hoverOnIdle) << ",\n";
     out << "  \"flyRequireForeground\": " << Bool(v.requireForeground) << "\n";
     out << "}\n";
 
@@ -153,6 +155,7 @@ static bool LoadConfig(Settings& s) {
     a.deadzonePx  = AsFloat(ValueOf(text, "aimDeadzone"), a.deadzonePx);
     a.jitterPx    = AsFloat(ValueOf(text, "aimJitter"), a.jitterPx);
     a.leadMs      = AsFloat(ValueOf(text, "aimLead"), a.leadMs);
+    a.snapPx      = AsFloat(ValueOf(text, "aimSnapPx"), a.snapPx);
     a.drawFov     = AsBool(ValueOf(text, "aimDrawFov"), a.drawFov);
     a.requireForeground = AsBool(ValueOf(text, "aimRequireForeground"), a.requireForeground);
 
@@ -172,6 +175,7 @@ static bool LoadConfig(Settings& s) {
     v.toggleMode  = AsBool(ValueOf(text, "flyToggle"), v.toggleMode);
     v.speed       = AsFloat(ValueOf(text, "flySpeed"), v.speed);
     v.zeroVelocity = AsBool(ValueOf(text, "flyZeroVelocity"), v.zeroVelocity);
+    v.hoverOnIdle = AsBool(ValueOf(text, "flyHoverOnIdle"), v.hoverOnIdle);
     v.requireForeground = AsBool(ValueOf(text, "flyRequireForeground"), v.requireForeground);
 
     if (v.speed < 5.f)   v.speed = 5.f;

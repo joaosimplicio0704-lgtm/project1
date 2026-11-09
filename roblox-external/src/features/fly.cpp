@@ -9,54 +9,95 @@
 
 namespace {
 
+// acima disso o passo viraria teleporte (frame travado, menu arrastando)
+constexpr float kMaxStepDt = 0.05f;    // 50 ms
+constexpr float kResyncStuds = 40.f;   // divergencia = "o jogo me moveu"
+
 bool Down(int vk) {
     return vk > 0 && (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+
+float Dist(const Vector3& a, const Vector3& b) {
+    const float dx = a.x - b.x;
+    const float dy = a.y - b.y;
+    const float dz = a.z - b.z;
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 } // namespace
 
 void Fly::Reset() {
     m_active = false;
+    m_hovering = false;
     m_toggled = false;
     m_prevDown = false;
+    m_havePos = false;
+    m_wasActive = false;
+    m_pos = Vector3{};
+    m_primitive = 0;
     m_lastTick = 0;
+}
+
+void Fly::Stop(Memory& memory) {
+    // solta o voo: zera a velocidade uma vez pra nao continuar planando
+    if (m_wasActive && m_primitive && memory.CanWrite()) {
+        const Vector3 zero{};
+        memory.Write(m_primitive + rbx::Primitive::AssemblyLinearVelocity, zero);
+    }
+
+    m_wasActive = false;
+    m_active = false;
+    m_hovering = false;
+    m_havePos = false;
 }
 
 void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& local, bool blocked) {
     const cfg::FlySettings& fly = settings.fly;
 
-    if (!fly.enabled || blocked || !local.Valid() || !local.primitive) {
-        m_active = false;
-        return;
-    }
-
-    // handle ainda sem VM_WRITE — o leitor reabre no proximo ciclo
-    if (!memory.CanWrite()) {
-        m_active = false;
-        return;
-    }
+    // dt sempre medido, inclusive quando desligado (evita passo gigante
+    // no primeiro tick depois de religar)
+    const uint64_t now = GetTickCount64();
+    float dt = m_lastTick ? static_cast<float>(now - m_lastTick) / 1000.f : 0.004f;
+    m_lastTick = now;
+    if (!(dt > 0.f))
+        dt = 0.004f;
+    if (dt > kMaxStepDt)
+        dt = kMaxStepDt;
 
     const bool down = Down(fly.key);
     if (fly.toggleMode && down && !m_prevDown)
         m_toggled = !m_toggled;
     m_prevDown = down;
 
-    const bool held = fly.toggleMode ? m_toggled : down;
-    if (!held) {
-        m_active = false;
-        m_lastTick = GetTickCount64();
+    const bool engaged = fly.enabled && !blocked && (fly.toggleMode ? m_toggled : down);
+
+    if (!engaged || !local.Valid() || !local.primitive) {
+        Stop(memory);
         return;
     }
 
-    const uint64_t now = GetTickCount64();
-    const float dt = m_lastTick
-        ? static_cast<float>(now - m_lastTick) / 1000.f
-        : static_cast<float>(settings.tickMs) / 1000.f;
-    m_lastTick = now;
-    m_active = true;
-
-    if (dt <= 0.f || dt > 0.25f)
+    // handle ainda sem VM_WRITE — o leitor reabre no proximo ciclo
+    if (!memory.CanWrite()) {
+        m_active = false;
+        m_hovering = false;
+        m_havePos = false;
         return;
+    }
+
+    // personagem trocou (respawn) ou morreu: recomeca da posicao real
+    const bool respawn = !m_havePos || m_primitive != local.primitive || local.health <= 0.f;
+    const bool divergent = !respawn && Dist(m_pos, local.position) > kResyncStuds;
+
+    if (respawn || divergent) {
+        m_pos = local.position;
+        m_primitive = local.primitive;
+        m_havePos = true;
+    }
+
+    if (!m_pos.Finite()) {
+        m_havePos = false;
+        return;
+    }
 
     const float* r = local.cameraRotation;   // 3x3 row-major da CFrame da camera
 
@@ -72,15 +113,51 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
     if (Down(VK_SPACE)) moveUp += 1.f;
     if (Down(VK_CONTROL)) moveUp -= 1.f;
 
-    if (moveForward == 0.f && moveRight == 0.f && moveUp == 0.f)
+    Vector3 dir{
+        forward.x * moveForward + right.x * moveRight,
+        forward.y * moveForward + right.y * moveRight,
+        forward.z * moveForward + right.z * moveRight
+    };
+    dir.y += moveUp;   // sobe/desce no eixo do mundo
+
+    const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+    const bool moving = len > 0.001f && std::isfinite(len);
+
+    if (!moving) {
+        if (!fly.hoverOnIdle) {
+            // deixa cair de proposito: nao escreve nada e devolve a gravidade
+            m_active = true;
+            m_hovering = false;
+            m_wasActive = false;
+            m_havePos = false;
+            return;
+        }
+
+        // pairado: nao escreve posicao (nada a mover), so mata a velocidade
+        // pra gravidade nao acumular; a posicao real vira a referencia
+        if (fly.zeroVelocity) {
+            const Vector3 zero{};
+            memory.Write(local.primitive + rbx::Primitive::AssemblyLinearVelocity, zero);
+            memory.Write(local.primitive + rbx::Primitive::AssemblyAngularVelocity, zero);
+        }
+
+        m_pos = local.position;
+        m_active = true;
+        m_hovering = true;
+        m_wasActive = true;
         return;
+    }
+
+    dir.x /= len;
+    dir.y /= len;
+    dir.z /= len;
 
     const float step = fly.speed * dt;
 
-    Vector3 next = local.position;
-    next.x += (forward.x * moveForward + right.x * moveRight) * step;
-    next.y += (forward.y * moveForward + right.y * moveRight) * step + moveUp * step;
-    next.z += (forward.z * moveForward + right.z * moveRight) * step;
+    Vector3 next = m_pos;
+    next.x += dir.x * step;
+    next.y += dir.y * step;
+    next.z += dir.z * step;
 
     if (!next.Finite())
         return;
@@ -90,5 +167,11 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
     if (fly.zeroVelocity) {
         const Vector3 zero{};
         memory.Write(local.primitive + rbx::Primitive::AssemblyLinearVelocity, zero);
+        memory.Write(local.primitive + rbx::Primitive::AssemblyAngularVelocity, zero);
     }
+
+    m_pos = next;
+    m_active = true;
+    m_hovering = false;
+    m_wasActive = true;
 }

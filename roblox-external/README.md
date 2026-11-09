@@ -103,39 +103,53 @@ Regras da captura, em `menu.cpp`:
 - `Config → Input (diagnostico)` mostra cursor do OS vs cursor do ImGui e o DPI —
   se os dois divergirem, o número aparece em laranja.
 
-## Aim assist
+## Aim assist — e por que o tiro sai na direção do inimigo
 
-Externo de verdade: lê a posição do osso (`Head` / peito / `HumanoidRootPart`),
-projeta com a view matrix, mede o erro em pixels até o centro da tela, e move o
-mouse com `SendInput(MOUSEEVENTF_MOVE)`. Nada de escrever view angle ou estado
-do player — a câmera gira, a projeção é recalculada, o erro converge.
+Num jogo em primeira/terceira pessoa o projétil sai **da câmera, pelo centro da tela**.
+Externo não muda a direção da bala (isso é raycast do servidor); o que dá pra fazer é
+**colocar a câmera exatamente em cima do osso no frame do disparo**. É o que este módulo
+faz, em três partes:
 
-Alvo escolhido: o mais perto do crosshair dentro do FOV.
+1. **leitura** — posição do osso (`Head` / peito / `HumanoidRootPart`) projetada com a
+   view matrix; erro medido em pixels até o centro da tela;
+2. **movimento** — `SendInput(MOUSEEVENTF_MOVE)` relativo. Nada de escrever view angle
+   ou estado do player: a câmera gira, a projeção é recalculada, o erro converge;
+3. **calibração automática** — lê a matriz da câmera antes e depois de cada `SendInput`
+   e mede **quantos radianos a câmera gira por count de mouse**. Com isso o erro em
+   pixels vira counts de verdade:
 
 ```
-passo = erro_px * (forca / suavizacao) + resto_fracionario
-passo = clamp(passo, passo_max)
+rad_por_px  = FOV_vertical_em_rad / altura_da_tela
+counts_por_px = rad_por_px / rad_por_count     // medido, não chutado
+passo_counts  = erro_px * ganho * counts_por_px + resto_fracionário
 ```
+
+Sem essa conta, "1 px = 1 count" é chute: se a sensibilidade do jogo gira 3 px por count,
+a mira pulava 3x o necessário e oscilava em volta do alvo em vez de encostar nele.
 
 | knob | o que faz |
 |---|---|
-| `Forca` (0.05–1.00) | **quanto a mira puxa**: fração do erro aplicada por tick. 1.00 = cola no osso |
-| `Suavizacao` (1–20) | divisor do passo. maior = mais lento e mais discreto |
-| `Passo max (px)` | teto de movimento por tick, evita flick |
+| `Força` (0.05–1.00) | quanto a mira puxa longe do alvo: fração do erro aplicada por tick |
+| `Suavização` (1–20) | divisor do passo. maior = mais lento e mais discreto |
+| `Mira exata (px)` | **dentro desse raio a correção é quase total** (0.7 quando calibrado), então o crosshair encosta no osso em 1–2 ticks em vez de gastar 10 |
+| `Passo max (px)` | teto de movimento por tick longe do alvo, evita flick |
 | `Zona morta (px)` | para de mexer quando já está em cima |
 | `Jitter (px)` | ruído no delta |
 | `Antecipação (ms)` | projeta o alvo pela velocidade dele (`AssemblyLinearVelocity`) — lead de alvo em movimento |
+| `FOV (raio px)` | círculo do alcance, desenhado na tela |
+| `Osso` | cabeça / peito / raiz |
+| `Tecla` | botão `Bind` captura qualquer tecla; modo segurar ou toggle |
+| `Só com o jogo em foco` | compara o PID do `GetForegroundWindow()` — não rouba o mouse fora do jogo |
+
+A aba mostra `calibrado: X.XX counts por pixel` (ou `calibrando...` até colher duas
+amostras) e o botão **`Recalibrar mira`** zera a medição.
 
 Alvo é **travado** enquanto você segura a tecla: se outro inimigo passar mais perto do
 crosshair no meio da puxada, o aim continua no mesmo. Solta a tecla (ou sai do FOV) e
-destrava.
-| `FOV (raio px)` | círculo do alcance, desenhado na tela |
-| `Osso` | cabeça / peito / raiz |
-| `Tecla` | botão `Bind` captura a próxima tecla; modo segurar ou toggle |
-| `Só com o jogo em foco` | compara o PID do `GetForegroundWindow()` — não rouba o mouse fora do jogo |
+destrava. Menu aberto = o aim não envia nada.
 
-Se o menu estiver aberto o aim não envia nada. O ganho real por tick aparece na
-aba (`forca / suavizacao`), pra não ter que fazer conta de cabeça.
+O que continua impossível sem injeção (e este projeto não injeta): **silent aim**
+(bala ignorando a câmera), **wallcheck** (precisa de raycast) e mexer no espalhamento.
 
 ## Disciplina de tiro
 
@@ -207,18 +221,27 @@ Watches vivem só na sessão — endereço cru envelhece rápido.
 ## Voo
 
 **Único módulo que escreve em memória.** Não existe voo read-only: voar é mudar a
-posição do personagem.
-
-Técnica: `WriteProcessMemory` no `Primitive::Position` do `HumanoidRootPart` a cada
-tick, com `AssemblyLinearVelocity` zerada pra gravidade não brigar. O cliente tem
-network ownership do próprio personagem, então a posição escrita é aceita na maioria
-dos jogos — o servidor reconcilia e geralmente deixa.
+posição do personagem. `WriteProcessMemory` no `Primitive::Position` do
+`HumanoidRootPart` a cada tick, com `AssemblyLinearVelocity`/`AngularVelocity` zeradas
+pra gravidade não brigar. O cliente tem network ownership do próprio personagem, então a
+posição escrita é aceita na maioria dos jogos — o servidor reconcilia e geralmente deixa.
 
 - `WASD` move no plano da câmera (usa `Camera::Rotation`, look = `-coluna 3`)
 - `Space` / `Ctrl` sobem e descem
-- `Velocidade` em studs/s, `Zerar velocidade`, toggle ou segurar
+- `Velocidade` em studs/s, `Zerar velocidade`, `Paira parado`, toggle ou segurar
 - ligar o voo reabre o handle com `VM_WRITE | VM_OPERATION`; sem isso o handle é
   estritamente read-only e a aba mostra `read-only (reatacha ao ligar)`
+
+### O que fazia o voo ficar "bugado"
+
+| sintoma | causa na versão anterior | correção |
+|---|---|---|
+| cair quando você soltava o WASD | o `Tick` só escrevia com direção != 0 — sem tecla, **nada era escrito** e a gravidade agia | `Paira parado`: sem direção zera a velocidade todo tick e mantém a altura |
+| andar menos que o slider / tremer | o passo era somado na posição **do snapshot**, que chega 1–2 ticks atrasado: cada tick reaplicava em cima de um valor velho | posição própria (`m_pos`), integrada por `dt` e escrita; o snapshot só é usado pra resync |
+| teleporte de 300 studs ao destravar o menu | `dt` sem teto depois de um stall | `dt` limitado a 50 ms |
+| continuar planando depois de soltar a tecla | o release não zerava a velocidade | `Stop()` zera `AssemblyLinearVelocity` uma vez |
+| brigar com respawn/knockback | mantinha a posição antiga e insistia | resync quando troca de personagem, morre (`Health <= 0`) ou a divergência passa de 40 studs |
+| girar feito pião | só a velocidade linear era zerada | `AssemblyAngularVelocity` também |
 
 ```cpp
 // run in a VM — Handle com VM_WRITE em processo protegido por Hyperion é ban/ crash
