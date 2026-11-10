@@ -1,5 +1,6 @@
 #pragma once
 #include "../config.h"
+#include "../sdk/sdk.h"
 
 struct ImDrawList;
 struct SceneSnapshot;
@@ -42,6 +43,15 @@ public:
     float TargetY() const { return m_targetY; }
     uintptr_t TargetPlayer() const { return m_lockedPlayer; }   // 0 = nenhum
 
+    // modo camera: a mira nao move o mouse, quem aplica a rotacao e o CameraHack
+    bool  Armed() const { return m_armed; }
+    bool  TargetWorld(Vector3& out) const {
+        if (!m_hasTarget)
+            return false;
+        out = m_targetWorld;
+        return true;
+    }
+
     // calibracao de sensibilidade (px de tela -> counts de mouse)
     bool  Calibrated() const { return m_calibrated; }
     float CountsPerPixel() const { return m_countsPerPx; }
@@ -56,6 +66,8 @@ private:
 
     float m_accumX = 0.f;   // resto fracionario do delta
     float m_accumY = 0.f;
+    bool    m_armed = false;      // tecla/condicoes ok neste tick
+    Vector3 m_targetWorld{};      // osso do alvo (com lead aplicado)
 
     bool  m_toggled = false;
     bool  m_lastDown = false;

@@ -150,7 +150,24 @@ static bool SaveConfig(const Settings& s) {
     out << "  \"flySpeed\": "          << v.speed << ",\n";
     out << "  \"flyZeroVelocity\": "   << Bool(v.zeroVelocity) << ",\n";
     out << "  \"flyHoverOnIdle\": "    << Bool(v.hoverOnIdle) << ",\n";
-    out << "  \"flyRequireForeground\": " << Bool(v.requireForeground) << "\n";
+    out << "  \"flyRequireForeground\": " << Bool(v.requireForeground) << ",\n";
+    out << "  \"flyAnchor\": "        << Bool(v.anchor) << ",\n";
+    out << "  \"aimCamera\": "        << Bool(a.cameraMode) << ",\n";
+
+    const CameraSettings& c = s.camera;
+    out << "  \"camFreecam\": "      << Bool(c.freecam) << ",\n";
+    out << "  \"camKey\": "          << c.freecamKey << ",\n";
+    out << "  \"camSpeed\": "        << c.freecamSpeed << ",\n";
+    out << "  \"camFovHack\": "      << Bool(c.fovHack) << ",\n";
+    out << "  \"camFov\": "          << c.fov << ",\n";
+    out << "  \"camUnlockFps\": "    << Bool(c.unlockFps) << ",\n";
+    out << "  \"camMaxFps\": "       << c.maxFps << ",\n";
+
+    const MagnetSettings& mag = s.magnet;
+    out << "  \"magEnabled\": "      << Bool(mag.enabled) << ",\n";
+    out << "  \"magRange\": "        << mag.range << ",\n";
+    out << "  \"magPull\": "         << mag.pullDistance << ",\n";
+    out << "  \"magPerSecond\": "    << mag.perSecond << "\n";
     out << "}\n";
 
     return out.good();
@@ -219,6 +236,23 @@ static bool LoadConfig(Settings& s) {
     v.zeroVelocity = AsBool(ValueOf(text, "flyZeroVelocity"), v.zeroVelocity);
     v.hoverOnIdle = AsBool(ValueOf(text, "flyHoverOnIdle"), v.hoverOnIdle);
     v.requireForeground = AsBool(ValueOf(text, "flyRequireForeground"), v.requireForeground);
+    v.anchor      = AsBool(ValueOf(text, "flyAnchor"), v.anchor);
+    a.cameraMode  = AsBool(ValueOf(text, "aimCamera"), a.cameraMode);
+
+    CameraSettings& c = s.camera;
+    c.freecam     = AsBool(ValueOf(text, "camFreecam"), c.freecam);
+    c.freecamKey  = AsInt(ValueOf(text, "camKey"), c.freecamKey);
+    c.freecamSpeed = AsFloat(ValueOf(text, "camSpeed"), c.freecamSpeed);
+    c.fovHack     = AsBool(ValueOf(text, "camFovHack"), c.fovHack);
+    c.fov         = AsFloat(ValueOf(text, "camFov"), c.fov);
+    c.unlockFps   = AsBool(ValueOf(text, "camUnlockFps"), c.unlockFps);
+    c.maxFps      = AsInt(ValueOf(text, "camMaxFps"), c.maxFps);
+
+    MagnetSettings& mag = s.magnet;
+    mag.enabled     = AsBool(ValueOf(text, "magEnabled"), mag.enabled);
+    mag.range       = AsFloat(ValueOf(text, "magRange"), mag.range);
+    mag.pullDistance = AsFloat(ValueOf(text, "magPull"), mag.pullDistance);
+    mag.perSecond   = AsInt(ValueOf(text, "magPerSecond"), mag.perSecond);
 
     if (v.speed < 5.f)   v.speed = 5.f;
     if (v.speed > 500.f) v.speed = 500.f;
@@ -324,6 +358,7 @@ bool Same(const Settings& a, const Settings& b) {
         x.bone != y.bone || x.fovPx != y.fovPx || x.smoothing != y.smoothing ||
         x.strength != y.strength || x.maxStepPx != y.maxStepPx || x.deadzonePx != y.deadzonePx ||
         x.jitterPx != y.jitterPx || x.leadMs != y.leadMs || x.snapPx != y.snapPx ||
+        x.cameraMode != y.cameraMode ||
         x.drawFov != y.drawFov || x.requireForeground != y.requireForeground)
         return false;
 
@@ -338,7 +373,20 @@ bool Same(const Settings& a, const Settings& b) {
     const FlySettings& w = b.fly;
     if (v.enabled != w.enabled || v.toggleMode != w.toggleMode || v.key != w.key ||
         v.speed != w.speed || v.zeroVelocity != w.zeroVelocity ||
-        v.hoverOnIdle != w.hoverOnIdle || v.requireForeground != w.requireForeground)
+        v.hoverOnIdle != w.hoverOnIdle || v.requireForeground != w.requireForeground ||
+        v.anchor != w.anchor)
+        return false;
+
+    const CameraSettings& c = a.camera;
+    const CameraSettings& d = b.camera;
+    if (c.freecam != d.freecam || c.freecamKey != d.freecamKey || c.freecamSpeed != d.freecamSpeed ||
+        c.fovHack != d.fovHack || c.fov != d.fov || c.unlockFps != d.unlockFps || c.maxFps != d.maxFps)
+        return false;
+
+    const MagnetSettings& mg = a.magnet;
+    const MagnetSettings& mh = b.magnet;
+    if (mg.enabled != mh.enabled || mg.range != mh.range || mg.pullDistance != mh.pullDistance ||
+        mg.perSecond != mh.perSecond)
         return false;
 
     if (a.profiles.size() != b.profiles.size())

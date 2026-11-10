@@ -5,9 +5,11 @@
 
 #include "config.h"
 #include "features/aim.h"
+#include "features/camerahack.h"
 #include "features/detector.h"
 #include "features/esp.h"
 #include "features/fly.h"
+#include "features/magnet.h"
 #include "features/memview.h"
 #include "features/trigger.h"
 #include "imgui/imgui.h"
@@ -107,8 +109,10 @@ int main() {
     Detector  detector;
     AimAssist aim;
     MemView   memView;
-    Trigger   trigger;
-    Fly       fly;
+    Trigger    trigger;
+    Fly        fly;
+    CameraHack cameraHack;
+    Magnet     magnet;
 
     bool     menuOpen = false;
     bool     running = true;
@@ -150,6 +154,8 @@ int main() {
             settings.fly.enabled = false;
             trigger.Reset();   // solta o botao esquerdo se estiver pressionado
             fly.Reset();
+            cameraHack.Release(esp.Mem());   // CameraType/FOV/MaxFPS de volta
+            magnet.Reset();
             aim.Reset();
             overlay.SetInteractive(false);
             menuOpen = false;
@@ -225,9 +231,18 @@ int main() {
                  overlay.IsInteractive() ||
                  (settings.fly.requireForeground && !focused));
 
+        // camera (freecam/mira/FOV/FPS) reusa o mesmo handle de escrita
+        cameraHack.Tick(settings, esp.Mem(), view.local, aim,
+                        overlay.IsInteractive() ||
+                        (settings.aim.requireForeground && !focused));
+
+        // magnet puxa item filtrado pra perto (precisa do handle de escrita)
+        magnet.Tick(settings, esp.Mem(), view.local, view, overlay.IsInteractive());
+
         memView.Tick(esp.Mem());
 
-        menu::Draw(settings, esp, overlay, detector, memView, aim, trigger, fly, &menuOpen);
+        menu::Draw(settings, esp, overlay, detector, memView, aim, trigger, fly, cameraHack, magnet,
+                   &menuOpen);
 
         // menu fechado pelo X da janela tambem devolve o mouse pro jogo
         if (!menuOpen && overlay.IsInteractive())
@@ -242,6 +257,8 @@ int main() {
     applog::Line("[app] saindo");
     trigger.Reset();
     fly.Reset();
+    cameraHack.Release(esp.Mem());
+    magnet.Reset();
     aim.Reset();
     HandleCleanup::Stop();
     esp.Shutdown();

@@ -49,6 +49,10 @@ struct AimSettings {
 
     bool  drawFov = true;
     bool  requireForeground = true;    // so age com a janela do jogo na frente
+
+    // mira por camera: escreve Camera::Rotation no frame do disparo (exata,
+    // sem SendInput). Opt-in: mexe no estado da camera do jogo.
+    bool  cameraMode = false;
 };
 
 // ============================================================
@@ -76,6 +80,31 @@ struct FlySettings {
     bool  zeroVelocity = true;     // zera AssemblyLinearVelocity pra gravidade nao brigar
     bool  hoverOnIdle = true;      // sem WASD: segura a altura em vez de cair
     bool  requireForeground = true;
+    bool  anchor = false;          // jogos que revertem a posicao: trava o HRP (Anchored)
+};
+
+// ============================================================
+// CAMERA — freecam, FOV e destravamento de FPS
+// Tudo local: o servidor nunca ve a camera.
+// ============================================================
+struct CameraSettings {
+    bool  freecam = false;
+    int   freecamKey = 0x43;      // VK_C
+    float freecamSpeed = 80.f;    // studs/s
+    bool  fovHack = false;
+    float fov = 110.f;            // graus (jogo normal: 70)
+    bool  unlockFps = false;
+    int   maxFps = 240;
+};
+
+// ============================================================
+// ITENS — puxar objeto filtrado pra perto do personagem
+// ============================================================
+struct MagnetSettings {
+    bool  enabled = false;
+    float range = 250.f;          // so considera itens ate essa distancia
+    float pullDistance = 4.f;     // onde o item para, em studs de voce
+    int   perSecond = 10;         // writes por segundo (cada um puxa 1 item)
 };
 
 // perfil por jogo (PlaceId)
@@ -117,6 +146,8 @@ struct Settings {
     AimSettings aim;
     TriggerSettings fire;
     FlySettings fly;
+    CameraSettings camera;
+    MagnetSettings magnet;
     std::vector<Profile> profiles;
 };
 

@@ -71,6 +71,23 @@ bool Memory::Attach(const char* process_name, bool stealth, bool write) {
         m_handle = StealthyOpenProcess::Execute(m_pid, access);
     if (!m_handle)
         m_handle = OpenProcess(access, FALSE, m_pid);
+
+    // Alguns jogos negam VM_WRITE (ou o anti-cheat derruba o handle de escrita).
+    // Antes de desistir, cai pra leitura: ESP/aim continuam, voo e magnet nao.
+    if (!m_handle && write) {
+        DWORD readAccess = PROCESS_VM_READ | PROCESS_QUERY_INFORMATION;
+        HANDLE fallback = nullptr;
+        if (stealth)
+            fallback = StealthyOpenProcess::Execute(m_pid, readAccess);
+        if (!fallback)
+            fallback = OpenProcess(readAccess, FALSE, m_pid);
+
+        if (fallback) {
+            m_handle = fallback;
+            write = false;   // downgrade: m_canWrite no fim do Attach
+        }
+    }
+
     if (!m_handle) {
         m_pid = 0;
         return false;

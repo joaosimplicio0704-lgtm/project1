@@ -28,6 +28,29 @@ float Dist(const Vector3& a, const Vector3& b) {
 
 } // namespace
 
+bool Fly::SetAnchored(Memory& memory, uintptr_t primitive, bool anchored) {
+    if (!primitive || !memory.CanWrite())
+        return false;
+
+    uint8_t flags = 0;
+    if (!memory.Read(primitive + rbx::Primitive::Flags, flags))
+        return false;
+
+    const uint8_t bit = static_cast<uint8_t>(rbx::PrimitiveFlags::Anchored);
+    const uint8_t next = anchored ? static_cast<uint8_t>(flags | bit)
+                                  : static_cast<uint8_t>(flags & ~bit);
+    if (next == flags)
+        return true;
+
+    if (!memory.Write(primitive + rbx::Primitive::Flags, next))
+        return false;
+
+    m_anchored = anchored;
+    m_anchorPrimitive = primitive;
+    applog::Line("[voo] Anchored %s (flags 0x%02X -> 0x%02X)", anchored ? "on" : "off", flags, next);
+    return true;
+}
+
 void Fly::Reset() {
     m_active = false;
     m_hovering = false;
@@ -38,6 +61,12 @@ void Fly::Reset() {
     m_pos = Vector3{};
     m_primitive = 0;
     m_lastTick = 0;
+    m_writeOk = false;
+    m_writeFails = 0;
+    m_anchored = false;
+    m_anchorPrimitive = 0;
+    m_reverting = false;
+    m_revertSince = 0;
 }
 
 void Fly::Stop(Memory& memory) {
@@ -46,6 +75,10 @@ void Fly::Stop(Memory& memory) {
         const Vector3 zero{};
         memory.Write(m_primitive + rbx::Primitive::AssemblyLinearVelocity, zero);
     }
+
+    // e devolve o Anchored, senao o personagem fica travado no ar pra sempre
+    if (m_anchored && m_anchorPrimitive)
+        SetAnchored(memory, m_anchorPrimitive, false);
 
     m_wasActive = false;
     m_active = false;
@@ -97,6 +130,27 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
     if (!m_pos.Finite()) {
         m_havePos = false;
         return;
+    }
+
+    // modo Ancorar: alguns jogos/personagens revertem a posicao no mesmo tick.
+    // Com o bit Anchored ligado o motor para de brigar e o write fica.
+    if (fly.anchor && !m_anchored)
+        SetAnchored(memory, local.primitive, true);
+    else if (!fly.anchor && m_anchored)
+        SetAnchored(memory, m_anchorPrimitive, false);
+
+    // o jogo esta revertendo? (drift grande e persistente enquanto devia andar)
+    const float drift = Dist(m_pos, local.position);
+    if (drift > 25.f) {
+        if (!m_revertSince)
+            m_revertSince = now;
+        else if (now - m_revertSince > 700 && !m_reverting) {
+            m_reverting = true;
+            applog::Line("[voo] o jogo esta revertendo a posicao (drift %.0f studs) — use Ancorar", drift);
+        }
+    } else {
+        m_revertSince = 0;
+        m_reverting = false;
     }
 
     const float* r = local.cameraRotation;   // 3x3 row-major da CFrame da camera

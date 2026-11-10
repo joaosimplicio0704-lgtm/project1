@@ -230,6 +230,64 @@ void TestAimLoop() {
     }
 }
 
+void TestLookRotation() {
+    std::printf("[6] LookRotation (mira por camera)\n");
+
+    const Vector3 eye{ 12.f, 5.f, -3.f };
+    const Vector3 target{ -40.f, 9.f, 60.f };
+
+    float m[9]{};
+    Check(mathx::LookRotation(eye, target, m), "gera matriz olhando pro alvo");
+
+    // look recuperado da matriz tem que ser a direcao normalizada eye->target
+    Vector3 want{ target.x - eye.x, target.y - eye.y, target.z - eye.z };
+    const float len = want.Length();
+    want.x /= len; want.y /= len; want.z /= len;
+
+    const Vector3 got{ -m[2], -m[5], -m[8] };
+    CheckNear(got.x, want.x, 1e-5f, "look.x bate");
+    CheckNear(got.y, want.y, 1e-5f, "look.y bate");
+    CheckNear(got.z, want.z, 1e-5f, "look.z bate");
+
+    // ortonormal: linhas e colunas unitarias e ortogonais
+    const Vector3 right{ m[0], m[3], m[6] };
+    const Vector3 up{ m[1], m[4], m[7] };
+    CheckNear(right.Length(), 1.f, 1e-5f, "right unitario");
+    CheckNear(up.Length(), 1.f, 1e-5f, "up unitario");
+    CheckNear(right.x * up.x + right.y * up.y + right.z * up.z, 0.f, 1e-5f, "right . up = 0");
+    CheckNear(right.x * got.x + right.y * got.y + right.z * got.z, 0.f, 1e-5f, "right . look = 0");
+    CheckNear(up.x * got.x + up.y * got.y + up.z * got.z, 0.f, 1e-5f, "up . look = 0");
+
+    // CameraAngles le de volta um angulo coerente com a direcao
+    float yaw = 0.f, pitch = 0.f;
+    Check(mathx::CameraAngles(m, yaw, pitch), "CameraAngles le a matriz gerada");
+    CheckNear(std::sin(pitch), want.y, 1e-4f, "pitch reconstroi a componente vertical");
+    CheckNear(std::cos(pitch) * -std::sin(yaw), want.x, 1e-4f, "yaw reconstroi x");
+    CheckNear(std::cos(pitch) * -std::cos(yaw), want.z, 1e-4f, "yaw reconstroi z");
+
+    // inversa: yaw/pitch -> matriz -> CameraAngles tem que voltar nos mesmos angulos
+    for (float yaw : { 0.f, 1.2f, -2.4f, 3.0f }) {
+        for (float pitch : { 0.f, 0.6f, -0.9f }) {
+            float rot[9]{};
+            Check(mathx::RotationFromYawPitch(yaw, pitch, rot), "RotationFromYawPitch gera matriz");
+
+            float y2 = 0.f, p2 = 0.f;
+            Check(mathx::CameraAngles(rot, y2, p2), "CameraAngles le de volta");
+
+            CheckNear(mathx::WrapPi(y2 - yaw), 0.f, 1e-4f, "round-trip do yaw");
+            CheckNear(p2, pitch, 1e-4f, "round-trip do pitch");
+        }
+    }
+
+    // alvo em cima da camera: sem direcao definida
+    float bad[9]{};
+    Check(!mathx::LookRotation(eye, eye, bad), "eye == target nao gera matriz");
+
+    // olhando reto pra cima: right degenera e deve recusar (evita NaN)
+    Check(!mathx::LookRotation(Vector3{ 0.f, 0.f, 0.f }, Vector3{ 0.f, 10.f, 0.f }, bad),
+          "olhar reto pra cima e recusado");
+}
+
 void TestFly() {
     std::printf("[4] voo\n");
 
@@ -316,6 +374,7 @@ int main() {
     TestRadiansPerPixel();
     TestAimLoop();
     TestFly();
+    TestLookRotation();
     TestConfig();
 
     std::printf("== %d checagens, %d falha(s) ==\n", g_checks, g_failures);

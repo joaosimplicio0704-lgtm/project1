@@ -69,6 +69,70 @@ inline float CountsPerPixel(float fovDeg, float height, float radPerCount) {
     return std::clamp(radPerPx / radPerCount, 0.02f, 40.f);
 }
 
+// matriz de rotacao (9 floats, row-major, COLUNAS = right/up/back) que aponta
+// a camera de `eye` para `target`. E a convencao que CameraAngles le de volta
+// (LookVector = -coluna 3), entao da pra escrever direto em Camera::Rotation.
+inline bool LookRotation(const Vector3& eye, const Vector3& target, float out[9]) {
+    if (!out)
+        return false;
+
+    Vector3 look{ target.x - eye.x, target.y - eye.y, target.z - eye.z };
+    const float len = look.Length();
+    if (!(len > 1e-4f) || !std::isfinite(len))
+        return false;
+
+    look.x /= len;
+    look.y /= len;
+    look.z /= len;
+
+    // right = normalize(cross(look, worldUp)); degenera olhando reto pra cima/baixo
+    Vector3 right{ -look.z, 0.f, look.x };
+    const float rightLen = right.Length();
+    if (!(rightLen > 1e-4f))
+        return false;
+
+    right.x /= rightLen;
+    right.z /= rightLen;
+    right.y = 0.f;
+
+    // up = cross(right, look); back = -look
+    const Vector3 up{
+        right.y * look.z - right.z * look.y,
+        right.z * look.x - right.x * look.z,
+        right.x * look.y - right.y * look.x
+    };
+
+    out[0] = right.x; out[1] = up.x; out[2] = -look.x;
+    out[3] = right.y; out[4] = up.y; out[5] = -look.y;
+    out[6] = right.z; out[7] = up.z; out[8] = -look.z;
+    return true;
+}
+
+// matriz de rotacao a partir de yaw/pitch, INVERSA de CameraAngles.
+// Da pra girar a camera sem mouse: guarda os angulos, integra e escreve isto.
+inline bool RotationFromYawPitch(float yaw, float pitch, float out[9]) {
+    if (!out || !std::isfinite(yaw) || !std::isfinite(pitch))
+        return false;
+
+    const float cp = std::cos(pitch), sp = std::sin(pitch);
+    const float cy = std::cos(yaw), sy = std::sin(yaw);
+
+    // CameraAngles faz yaw = atan2(-lx, -lz), entao:
+    // -lx = cos(pitch)*sin(yaw), -lz = cos(pitch)*cos(yaw), ly = sin(pitch)
+    const Vector3 look{ -cp * sy, sp, -cp * cy };
+    const Vector3 right{ cy, 0.f, -sy };
+    const Vector3 up{
+        right.y * look.z - right.z * look.y,
+        right.z * look.x - right.x * look.z,
+        right.x * look.y - right.y * look.x
+    };
+
+    out[0] = right.x; out[1] = up.x; out[2] = -look.x;
+    out[3] = right.y; out[4] = up.y; out[5] = -look.y;
+    out[6] = right.z; out[7] = up.z; out[8] = -look.z;
+    return true;
+}
+
 // passo do voo: posicao + direcao normalizada * velocidade * dt
 inline Vector3 FlyStep(const Vector3& from, const Vector3& dir, float speed, float dt) {
     return Vector3{

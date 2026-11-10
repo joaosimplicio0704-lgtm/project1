@@ -189,7 +189,9 @@ void Esp::UpdateSettings(const cfg::Settings& settings) {
     m_reader.skeleton = settings.espSkeleton;
     m_reader.maxDistance = settings.maxDistance;
     m_reader.stealthOpen = settings.stealthOpen;
-    m_reader.wantWrite = settings.fly.enabled;
+    m_reader.wantWrite = settings.fly.enabled || settings.magnet.enabled ||
+                         settings.aim.cameraMode || settings.camera.freecam ||
+                         settings.camera.fovHack || settings.camera.unlockFps;
     m_reader.tickMs = settings.tickMs;
     m_reader.parts = settings.espParts;
 
@@ -462,6 +464,26 @@ const Esp::PartEntry& Esp::PartsOf(uintptr_t character, uint64_t now) {
         }
     }
 
+    // ---- fallbacks: e aqui que "não detecta o inimigo" em alguns jogos se resolve ----
+    // 1) rig customizado sem HumanoidRootPart no nome -> Model::PrimaryPart
+    if (!entry.rootPart) {
+        const uintptr_t primary = m_memory.ReadPtr(character + rbx::Model::PrimaryPart);
+        if (primary)
+            entry.rootPart = primary;
+    }
+    // 2) Humanoid::HumanoidRootPart (offset do proprio Humanoid)
+    if (!entry.rootPart && entry.humanoid) {
+        const uintptr_t hrp = m_memory.ReadPtr(entry.humanoid + rbx::Humanoid::HumanoidRootPart);
+        if (hrp)
+            entry.rootPart = hrp;
+    }
+    // 3) R6 sem root: Torso/UpperTorso servem de referencia
+    if (!entry.rootPart && entry.bones[kBoneUpperTorso])
+        entry.rootPart = entry.bones[kBoneUpperTorso];
+    // 4) cabeca: o osso Head, se o nome nao era exatamente "Head"
+    if (!entry.headPart && entry.bones[0])
+        entry.headPart = entry.bones[0];
+
     return entry;
 }
 
@@ -560,6 +582,7 @@ void Esp::ReadScene(SceneSnapshot& scene, const ReaderSettings& reader) {
     std::vector<Target> found;
     const std::vector<uintptr_t> players = Children(playersService, now);
     int playerCount = 0;
+    int skippedNoChar = 0, skippedNoParts = 0, skippedTeam = 0, skippedDead = 0, skippedFar = 0;
 
     for (uintptr_t player : players) {
         if (!player)
@@ -574,37 +597,67 @@ void Esp::ReadScene(SceneSnapshot& scene, const ReaderSettings& reader) {
 
         if (reader.teamCheck && localTeam) {
             const uintptr_t team = m_memory.ReadPtr(player + rbx::Player::Team);
-            if (team && team == localTeam)
+            if (team && team == localTeam) {
+                ++skippedTeam;
                 continue;
+            }
         }
 
-        const uintptr_t character = m_memory.ReadPtr(player + rbx::Player::ModelInstance);
-        if (!character)
+        uintptr_t character = m_memory.ReadPtr(player + rbx::Player::ModelInstance);
+
+        // StreamingEnabled / modelo ainda carregando: procura no Workspace um Model
+        // com o nome do jogador antes de desistir
+        if (!character) {
+            const std::string& playerName = NameOf(player, now);
+            if (playerName != "?" && local.workspace) {
+                for (uintptr_t child : Children(local.workspace, now)) {
+                    if (ClassOf(child, now) != "Model")
+                        continue;
+                    if (NameOf(child, now) == playerName) {
+                        character = child;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!character) {
+            ++skippedNoChar;
             continue;
+        }
 
         const PartEntry& parts = PartsOf(character, now);
-        if (!parts.rootPart || !parts.headPart)
+        if (!parts.rootPart) {
+            ++skippedNoParts;
             continue;
+        }
 
         Target target{};
         if (!ReadPartPosition(m_memory, parts.rootPart, target.root))
             continue;
-        if (!ReadPartPosition(m_memory, parts.headPart, target.head))
-            continue;
+
+        // sem Head legivel (rig custom): usa o root deslocado pra cima, senao o
+        // alvo simplesmente nao aparece
+        if (!parts.headPart || !ReadPartPosition(m_memory, parts.headPart, target.head))
+            target.head = Vector3{ target.root.x, target.root.y + 1.5f, target.root.z };
 
         if (local.position.NonZero())
             target.distance = (target.root - local.position).Length();
 
-        if (target.distance > reader.maxDistance)
+        if (target.distance > reader.maxDistance) {
+            ++skippedFar;
             continue;
+        }
 
         if (parts.humanoid) {
             target.health = m_memory.ReadOr<float>(parts.humanoid + rbx::Humanoid::Health, 0.f);
             target.maxHealth = m_memory.ReadOr<float>(parts.humanoid + rbx::Humanoid::MaxHealth, 100.f);
             if (target.maxHealth <= 0.f)
                 target.maxHealth = 100.f;
-            if (target.health <= 0.f)
+            if (target.health <= 0.f) {
+                ++skippedDead;
                 continue;
+            }
         }
 
         const uintptr_t primitive = m_memory.ReadPtr(parts.rootPart + rbx::BasePart::Primitive);
@@ -626,9 +679,21 @@ void Esp::ReadScene(SceneSnapshot& scene, const ReaderSettings& reader) {
         target.player = player;
         target.name = NameOf(player, now);
         if (target.name == "?")
-            continue;
+            target.name = "player";
 
         found.push_back(std::move(target));
+    }
+
+    // diagnostico: se tem gente no jogo e nenhum alvo, o log diz o motivo
+    if (now - m_lastDiag > 5000) {
+        m_lastDiag = now;
+        if (found.empty() && playerCount > 1) {
+            applog::Line("[esp] %d players e 0 alvos (sem personagem %d, sem parts %d, time %d, "
+                         "morto %d, longe %d)",
+                         playerCount, skippedNoChar, skippedNoParts, skippedTeam, skippedDead,
+                         skippedFar);
+            scene.status = "0 alvos: ver log";
+        }
     }
 
     scene.targets = std::move(found);
@@ -697,6 +762,7 @@ void Esp::ReadParts(SceneSnapshot& scene, const ReaderSettings& reader, uint64_t
             continue;
 
         PartMark mark{};
+        mark.primitive = m_memory.ReadPtr(child + rbx::BasePart::Primitive);
         mark.position = position;
         mark.name = name;
         mark.distance = distance;

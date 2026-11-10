@@ -11,6 +11,8 @@
 #include "../features/trigger.h"
 #include "../features/esp.h"
 #include "../features/fly.h"
+#include "../features/camerahack.h"
+#include "../features/magnet.h"
 #include "../imgui/imgui.h"
 #include "../offsets.h"
 #include "../overlay/overlay.h"
@@ -190,7 +192,7 @@ static void KeyBindButton(int slot, int& key, cfg::Settings& settings) {
 }
 
 // ------------------------------------------------------------
-static void DrawEspTab(cfg::Settings& settings) {
+static void DrawEspTab(cfg::Settings& settings, Magnet& magnet, Esp& esp) {
     ImGui::Checkbox("ESP  (F1)", &settings.espEnabled);
     ImGui::Checkbox("Caixa  (F2)", &settings.boxes);
     ImGui::Checkbox("Nome", &settings.names);
@@ -233,6 +235,41 @@ static void DrawEspTab(cfg::Settings& settings) {
         std::snprintf(filter, sizeof(filter), "%s", settings.partsFilter.c_str());
     ImGui::SameLine();
     ImGui::TextDisabled("nomes (vira vírgula)");
+
+    ImGui::Spacing();
+    ImGui::SeparatorText("Puxar item (magnet)");
+    ImGui::Checkbox("Puxar pra mim", &settings.magnet.enabled);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("escreve Primitive::Position do item filtrado pra perto de voce.\n"
+                          "funciona em item desancorado (loot no chao); se for do servidor ele volta");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("puxar agora")) {
+        const auto scene = esp.Snapshot();
+        if (scene)
+            magnet.PullOnce(settings, esp.Mem(), scene->local, *scene);
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("um empurrao de itens sem deixar ligado");
+
+    ImGui::SameLine();
+    if (ImGui::SmallButton("ir ate o item")) {
+        const auto scene = esp.Snapshot();
+        if (scene && magnet.TeleportToNearest(settings, esp.Mem(), scene->local, *scene))
+            std::snprintf(g_status, sizeof(g_status), "teleportado pro item mais proximo");
+        else
+            std::snprintf(g_status, sizeof(g_status), "nenhum item no filtro/alcance");
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("leva o SEU personagem ate o item (esse write o cliente sempre manda)");
+
+    ImGui::TextDisabled("puxados %d   recusados %d", magnet.Pulled(), magnet.Refused());
+
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderFloat("Alcance", &settings.magnet.range, 20.f, 1000.f, "%.0f studs");
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderFloat("Distancia final", &settings.magnet.pullDistance, 2.f, 20.f, "%.0f studs");
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderInt("Itens/s", &settings.magnet.perSecond, 1, 60);
 
     ImGui::Spacing();
     ImGui::SeparatorText("Filtro");
@@ -315,6 +352,16 @@ static void DrawAimTab(cfg::Settings& settings, AimAssist& aimAssist, bool attac
     ImGui::Checkbox("Desenhar circulo", &aim.drawFov);
     ImGui::Checkbox("So com o jogo em foco", &aim.requireForeground);
 
+    ImGui::SeparatorText("Mira por camera");
+    ImGui::Checkbox("Escrever rotacao da camera", &aim.cameraMode);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("em vez de mover o mouse: escreve Camera::Rotation no frame do disparo.\n"
+                          "instantaneo e exato, ignora sensibilidade/mouse lock.\n"
+                          "precisa de handle de escrita e desliga o modulo de camera do jogo "
+                          "enquanto a tecla esta apertada");
+    if (aim.cameraMode)
+        ImGui::TextDisabled("com esta opcao o mouse nao e movido e a calibracao fica parada");
+
     ImGui::Spacing();
     ImGui::TextDisabled("ganho real por tick: %.3f", aim.strength / (aim.smoothing < 1.f ? 1.f : aim.smoothing));
     if (!attached)
@@ -386,6 +433,11 @@ static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) 
     ImGui::Checkbox("Modo toggle", &v.toggleMode);
     ImGui::Checkbox("So com o jogo em foco", &v.requireForeground);
 
+    ImGui::Checkbox("Ancorar (jogos que revertem)", &v.anchor);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("liga o bit Anchored do HumanoidRootPart enquanto voa: o motor para de\n"
+                          "puxar o personagem de volta. e desligado sozinho ao soltar a tecla");
+
     ImGui::Spacing();
     ImGui::Text("handle     %s", esp.Mem().CanWrite() ? "VM_WRITE ok" : "read-only (reatacha ao ligar)");
     if (!fly.Active())
@@ -399,6 +451,52 @@ static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) 
     const Vector3 shown = fly.Active() && fly.HasPosition() ? fly.Position() : local.position;
     ImGui::Text("posicao    %.1f, %.1f, %.1f", shown.x, shown.y, shown.z);
     ImGui::Text("passo      %.1f studs/s (dt limitado a 50 ms)", v.speed);
+    if (fly.Reverting() && !v.anchor)
+        ImGui::TextColored(ImVec4(1.f, 0.6f, 0.2f, 1.f),
+                           "este jogo esta revertendo o write: ligue Ancorar");
+    else if (fly.Anchored())
+        ImGui::TextDisabled("ancorado (o motor nao briga)");
+}
+
+// ------------------------------------------------------------
+static void DrawCameraTab(cfg::Settings& settings, const CameraHack& cameraHack, const Esp& esp,
+                          AimAssist& aim) {
+    cfg::CameraSettings& cam = settings.camera;
+
+    ImGui::Checkbox("Freecam (camera solta)", &cam.freecam);
+    ImGui::SameLine(220.f);
+    KeyBindButton(4, cam.freecamKey, settings);
+
+    ImGui::TextDisabled("aperta a tecla: camera solta | WASD move | setas olham | Space/Ctrl sobem/descem");
+    ImGui::TextColored(ImVec4(0.55f, 0.9f, 0.55f, 1.f),
+                       "camera e local: o servidor nao recebe nada disso");
+
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderFloat("Velocidade", &cam.freecamSpeed, 10.f, 400.f, "%.0f studs/s");
+
+    ImGui::SeparatorText("FOV");
+    ImGui::Checkbox("FOV hack", &cam.fovHack);
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderFloat("FOV", &cam.fov, 20.f, 120.f, "%.0f graus");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("70 e o normal do Roblox; 110 ve praticamente tudo, 25 vira luneta");
+
+    ImGui::SeparatorText("FPS");
+    ImGui::Checkbox("Tirar o teto de FPS", &cam.unlockFps);
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderInt("Max FPS", &cam.maxFps, 30, 500);
+
+    ImGui::SeparatorText("Estado");
+    ImGui::Text("camera do jogo  %s", cameraHack.ScriptableOwned() ? "Scriptable (nossa)" : "normal");
+    ImGui::Text("freecam         %s", cameraHack.FreecamActive() ? "ativa" : "parada");
+    ImGui::Text("mira por camera %s", cameraHack.AimActive() ? "aplicando" : "—");
+    ImGui::Text("handle          %s", esp.Mem().CanWrite() ? "VM_WRITE ok" : "read-only");
+    if (!esp.Mem().CanWrite())
+        ImGui::TextDisabled("freecam/FOV/FPS/mira por camera precisam do handle de escrita");
+
+    ImGui::SeparatorText("Atalho");
+    ImGui::Checkbox("Mira por camera na aba Aim", &settings.aim.cameraMode);
+    (void)aim;
 }
 
 // ------------------------------------------------------------
@@ -526,7 +624,8 @@ static void DrawConfigTab(cfg::Settings& settings, Esp& esp, Overlay& overlay) {
 
 // ------------------------------------------------------------
 void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detector,
-          MemView& memView, AimAssist& aim, const Trigger& trigger, const Fly& fly, bool* open) {
+          MemView& memView, AimAssist& aim, const Trigger& trigger, const Fly& fly,
+          CameraHack& cameraHack, Magnet& magnet, bool* open) {
     if (!open || !*open) {
         g_binding = 0;   // fecha o menu no meio do bind: nao pode ficar armado
         return;
@@ -545,7 +644,7 @@ void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detecto
 
     if (ImGui::BeginTabBar("##tabs")) {
         if (ImGui::BeginTabItem("ESP")) {
-            DrawEspTab(settings);
+            DrawEspTab(settings, magnet, esp);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Aim")) {
@@ -563,6 +662,10 @@ void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detecto
         }
         if (ImGui::BeginTabItem("Voo")) {
             DrawFlyTab(settings, fly, esp);
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Camera")) {
+            DrawCameraTab(settings, cameraHack, esp, aim);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Memoria")) {

@@ -26,6 +26,8 @@ $ZIG c++ \
     src/features/trigger.cpp \
     src/features/memview.cpp \
     src/features/fly.cpp \
+    src/features/camerahack.cpp \
+    src/features/magnet.cpp \
     src/overlay/overlay.cpp \
     src/menu/menu.cpp \
     src/imgui/imgui.cpp \

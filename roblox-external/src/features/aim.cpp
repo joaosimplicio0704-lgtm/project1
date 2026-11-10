@@ -90,6 +90,7 @@ void AimAssist::ResetCalibration() {
 void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, unsigned long pid,
                      float width, float height, bool blocked) {
     m_hasTarget = false;
+    m_armed = false;
 
     const cfg::AimSettings& aim = settings.aim;
 
@@ -175,6 +176,7 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
     float bestDistance = aim.fovPx;
     float lockDistance = aim.fovPx;
     Vector2 bestScreen{}, lockScreen{};
+    Vector3 bestWorld{}, lockWorld{};
     uintptr_t bestPlayer = 0, lockPlayer = 0;
 
     for (const Target& target : scene.targets) {
@@ -201,6 +203,7 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
             lockDistance = distance;
             lockScreen = screen;
             lockPlayer = target.player;
+            lockWorld = point;
         }
 
         if (found && distance >= bestDistance)
@@ -210,6 +213,7 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
         bestDistance = distance;
         bestScreen = screen;
         bestPlayer = target.player;
+        bestWorld = point;
     }
 
     // alvo travado vale mesmo se outro ficou mais perto, desde que siga no FOV
@@ -218,6 +222,7 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
         bestDistance = lockDistance;
         bestScreen = lockScreen;
         bestPlayer = lockPlayer;
+        bestWorld = lockWorld;
     }
 
     if (!found) {
@@ -233,9 +238,19 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
     m_targetX = bestScreen.x;
     m_targetY = bestScreen.y;
     m_targetError = bestDistance;
+    m_targetWorld = bestWorld;
+    m_armed = active;
 
     if (!active) {
         m_accumX = m_accumY = 0.f;
+        return;
+    }
+
+    // modo camera: o CameraHack le m_targetWorld e escreve Camera::Rotation.
+    // Mover o mouse aqui seria brigar com a rotacao que ja esta sendo escrita.
+    if (aim.cameraMode) {
+        m_accumX = m_accumY = 0.f;
+        m_probeLeft = 0;
         return;
     }
 

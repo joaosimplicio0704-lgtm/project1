@@ -43,9 +43,13 @@ public:
     // o jogo aceitou o ultimo write? (false = handle sem VM_WRITE / posicao recusada)
     bool    WriteOk() const { return m_writeOk; }
     int     WriteFails() const { return m_writeFails; }
+    // o jogo esta revertendo a posicao escrita (precisa do modo Ancorar)
+    bool    Reverting() const { return m_reverting; }
+    bool    Anchored() const { return m_anchored; }
 
 private:
     void Stop(Memory& memory);
+    bool SetAnchored(Memory& memory, uintptr_t primitive, bool anchored);
 
     bool      m_active = false;     // armado e com write valido
     bool      m_hovering = false;   // parado no ar (so segurando altura)
@@ -58,4 +62,8 @@ private:
     uint64_t  m_lastTick = 0;
     bool      m_writeOk = false;
     int       m_writeFails = 0;
+    bool      m_anchored = false;
+    uintptr_t m_anchorPrimitive = 0;
+    bool      m_reverting = false;
+    uint64_t  m_revertSince = 0;
 };

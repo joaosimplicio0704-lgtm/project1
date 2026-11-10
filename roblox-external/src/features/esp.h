@@ -76,6 +76,7 @@ struct Target {
 
 // objeto solto no mapa que bate com o filtro de nomes (loot, caixa, moeda...)
 struct PartMark {
+    uintptr_t   primitive = 0;   // BasePart::Primitive (pra escrever posicao)
     Vector3     position{};
     std::string name;
     float       distance = 0.f;
@@ -180,6 +181,7 @@ private:
 
     // --- estado do worker (so a thread de leitura toca) ---
     uintptr_t m_dataModel = 0;
+    uint64_t  m_lastDiag = 0;
     uint64_t  m_partsAt = 0;
     std::vector<PartMark> m_lastParts;
     uint64_t  m_lastAttachAttempt = 0;

@@ -104,6 +104,16 @@ Regras da captura, em `menu.cpp`:
 - `Config → Input (diagnostico)` mostra cursor do OS vs cursor do ImGui e o DPI —
   se os dois divergirem, o número aparece em laranja.
 
+## Jogos que "não deixam" e jogos que bloqueiam
+
+Três queixas reais, três causas diferentes:
+
+| sintoma | causa | correção |
+|---|---|---|
+| "não injeta" / não anexa | alguns jogos negam `PROCESS_VM_WRITE` (o anti-cheat derruba o handle de escrita) — e aí o anexo inteiro falhava | se o handle completo falhar, cai pra **leitura** (`VM_READ` + `QUERY_INFORMATION`): ESP/aim seguem, voo/magnet/câmera ficam desabilitados e a aba mostra `read-only`. Tudo logado |
+| "não detecta o inimigo" | rig customizado sem `HumanoidRootPart`, `StreamingEnabled` (personagem ainda não carregou), partes renomeadas, `Head` ausente | fallbacks: `Model::PrimaryPart` → `Humanoid::HumanoidRootPart` → `Torso/UpperTorso`; personagem procurado no `Workspace` pelo nome do jogador; sem `Head`, a caixa usa o root deslocado; nome `?` não descarta mais o alvo. Se continuar 0 alvos, o **log** diz o motivo (sem personagem / sem parts / time / morto / longe) |
+| voo "bloqueado" em alguns jogos | o motor ou o servidor reverte a posição escrita no mesmo tick | **modo Ancorar**: liga o bit `Anchored` (`Primitive::Flags 0x1BE`) enquanto voa e desliga sozinho ao soltar. Além disso o módulo detecta a reversão (drift > 25 studs por 700 ms) e avisa na aba |
+
 ## Testes offline
 
 Parte do projeto é matemática pura e roda sem Windows, sem cliente e sem processo:
@@ -140,6 +150,38 @@ Duas coisas que **o teste pegou** e que estavam erradas no build anterior:
 | panic (F10) | desliga aim/tiro/voo, solta o botão esquerdo se o trigger estiver pressionado e devolve o mouse |
 | handle de escrita | só existe enquanto o voo está ligado; ao desligar, volta pro read-only (menos exposição) |
 | write verificado | o voo checa o retorno de `WriteProcessMemory` e a aba mostra `write ok` / `RECUSADO` em vez de falhar calado |
+
+## Câmera (freecam, mira por câmera, FOV, FPS)
+
+A câmera do Roblox é **100% local** — o servidor nunca a vê. Enquanto o jogo está com
+`CameraType = Scriptable` (6), o módulo de câmera dele para de reescrever a CFrame e o
+que a gente escreve **fica**. É o pacote mais agressivo que dá pra fazer sem posição
+replicada, e por isso o de menor risco.
+
+| feature | o que faz | offset |
+|---|---|---|
+| **freecam** | câmera desacoplada: tecla solta, `WASD` move, **setas olham**, `Space/Ctrl` sobem/descem. Atravessa parede, enxerga o mapa todo, combina com o ESP de objetos | `Camera::CameraType 0x120`, `Position 0xE4`, `Rotation 0xC0` |
+| **mira por câmera** | escreve a rotação exata apontando pro osso no frame do disparo: sem `SendInput`, sem sensibilidade, sem mouse lock. Instantâneo e determinístico | `Camera::Rotation 0xC0` |
+| **FOV hack** | 70 → 110 pra ver tudo, ou 25 pra virar luneta | `Camera::FieldOfView 0x128` |
+| **FPS unlock** | tira o teto de 60 (com trava: se o campo não for um float plausível, não escreve) | `TaskScheduler::MaxFPS 0xB0` |
+
+Ao desligar (ou no **F10**) tudo volta: `CameraType`, FOV e MaxFPS originais. A câmera
+se descola, então o personagem continua onde estava — nada de posição indo pro servidor.
+
+## Puxar item (magnet)
+
+Reusa a varredura do ESP de objetos: os marcadores já vêm com nome, posição e o endereço
+do `Primitive`. Aí é só escrever `Primitive::Position` do item pra perto de você.
+
+- **Puxar pra mim** — contínuo, `Itens/s` limita os writes (10/s por default), pega o item
+  mais perto primeiro, para a `Distancia final` studs de você.
+- **puxar agora** — um empurrão único, sem deixar ligado.
+- **ir até o item** — alternativa garantida: em vez de mover o item, move **você** até ele
+  (`Primitive::Position` do seu HumanoidRootPart, que o cliente sempre manda).
+
+Funciona em item **desancorado** (loot largado no chão é o caso normal). Item `Anchored`
+ou com network ownership do servidor volta pro lugar — a aba conta `puxados / recusados`
+em vez de fingir que funcionou.
 
 ## Mira na tela e objetos
 
