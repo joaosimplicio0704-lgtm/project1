@@ -1,0 +1,75 @@
+# fort
+
+Ferramenta externa Windows x64 em C++17: leitura por `ReadProcessMemory`, aim por deltas relativos de `SendInput` e overlay D3D11 + Dear ImGui. Não injeta DLL, não escreve na memória do jogo e não altera `ControlRotation`.
+
+## Executar
+
+Os binários já incluídos nesta pasta são:
+
+- `FortLoader.exe`: launcher que localiza e inicia o programa.
+- `FortniteExternal.exe`: programa principal.
+
+Deixe os dois na mesma pasta, abra o jogo e execute `FortLoader.exe`. Se o jogo estiver elevado, execute o loader como administrador. Não é necessário instalar ImGui nem compilar para usar os binários.
+
+O loader procura `fortnite-config.json` ao lado dos executáveis. Quando o arquivo existe, inicia o programa com `--load-config`; quando não existe, usa os padrões. O carregamento restaura os valores do JSON, mas **aim e ESP sempre permanecem desligados no lançamento**.
+
+O loader usa somente `CreateProcess`: não baixa arquivos, não injeta código, não altera permissões e não cria processo oculto. Para fechar o programa principal, pressione `END`.
+
+## Teclas
+
+| Tecla | Função |
+|---|---|
+| `INSERT` | abre/fecha o menu em abas |
+| `F1` | liga/desliga o aim |
+| botão direito | segura para atuar com o aim ligado |
+| `F2` | liga/desliga o ESP |
+| `F5` | salva `fortnite-config.json` no diretório atual |
+| `F9` | carrega manualmente o JSON |
+| `END` | encerra |
+
+Para preparar o carregamento pelo loader, abra o programa, ajuste o menu e pressione `F5` enquanto o diretório de trabalho for a pasta dos executáveis. O arquivo será encontrado na próxima abertura pelo `FortLoader.exe`.
+
+O menu permite ajustar FOV, smoothing, pixels por grau, distância, time, bots, osso da cabeça e elementos visuais. O overlay fica click-through com o menu fechado e acompanha a área cliente do jogo.
+
+## Compilar novamente
+
+Requisitos: Windows 10/11 x64, Visual Studio 2022 com **Desktop development with C++**, CMake e Git.
+
+No Prompt de Comando, dentro desta pasta:
+
+```bat
+build.cmd
+```
+
+Comando CMake equivalente:
+
+```bat
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 && cmake --build build --config Release --parallel
+```
+
+O `build.cmd` também copia os dois executáveis novos de `build\Release` para esta pasta. O CMake baixa Dear ImGui `v1.91.5` do repositório oficial durante a configuração. `SHA256SUMS.txt` contém os hashes dos binários publicados.
+
+## Pontos que precisam de redump
+
+Os offsets presentes vieram do dump fornecido. Estes pontos não estavam completos nele e estão marcados com `// FILL:` no código:
+
+- `Offsets.h`: `UPlayer::PlayerController`, inicialmente `0x30`. Exporte `UPlayer` no SDK e substitua se necessário.
+- `Game.cpp`: nomes/índices de `kBodyBones`. Exporte `USkeletalMesh::RefSkeleton` e faça `GetBoneName(index)` para o mesh real; ajuste também o valor padrão de `kHeadBone` em `Overlay.cpp`.
+- `Offsets.h`: `FFortGameplayAttributeData::CurrentValue`, inicialmente `0x4`. Confirme o layout do struct no redump.
+- O código usa `SkinnedMeshComponent::CachedWorldToLocalTransform` em `0x870` e a máscara de recently rendered em `0x7E1`; confirme esses campos no redump.
+
+Sem essa conferência, câmera, ossos ou atributos podem falhar de forma segura, mas não há garantia de funcionamento em outra build.
+
+## Implementação e validação
+
+- Cadeia: `UWorld -> OwningGameInstance -> LocalPlayers -> PlayerController -> PlayerCameraManager`.
+- Jogadores: `GameState -> PlayerArray -> PawnPrivate`, sem depender do layout de `ActorCluster`.
+- O osso component-space é convertido para world-space invertendo `CachedWorldToLocalTransform`.
+- O alvo é o osso projetado mais próximo do crosshair dentro do FOV configurado.
+- O delta angular vira `MOUSEEVENTF_MOVE`, dividido por smoothing; não há escrita de view angles.
+- `visibleOnly` usa `bRecentlyRendered`; isso **não** é um trace de oclusão nem prova de linha de visão.
+- `ProcessHandle` é o wrapper RAII read-only fornecido, sem VEH/HWBP, threads auxiliares ou monitor global de handles.
+
+Os binários foram compilados por toolchain cruzada para Windows x64 e os testes matemáticos de câmera/matriz passaram. Eles **não foram executados em Windows nem testados contra o jogo** neste ambiente Linux.
+
+Contas podem ser punidas pelo anti-cheat e pela política do jogo. Use apenas onde você tem autorização; este projeto não inclui bypass nem promessa de não detecção.
