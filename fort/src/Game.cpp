@@ -331,11 +331,19 @@ WorldSnapshot Game::Capture(const Config& config, int screenWidth, int screenHei
 
             const fn::FTransform cachedWorldToLocal = Read<fn::FTransform>(
                 mesh + SkinnedMeshComponent::CachedWorldToLocalTransform);
-            const fn::TArray<fn::FTransform> cachedBones = Read<fn::TArray<fn::FTransform>>(
+            fn::TArray<fn::FTransform> cachedBones = Read<fn::TArray<fn::FTransform>>(
                 mesh + SkeletalMeshComponent::CachedComponentSpaceTransforms);
+            const auto validBoneArray = [](const fn::TArray<fn::FTransform>& array) {
+                return array.Count > 0 && array.Count <= kMaxBones &&
+                    fn::IsValidAddress(reinterpret_cast<std::uintptr_t>(array.Data));
+            };
+            if (!validBoneArray(cachedBones)) {
+                cachedBones = Read<fn::TArray<fn::FTransform>>(
+                    mesh + SkeletalMeshComponent::CachedComponentSpaceTransformsSecondary);
+            }
+
             fn::FMatrix localToWorld;
-            if (cachedBones.Count > 0 && cachedBones.Count <= kMaxBones &&
-                fn::IsValidAddress(reinterpret_cast<std::uintptr_t>(cachedBones.Data)) &&
+            if (validBoneArray(cachedBones) &&
                 fn::InvertMatrix(fn::ToMatrix(cachedWorldToLocal), localToWorld)) {
                 std::vector<fn::FTransform> bones(static_cast<std::size_t>(cachedBones.Count));
                 if (ReadInto(reinterpret_cast<std::uintptr_t>(cachedBones.Data), bones.data(),
@@ -346,6 +354,17 @@ WorldSnapshot Game::Capture(const Config& config, int screenWidth, int screenHei
                     if (ReasonableBone(candidateHead, player.Root)) {
                         player.HasBoneData = true;
                         player.Head = candidateHead;
+                        player.AimPoint = player.Head;
+
+                        int aimBone = config.headBone;
+                        if (config.aimPart == 1) aimBone = 67;      // neck_02
+                        else if (config.aimPart == 2) aimBone = 8; // spine_03 / chest
+                        else if (config.aimPart == 3) aimBone = 5; // pelvis
+                        aimBone = std::clamp(aimBone, 0, cachedBones.Count - 1);
+                        const fn::FVector candidateAim = fn::TransformPoint(localToWorld,
+                            bones[static_cast<std::size_t>(aimBone)].Translation);
+                        if (ReasonableBone(candidateAim, player.Root)) player.AimPoint = candidateAim;
+
                         player.Bones.reserve(std::size(kBodyBones));
                         for (const NamedBone& namedBone : kBodyBones) {
                             if (namedBone.Index >= cachedBones.Count) continue;
@@ -367,9 +386,16 @@ WorldSnapshot Game::Capture(const Config& config, int screenWidth, int screenHei
         if (!player.HasBoneData) {
             ++snapshot.BoneFallbackCount;
             player.Head = player.Root + fn::FVector{ 0.0, 0.0, 180.0 };
+            double aimHeight = 180.0;
+            if (config.aimPart == 1) aimHeight = 160.0;
+            else if (config.aimPart == 2) aimHeight = 130.0;
+            else if (config.aimPart == 3) aimHeight = 95.0;
+            player.AimPoint = player.Root + fn::FVector{ 0.0, 0.0, aimHeight };
         }
         player.HeadProjected = fn::WorldToScreen(player.Head, snapshot.CameraLocation,
             snapshot.CameraRotation, snapshot.CameraFov, screenWidth, screenHeight, player.HeadScreen);
+        player.AimProjected = fn::WorldToScreen(player.AimPoint, snapshot.CameraLocation,
+            snapshot.CameraRotation, snapshot.CameraFov, screenWidth, screenHeight, player.AimScreen);
         snapshot.Players.push_back(std::move(player));
     }
 

@@ -51,6 +51,8 @@ bool SaveConfig(const Config& config, std::string& message) {
     WriteBool(output, "visibleOnly", config.visibleOnly);
     WriteBool(output, "includeBots", config.includeBots);
     WriteBool(output, "drawBoxes", config.drawBoxes);
+    WriteBool(output, "cornerBoxes", config.cornerBoxes);
+    WriteBool(output, "drawSkeleton", config.drawSkeleton);
     WriteBool(output, "drawNames", config.drawNames);
     WriteBool(output, "drawHealth", config.drawHealth);
     WriteBool(output, "drawDistance", config.drawDistance);
@@ -59,7 +61,8 @@ bool SaveConfig(const Config& config, std::string& message) {
     WriteNumber(output, "smoothing", config.smoothing);
     WriteNumber(output, "pixelsPerDegree", config.pixelsPerDegree);
     WriteNumber(output, "maxDistanceM", config.maxDistanceM);
-    WriteNumber(output, "headBone", config.headBone, true);
+    WriteNumber(output, "headBone", config.headBone);
+    WriteNumber(output, "aimPart", config.aimPart, true);
     output << "}\n";
     file << output.str();
     if (!file) {
@@ -86,6 +89,8 @@ bool LoadConfig(Config& config, std::string& message) {
     ReadBool(json, "visibleOnly", config.visibleOnly);
     ReadBool(json, "includeBots", config.includeBots);
     ReadBool(json, "drawBoxes", config.drawBoxes);
+    ReadBool(json, "cornerBoxes", config.cornerBoxes);
+    ReadBool(json, "drawSkeleton", config.drawSkeleton);
     ReadBool(json, "drawNames", config.drawNames);
     ReadBool(json, "drawHealth", config.drawHealth);
     ReadBool(json, "drawDistance", config.drawDistance);
@@ -95,12 +100,15 @@ bool LoadConfig(Config& config, std::string& message) {
     ReadNumber(json, "pixelsPerDegree", config.pixelsPerDegree);
     ReadNumber(json, "maxDistanceM", config.maxDistanceM);
     ReadNumber(json, "headBone", config.headBone);
+    ReadNumber(json, "aimPart", config.aimPart);
 
     config.fovPx = config.fovPx < 10.0f ? 10.0f : (config.fovPx > 800.0f ? 800.0f : config.fovPx);
     config.smoothing = config.smoothing < 1.0f ? 1.0f : (config.smoothing > 50.0f ? 50.0f : config.smoothing);
     config.pixelsPerDegree = config.pixelsPerDegree < 0.01f ? 0.01f : config.pixelsPerDegree;
     config.maxDistanceM = config.maxDistanceM < 1.0f ? 1.0f : config.maxDistanceM;
     if (config.headBone < 0) config.headBone = 0;
+    if (config.aimPart < 0) config.aimPart = 0;
+    if (config.aimPart > 3) config.aimPart = 3;
 
     // v1 enabled an unvalidated visibility offset and limited scans to 250 m.
     // Migrate old files once instead of letting those filters hide every pawn.

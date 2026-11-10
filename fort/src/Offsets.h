@@ -93,6 +93,9 @@ namespace FortniteOffsets {
 
     namespace SkeletalMeshComponent {
         inline constexpr std::uint64_t CachedComponentSpaceTransforms = 0x9C8;
+        // Same primary/secondary TArray fallback pattern as the reference base,
+        // rebased to the supplied dump's 0x9C8 field (0x9C8 + sizeof(TArray)).
+        inline constexpr std::uint64_t CachedComponentSpaceTransformsSecondary = 0x9D8;
     }
 
     namespace FortPawn {

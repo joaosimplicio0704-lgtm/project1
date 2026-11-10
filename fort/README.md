@@ -60,6 +60,12 @@ Os offsets presentes vieram do dump fornecido. Estes pontos não estavam complet
 
 Sem essa conferência, câmera, ossos ou atributos podem falhar de forma segura, mas não há garantia de funcionamento em outra build.
 
+## Referência aplicada
+
+Foi comparado [`d0do47/fortnite-external`](https://github.com/d0do47/fortnite-external), commit `ae17a392d4aef35e5bb7713e96a9c89457c52585`. Foram adaptados apenas conceitos compatíveis: fallback entre dois caches de bones, hitbox head/neck/chest/pelvis, corner boxes e toggle de skeleton. Os offsets dessa referência são de outra versão e não substituíram o dump fornecido.
+
+Driver/kernel, leitura ou escrita física, hijack/patch do DWM, escrita de view angles, injeção, bypass de ETW/AMSI/Defender e limpeza de logs não foram incorporados.
+
 ## Implementação e validação
 
 - Cadeia: `UWorld -> OwningGameInstance -> LocalPlayers -> PlayerController -> PlayerCameraManager`.

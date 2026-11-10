@@ -30,9 +30,12 @@ struct PlayerSnapshot {
     float DistanceM = 0.0f;
     fn::FVector Root;
     fn::FVector Head;
+    fn::FVector AimPoint;
     fn::ScreenPoint HeadScreen;
+    fn::ScreenPoint AimScreen;
     fn::ScreenPoint FeetScreen;
     bool HeadProjected = false;
+    bool AimProjected = false;
     bool FeetProjected = false;
     std::vector<BonePoint> Bones;
 };

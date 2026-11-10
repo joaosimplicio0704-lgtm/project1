@@ -241,6 +241,24 @@ namespace {
         BoneLine(draw, player, "lowerleg_r", "foot_r", color);
     }
 
+    void DrawCornerBox(ImDrawList* draw, float left, float top, float right, float bottom, ImU32 color) {
+        const float horizontal = (right - left) * 0.28f;
+        const float vertical = (bottom - top) * 0.28f;
+        const auto segment = [&](ImVec2 from, ImVec2 to) {
+            draw->AddLine(from, to, IM_COL32(0, 0, 0, 200), 2.6f);
+            draw->AddLine(from, to, color, 1.25f);
+        };
+
+        segment({ left, top }, { left + horizontal, top });
+        segment({ left, top }, { left, top + vertical });
+        segment({ right, top }, { right - horizontal, top });
+        segment({ right, top }, { right, top + vertical });
+        segment({ left, bottom }, { left + horizontal, bottom });
+        segment({ left, bottom }, { left, bottom - vertical });
+        segment({ right, bottom }, { right - horizontal, bottom });
+        segment({ right, bottom }, { right, bottom - vertical });
+    }
+
     void DrawPlayer(ImDrawList* draw, const PlayerSnapshot& player, const Config& config,
                     int screenWidth, int screenHeight) {
         if (!player.HeadProjected || !player.FeetProjected) return;
@@ -260,12 +278,16 @@ namespace {
         const ImU32 color = player.IsBot ? IM_COL32(255, 190, 65, 255) : IM_COL32(95, 205, 255, 255);
 
         if (config.drawBoxes) {
-            draw->AddRect(ImVec2(left - 1.0f, top - 1.0f), ImVec2(right + 1.0f, bottom + 1.0f),
-                IM_COL32(0, 0, 0, 180), 0.0f, 0, 2.5f);
-            draw->AddRect(ImVec2(left, top), ImVec2(right, bottom), color, 0.0f, 0, 1.25f);
+            if (config.cornerBoxes) {
+                DrawCornerBox(draw, left, top, right, bottom, color);
+            } else {
+                draw->AddRect(ImVec2(left - 1.0f, top - 1.0f), ImVec2(right + 1.0f, bottom + 1.0f),
+                    IM_COL32(0, 0, 0, 180), 0.0f, 0, 2.5f);
+                draw->AddRect(ImVec2(left, top), ImVec2(right, bottom), color, 0.0f, 0, 1.25f);
+            }
         }
 
-        DrawSkeleton(draw, player, IM_COL32(240, 240, 240, 220));
+        if (config.drawSkeleton) DrawSkeleton(draw, player, IM_COL32(240, 240, 240, 220));
 
         if (config.drawNames) {
             CenteredText(draw, ImVec2(centerX, top - 17.0f), player.Name, color);
@@ -306,12 +328,12 @@ namespace {
         const PlayerSnapshot* target = nullptr;
         float bestDistance = config.fovPx;
         for (const PlayerSnapshot& player : snapshot.Players) {
-            if (!player.HeadProjected || (config.teamCheck && IsTeammate(player, snapshot)) ||
+            if (!player.AimProjected || (config.teamCheck && IsTeammate(player, snapshot)) ||
                 (config.visibleOnly && !player.RecentlyRendered)) {
                 continue;
             }
-            const float deltaX = player.HeadScreen.X - centerX;
-            const float deltaY = player.HeadScreen.Y - centerY;
+            const float deltaX = player.AimScreen.X - centerX;
+            const float deltaY = player.AimScreen.Y - centerY;
             const float distance = std::hypot(deltaX, deltaY);
             if (distance < bestDistance) {
                 bestDistance = distance;
@@ -320,7 +342,7 @@ namespace {
         }
         if (!target) return;
 
-        const fn::FRotator desired = fn::LookAt(snapshot.CameraLocation, target->Head);
+        const fn::FRotator desired = fn::LookAt(snapshot.CameraLocation, target->AimPoint);
         const double yawDelta = fn::NormalizeAngle(desired.Yaw - snapshot.CameraRotation.Yaw);
         const double pitchDelta = fn::NormalizeAngle(desired.Pitch - snapshot.CameraRotation.Pitch);
         const float smoothing = std::max(1.0f, config.smoothing);
@@ -349,19 +371,24 @@ namespace {
                 ImGui::SliderFloat("Smoothing", &config.smoothing, 1.0f, 50.0f, "%.1f");
                 ImGui::SliderFloat("Pixels / degree", &config.pixelsPerDegree, 0.01f, 10.0f, "%.2f");
                 ImGui::SliderFloat("Maximum distance (m)", &config.maxDistanceM, 1.0f, 500.0f, "%.0f");
-                ImGui::InputInt("Head bone", &config.headBone);
-                config.headBone = std::max(0, config.headBone);
+                ImGui::Combo("Target hitbox", &config.aimPart, "Head\0Neck\0Chest\0Pelvis\0\0");
+                if (config.aimPart == 0) {
+                    ImGui::InputInt("Head bone", &config.headBone);
+                    config.headBone = std::max(0, config.headBone);
+                }
                 ImGui::TextDisabled("Hold right mouse to aim. Recently rendered is not an occlusion trace.");
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("ESP")) {
                 ImGui::Checkbox("Enabled (F2)", &config.espEnabled);
                 ImGui::Checkbox("Boxes", &config.drawBoxes);
+                ImGui::Checkbox("Corner boxes", &config.cornerBoxes);
+                ImGui::Checkbox("Skeleton", &config.drawSkeleton);
                 ImGui::Checkbox("Names", &config.drawNames);
                 ImGui::Checkbox("Health / shield", &config.drawHealth);
                 ImGui::Checkbox("Distance", &config.drawDistance);
                 ImGui::Checkbox("Snaplines", &config.snaplines);
-                ImGui::TextDisabled("Skeleton lines are always drawn while ESP is enabled.");
+                ImGui::TextDisabled("Bone cache: primary 0x9C8 with secondary 0x9D8 fallback.");
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Settings")) {
