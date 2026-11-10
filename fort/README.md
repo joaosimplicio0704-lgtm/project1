@@ -4,14 +4,14 @@ Ferramenta externa Windows x64 em C++17: leitura por `ReadProcessMemory`, aim po
 
 ## Executar
 
-Os binários já incluídos nesta pasta são:
+Os binários já incluídos estão juntos em `build/`:
 
-- `FortLoader.exe`: launcher que localiza e inicia o programa.
-- `FortniteExternal.exe`: programa principal.
+- `build/FortLoader.exe`: launcher que localiza e inicia o programa.
+- `build/FortniteExternal.exe`: programa principal.
 
-Deixe os dois na mesma pasta, abra o jogo e execute `FortLoader.exe`. Se o jogo estiver elevado, execute o loader como administrador. Não é necessário instalar ImGui nem compilar para usar os binários.
+Deixe os dois juntos dentro de `build/`, abra o jogo e execute `build\FortLoader.exe`. Se o jogo estiver elevado, execute o loader como administrador. Não é necessário instalar ImGui nem compilar para usar os binários.
 
-O loader procura `fortnite-config.json` ao lado dos executáveis. Quando o arquivo existe, inicia o programa com `--load-config`; quando não existe, usa os padrões. O carregamento restaura os valores do JSON, mas **aim e ESP sempre permanecem desligados no lançamento**.
+O loader procura `build/fortnite-config.json`, ao lado dos executáveis. Quando o arquivo existe, inicia o programa com `--load-config`; quando não existe, usa os padrões. O carregamento restaura os valores do JSON, mas **aim e ESP sempre permanecem desligados no lançamento**.
 
 O loader usa somente `CreateProcess`: não baixa arquivos, não injeta código, não altera permissões e não cria processo oculto. Para fechar o programa principal, pressione `END`.
 
@@ -44,10 +44,10 @@ build.cmd
 Comando CMake equivalente:
 
 ```bat
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64 && cmake --build build --config Release --parallel
+cmake -S . -B cmake-build -G "Visual Studio 17 2022" -A x64 && cmake --build cmake-build --config Release --parallel
 ```
 
-O `build.cmd` também copia os dois executáveis novos de `build\Release` para esta pasta. O CMake baixa Dear ImGui `v1.91.5` do repositório oficial durante a configuração. `SHA256SUMS.txt` contém os hashes dos binários publicados.
+O `build.cmd` compila em `cmake-build\` e copia os dois executáveis novos para `build\`. O CMake baixa Dear ImGui `v1.91.5` do repositório oficial durante a configuração. `build/SHA256SUMS.txt` contém os hashes dos binários publicados.
 
 ## Pontos que precisam de redump
 
