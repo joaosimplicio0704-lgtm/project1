@@ -44,6 +44,7 @@ bool SaveConfig(const Config& config, std::string& message) {
 
     std::ostringstream output;
     output << "{\n";
+    WriteNumber(output, "version", 2);
     WriteBool(output, "aimEnabled", config.aimEnabled);
     WriteBool(output, "espEnabled", config.espEnabled);
     WriteBool(output, "teamCheck", config.teamCheck);
@@ -77,6 +78,8 @@ bool LoadConfig(Config& config, std::string& message) {
     }
     const std::string json((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
+    int fileVersion = 0;
+    ReadNumber(json, "version", fileVersion);
     ReadBool(json, "aimEnabled", config.aimEnabled);
     ReadBool(json, "espEnabled", config.espEnabled);
     ReadBool(json, "teamCheck", config.teamCheck);
@@ -98,6 +101,14 @@ bool LoadConfig(Config& config, std::string& message) {
     config.pixelsPerDegree = config.pixelsPerDegree < 0.01f ? 0.01f : config.pixelsPerDegree;
     config.maxDistanceM = config.maxDistanceM < 1.0f ? 1.0f : config.maxDistanceM;
     if (config.headBone < 0) config.headBone = 0;
+
+    // v1 enabled an unvalidated visibility offset and limited scans to 250 m.
+    // Migrate old files once instead of letting those filters hide every pawn.
+    if (fileVersion < 2) {
+        config.visibleOnly = false;
+        config.maxDistanceM = 500.0f;
+    }
+    config.version = 2;
 
     message = "loaded " + ConfigPath();
     return true;

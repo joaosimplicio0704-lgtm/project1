@@ -31,7 +31,7 @@ inline constexpr float kFovPx = 180.0f;
 inline constexpr float kSmoothing = 4.0f;
 inline constexpr int kHeadBone = 110;
 inline constexpr bool kTeamCheck = true;
-inline constexpr bool kVisibleOnly = true;
+inline constexpr bool kVisibleOnly = false;
 // -----------------------------------------------------------------------
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
@@ -293,6 +293,11 @@ namespace {
         }
     }
 
+    bool IsTeammate(const PlayerSnapshot& player, const WorldSnapshot& snapshot) {
+        // Team zero is commonly unassigned/solo, not proof that two pawns are allies.
+        return snapshot.LocalTeam != 0 && player.Team != 0 && player.Team == snapshot.LocalTeam;
+    }
+
     void ProcessAim(const WorldSnapshot& snapshot, const Config& config, int width, int height, HWND gameWindow) {
         if (!config.aimEnabled || !snapshot.Valid || !Down(kAimKey) || ::GetForegroundWindow() != gameWindow) return;
 
@@ -301,7 +306,7 @@ namespace {
         const PlayerSnapshot* target = nullptr;
         float bestDistance = config.fovPx;
         for (const PlayerSnapshot& player : snapshot.Players) {
-            if (!player.HeadProjected || (config.teamCheck && player.Team == snapshot.LocalTeam) ||
+            if (!player.HeadProjected || (config.teamCheck && IsTeammate(player, snapshot)) ||
                 (config.visibleOnly && !player.RecentlyRendered)) {
                 continue;
             }
@@ -371,8 +376,13 @@ namespace {
                 ImGui::Text("PID: %lu", game.Pid());
                 ImGui::Text("Auto read: %s", game.Ready() ? "ON (4 ms)" : "RECONNECTING");
                 ImGui::Text("Snapshot: %s", snapshot.Valid ? "valid" : "waiting");
+                ImGui::Text("Camera source: %s", snapshot.CameraFallback ? "controller fallback" : "CameraManager");
+                ImGui::Text("PlayerState entries: %d", snapshot.PlayerStateCount);
+                ImGui::Text("Pawn candidates: %d", snapshot.CandidateCount);
                 if (snapshot.Valid) {
                     ImGui::Text("Players read: %zu", snapshot.Players.size());
+                    ImGui::Text("Root-only bone fallbacks: %d", snapshot.BoneFallbackCount);
+                    ImGui::Text("Local team: %u", static_cast<unsigned>(snapshot.LocalTeam));
                     ImGui::Text("Local pawn: 0x%llX", static_cast<unsigned long long>(snapshot.LocalPawn));
                     ImGui::Text("Camera: %.1f / %.1f / %.1f", snapshot.CameraLocation.X,
                         snapshot.CameraLocation.Y, snapshot.CameraLocation.Z);
@@ -525,7 +535,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int) {
         }
         if (config.espEnabled && snapshot.Valid) {
             for (const PlayerSnapshot& player : snapshot.Players) {
-                if (config.teamCheck && player.Team == snapshot.LocalTeam) continue;
+                if (config.teamCheck && IsTeammate(player, snapshot)) continue;
                 if (config.visibleOnly && !player.RecentlyRendered) continue;
                 DrawPlayer(draw, player, config, width, height);
             }

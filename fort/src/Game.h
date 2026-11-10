@@ -22,6 +22,7 @@ struct PlayerSnapshot {
     std::uint8_t Team = 0;
     bool IsBot = false;
     bool RecentlyRendered = false;
+    bool HasBoneData = false;
     bool Dead = false;
     float Health = 0.0f;
     float MaxHealth = 100.0f;
@@ -38,8 +39,13 @@ struct PlayerSnapshot {
 
 struct WorldSnapshot {
     bool Valid = false;
+    bool CameraFallback = false;
     std::uintptr_t LocalPawn = 0;
+    std::uintptr_t LocalPlayerState = 0;
     std::uint8_t LocalTeam = 0;
+    std::int32_t PlayerStateCount = 0;
+    std::int32_t CandidateCount = 0;
+    std::int32_t BoneFallbackCount = 0;
     fn::FVector CameraLocation;
     fn::FRotator CameraRotation;
     float CameraFov = 90.0f;

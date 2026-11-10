@@ -63,8 +63,10 @@ Sem essa conferência, câmera, ossos ou atributos podem falhar de forma segura,
 ## Implementação e validação
 
 - Cadeia: `UWorld -> OwningGameInstance -> LocalPlayers -> PlayerController -> PlayerCameraManager`.
-- Jogadores: `GameState -> PlayerArray -> PawnPrivate`, sem depender do layout de `ActorCluster`.
-- O osso component-space é convertido para world-space invertendo `CachedWorldToLocalTransform`.
+- Jogadores: `GameState -> PlayerArray -> PawnPrivate`, sem depender do layout de `ActorCluster`. Há fallback para `GEngine`, validação de candidatos de controller e offsets próximos de `PawnPrivate`.
+- Se `PlayerCameraManager` falhar, uma câmera aproximada usa o pawn possuído e `ControlRotation`; o menu informa quando esse fallback está ativo.
+- O osso component-space é convertido para world-space invertendo `CachedWorldToLocalTransform`. Se mesh, vida ou ossos falharem, o pawn com posição válida não é descartado: o ESP usa uma cabeça aproximada em `root + 180 cm`.
+- Time `0` é tratado como não atribuído/solo, não como prova de mesma equipe. Configurações antigas são migradas para desligar o filtro de visibilidade não validado e ampliar a distância para 500 m.
 - O alvo é o osso projetado mais próximo do crosshair dentro do FOV configurado.
 - O delta angular vira `MOUSEEVENTF_MOVE`, dividido por smoothing; não há escrita de view angles.
 - `visibleOnly` usa `bRecentlyRendered`; isso **não** é um trace de oclusão nem prova de linha de visão.

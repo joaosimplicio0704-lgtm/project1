@@ -5,6 +5,11 @@
 // Subset of the cheatoffsets.com Fortnite dump supplied with the project.
 namespace FortniteOffsets {
     inline constexpr std::uintptr_t UWorld = 0x1C8E1578;
+    inline constexpr std::uintptr_t GEngine = 0x1C8E2F48;
+
+    namespace Engine {
+        inline constexpr std::uint64_t GameInstance = 0x1100;
+    }
 
     namespace World {
         inline constexpr std::uint64_t GameState = 0x1D0;
@@ -37,6 +42,7 @@ namespace FortniteOffsets {
     }
 
     namespace Controller {
+        inline constexpr std::uint64_t Pawn = 0x2B8;
         inline constexpr std::uint64_t ControlRotation = 0x2F0;
     }
 
