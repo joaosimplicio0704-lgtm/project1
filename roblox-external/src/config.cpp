@@ -13,6 +13,22 @@ static const char* kProfilesFile = "profiles.json";
 // parser minimo: um objeto chato por arquivo, chave: valor
 // (sem dependencia externa de proposito)
 // ------------------------------------------------------------
+static std::string JsonEscape(const std::string& in) {
+    std::string out;
+    out.reserve(in.size() + 8);
+    for (char c : in) {
+        if (c == '"' || c == '\\') {
+            out.push_back('\\');
+            out.push_back(c);
+        } else if (c == '\n' || c == '\r') {
+            out.push_back(' ');
+        } else {
+            out.push_back(c);
+        }
+    }
+    return out;
+}
+
 static std::string ValueOf(const std::string& text, const char* key) {
     const std::string needle = std::string("\"") + key + "\":";
     size_t pos = text.find(needle);
@@ -22,6 +38,19 @@ static std::string ValueOf(const std::string& text, const char* key) {
     pos += needle.size();
     while (pos < text.size() && (text[pos] == ' ' || text[pos] == '\t'))
         ++pos;
+
+    // valor entre aspas pode conter virgula ("coin,cash"): le ate a aspe
+    if (pos < text.size() && text[pos] == '"') {
+        std::string value;
+        ++pos;
+        while (pos < text.size() && text[pos] != '"') {
+            if (text[pos] == '\\' && pos + 1 < text.size())
+                ++pos;
+            value.push_back(text[pos]);
+            ++pos;
+        }
+        return value;
+    }
 
     size_t end = pos;
     while (end < text.size() && text[end] != ',' && text[end] != '}' && text[end] != '\n')
@@ -57,6 +86,10 @@ static uint64_t AsU64(const std::string& value, uint64_t fallback) {
     return static_cast<uint64_t>(std::strtoull(value.c_str(), nullptr, 10));
 }
 
+static std::string AsText(const std::string& value, const std::string& fallback) {
+    return value.empty() ? fallback : value;
+}
+
 static const char* Bool(bool value) { return value ? "true" : "false"; }
 
 // ------------------------------------------------------------
@@ -66,8 +99,6 @@ static bool SaveConfig(const Settings& s) {
     std::ofstream out(kConfigFile, std::ios::trunc);
     if (!out)
         return false;
-
-    const AimSettings& a = s.aim;
 
     out << "{\n";
     out << "  \"espEnabled\": "  << Bool(s.espEnabled)  << ",\n";
@@ -83,6 +114,12 @@ static bool SaveConfig(const Settings& s) {
     out << "  \"handleWatch\": " << Bool(s.handleWatch) << ",\n";
     out << "  \"maxDistance\": " << s.maxDistance << ",\n";
     out << "  \"tickMs\": "      << s.tickMs << ",\n";
+    out << "  \"espParts\": "       << Bool(s.espParts) << ",\n";
+    out << "  \"partsFilter\": \"" << JsonEscape(s.partsFilter) << "\",\n";
+    out << "  \"crosshair\": "      << Bool(s.crosshair) << ",\n";
+    out << "  \"crosshairSize\": "  << s.crosshairSize << ",\n";
+
+    const AimSettings& a = s.aim;
     out << "  \"aimEnabled\": "        << Bool(a.enabled) << ",\n";
     out << "  \"aimKey\": "            << a.key << ",\n";
     out << "  \"aimToggle\": "         << Bool(a.toggleMode) << ",\n";
@@ -142,6 +179,11 @@ static bool LoadConfig(Settings& s) {
 
     s.maxDistance = AsFloat(ValueOf(text, "maxDistance"), s.maxDistance);
     s.tickMs      = AsInt(ValueOf(text, "tickMs"), s.tickMs);
+
+    s.espParts      = AsBool(ValueOf(text, "espParts"), s.espParts);
+    s.partsFilter   = AsText(ValueOf(text, "partsFilter"), s.partsFilter);
+    s.crosshair     = AsBool(ValueOf(text, "crosshair"), s.crosshair);
+    s.crosshairSize = AsFloat(ValueOf(text, "crosshairSize"), s.crosshairSize);
 
     AimSettings& a = s.aim;
     a.enabled     = AsBool(ValueOf(text, "aimEnabled"), a.enabled);
@@ -261,6 +303,56 @@ bool Load(Settings& settings) {
     const bool config = LoadConfig(settings);
     LoadProfiles(settings.profiles);
     return config;
+}
+
+bool Same(const Settings& a, const Settings& b) {
+    const bool scalars =
+        a.espEnabled == b.espEnabled && a.boxes == b.boxes && a.names == b.names &&
+        a.healthBar == b.healthBar && a.distance == b.distance &&
+        a.espSkeleton == b.espSkeleton && a.espTracer == b.espTracer &&
+        a.espHeadDot == b.espHeadDot && a.espParts == b.espParts &&
+        a.partsFilter == b.partsFilter && a.crosshair == b.crosshair &&
+        a.crosshairSize == b.crosshairSize && a.teamCheck == b.teamCheck &&
+        a.stealthOpen == b.stealthOpen && a.handleWatch == b.handleWatch &&
+        a.maxDistance == b.maxDistance && a.tickMs == b.tickMs;
+    if (!scalars)
+        return false;
+
+    const AimSettings& x = a.aim;
+    const AimSettings& y = b.aim;
+    if (x.enabled != y.enabled || x.key != y.key || x.toggleMode != y.toggleMode ||
+        x.bone != y.bone || x.fovPx != y.fovPx || x.smoothing != y.smoothing ||
+        x.strength != y.strength || x.maxStepPx != y.maxStepPx || x.deadzonePx != y.deadzonePx ||
+        x.jitterPx != y.jitterPx || x.leadMs != y.leadMs || x.snapPx != y.snapPx ||
+        x.drawFov != y.drawFov || x.requireForeground != y.requireForeground)
+        return false;
+
+    const TriggerSettings& f = a.fire;
+    const TriggerSettings& g = b.fire;
+    if (f.enabled != g.enabled || f.key != g.key || f.autoFire != g.autoFire ||
+        f.maxErrorPx != g.maxErrorPx || f.minIntervalMs != g.minIntervalMs ||
+        f.holdMs != g.holdMs || f.burst != g.burst || f.requireForeground != g.requireForeground)
+        return false;
+
+    const FlySettings& v = a.fly;
+    const FlySettings& w = b.fly;
+    if (v.enabled != w.enabled || v.toggleMode != w.toggleMode || v.key != w.key ||
+        v.speed != w.speed || v.zeroVelocity != w.zeroVelocity ||
+        v.hoverOnIdle != w.hoverOnIdle || v.requireForeground != w.requireForeground)
+        return false;
+
+    if (a.profiles.size() != b.profiles.size())
+        return false;
+
+    for (size_t i = 0; i < a.profiles.size(); ++i) {
+        const Profile& p = a.profiles[i];
+        const Profile& q = b.profiles[i];
+        if (p.placeId != q.placeId || p.fovPx != q.fovPx || p.smoothing != q.smoothing ||
+            p.strength != q.strength || p.bone != q.bone)
+            return false;
+    }
+
+    return true;
 }
 
 const Profile* FindProfile(const Settings& settings, uint64_t placeId) {

@@ -14,7 +14,7 @@ if not exist build mkdir build
 cl /nologo /std:c++20 /O2 /EHsc /MT /W3 /utf-8 ^
    /D_WIN32_WINNT=0x0A00 /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE ^
    src\main.cpp ^
-   src\config.cpp ^
+   src\applog.cpp src\config.cpp ^
    src\sdk\memory.cpp ^
    src\stealth\StealthyOpenProcess.cpp ^
    src\stealth\handle_cleanup.cpp ^

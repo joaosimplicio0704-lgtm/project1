@@ -205,6 +205,36 @@ static void DrawEspTab(cfg::Settings& settings) {
     ImGui::Checkbox("Ponto na cabeca", &settings.espHeadDot);
 
     ImGui::Spacing();
+    ImGui::SeparatorText("Mira na tela");
+    ImGui::Checkbox("Desenhar mira no centro", &settings.crosshair);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("o cursor do sistema fica escondido no jogo; isso da a referencia de onde o tiro sai");
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderFloat("Tamanho da mira", &settings.crosshairSize, 3.f, 30.f, "%.0f px");
+
+    ImGui::Spacing();
+    ImGui::SeparatorText("Objetos (por nome)");
+    ImGui::Checkbox("ESP de objetos", &settings.espParts);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("varre o Workspace 4x por segundo procurando Part cujo nome bata com o filtro.\n"
+                          "nao usa offset de jogo: funciona em qualquer place que nomeie o loot");
+
+    static char filter[256]{};
+    static bool filterLoaded = false;
+    if (!filterLoaded) {
+        std::snprintf(filter, sizeof(filter), "%s", settings.partsFilter.c_str());
+        filterLoaded = true;
+    }
+
+    ImGui::SetNextItemWidth(300.f);
+    if (ImGui::InputText("##filtro", filter, sizeof(filter)))
+        settings.partsFilter = filter;
+    if (!ImGui::IsItemActive() && settings.partsFilter != filter)
+        std::snprintf(filter, sizeof(filter), "%s", settings.partsFilter.c_str());
+    ImGui::SameLine();
+    ImGui::TextDisabled("nomes (vira vírgula)");
+
+    ImGui::Spacing();
     ImGui::SeparatorText("Filtro");
     ImGui::Checkbox("Ignorar mesmo time", &settings.teamCheck);
 
@@ -358,6 +388,12 @@ static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) 
 
     ImGui::Spacing();
     ImGui::Text("handle     %s", esp.Mem().CanWrite() ? "VM_WRITE ok" : "read-only (reatacha ao ligar)");
+    if (!fly.Active())
+        ImGui::TextDisabled("write      —");
+    else if (fly.WriteOk())
+        ImGui::TextColored(ImVec4(0.55f, 0.9f, 0.55f, 1.f), "write      ok");
+    else
+        ImGui::TextColored(ImVec4(1.f, 0.6f, 0.2f, 1.f), "write      RECUSADO (%d)", fly.WriteFails());
     ImGui::Text("estado     %s", !fly.Active() ? "parado"
                             : (fly.Hovering() ? "pairando" : "voando"));
     const Vector3 shown = fly.Active() && fly.HasPosition() ? fly.Position() : local.position;
@@ -445,6 +481,12 @@ static void DrawConfigTab(cfg::Settings& settings, Esp& esp, Overlay& overlay) {
     ImGui::Checkbox("Fechar handles de thread orfaos", &settings.handleWatch);
     if (ImGui::Button("Reatachar"))
         esp.RequestReattach();
+
+    ImGui::Spacing();
+    ImGui::SeparatorText("Seguranca");
+    ImGui::Text("Panic  F10 — desliga aim/tiro/voo e solta o mouse");
+    ImGui::TextDisabled("log: roblox-external.log (ao lado do .exe)");
+    ImGui::TextDisabled("auto-save: 800 ms depois da ultima mudanca");
 
     ImGui::Spacing();
     ImGui::SeparatorText("Arquivo");

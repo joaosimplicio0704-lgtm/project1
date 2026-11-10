@@ -65,6 +65,7 @@ F1       ESP on/off
 F2       caixa on/off
 F5       salva config.json + profiles.json
 F9       carrega config.json + profiles.json
+F10      PANIC: desliga aim/tiro/voo, solta o mouse (salva sozinho depois)
 END      sai
 Mouse 5  aim assist (segurar; rebindável na aba Aim)
 ```
@@ -102,6 +103,55 @@ Regras da captura, em `menu.cpp`:
 - Menu aberto roda sem vsync com `Sleep(1)`; fechado usa `Present(1,0)` + tick.
 - `Config → Input (diagnostico)` mostra cursor do OS vs cursor do ImGui e o DPI —
   se os dois divergirem, o número aparece em laranja.
+
+## Testes offline
+
+Parte do projeto é matemática pura e roda sem Windows, sem cliente e sem processo:
+
+```
+./tests/run.sh          # g++ -std=c++20, 47 checagens
+== testes offline roblox-external ==
+[1] WorldToScreen
+[2] radianos por pixel
+[3] laco do aim
+[4] voo
+[5] config.json
+== 47 checagens, 0 falha(s) ==
+```
+
+O que é provado: projeção (centro, fora da tela, atrás da câmera, offset `tan(fov)`),
+a escala angular por pixel nos dois eixos, convergência do laço do aim com e sem
+calibração, integração do voo + clamp de `dt`, e round-trip do `config.json`
+(inclusive string com vírgula).
+
+Duas coisas que **o teste pegou** e que estavam erradas no build anterior:
+
+| bug | correção |
+|---|---|
+| `rad/px` usava a aproximação linear `fov/altura` | a projeção é tangente: `2*tan(fov/2)/altura`. Em 70° a conta antiga errava **15%** — a mira puxava menos do que devia |
+| com a conversão calibrada, o ganho default (`força 0.55 / suavização 6`) ficou 3x mais lento que antes | `suavização` default 4 e `Mira exata` 18 px: converge em ~12 ticks em vez de ~50 |
+
+## Confiabilidade
+
+| coisa | como funciona |
+|---|---|
+| log | `roblox-external.log` ao lado do `.exe`, com timestamp: attach (base, tamanho, VM_WRITE ou read-only), reattach, handle de escrita devolvido, write recusado, panic, save. Rotação em 4 MB |
+| auto-save | qualquer mudança no menu vira `config.json` **800 ms** depois da última mexida (F5/F9 continuam existindo) |
+| panic (F10) | desliga aim/tiro/voo, solta o botão esquerdo se o trigger estiver pressionado e devolve o mouse |
+| handle de escrita | só existe enquanto o voo está ligado; ao desligar, volta pro read-only (menos exposição) |
+| write verificado | o voo checa o retorno de `WriteProcessMemory` e a aba mostra `write ok` / `RECUSADO` em vez de falhar calado |
+
+## Mira na tela e objetos
+
+- **Mira no centro** (opt-in): no jogo o cursor do sistema fica escondido, então sem isso
+  não há referência de onde o tiro sai. Cruz + ponto, tamanho ajustável.
+- **Destaque do alvo**: a caixa do alvo que o aim está puxando ganha cor própria, traço
+  mais grosso e cantos marcados — dá para ver na hora o que a mira escolheu.
+- **ESP de objetos por nome** (opt-in): varre o `Workspace` 4x por segundo procurando
+  `Part`/`MeshPart` cujo nome bata com o filtro (`coin,cash,crate,ammo,key,loot,…`,
+  editável, case-insensitive por trecho) e desenha ponto + `nome 12m`.
+  **Não usa offset de jogo**: funciona em qualquer place que nomeie o loot. Custos:
+  máximo 1500 instâncias olhadas e 48 marcadores por varredura, nomes/classe com cache.
 
 ## Aim assist — e por que o tiro sai na direção do inimigo
 

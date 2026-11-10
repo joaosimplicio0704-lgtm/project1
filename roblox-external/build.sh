@@ -16,6 +16,7 @@ $ZIG c++ \
     -static \
     src/main.cpp \
     src/config.cpp \
+    src/applog.cpp \
     src/sdk/memory.cpp \
     src/stealth/StealthyOpenProcess.cpp \
     src/stealth/handle_cleanup.cpp \

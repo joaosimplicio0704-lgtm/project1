@@ -6,14 +6,13 @@
 #include <cmath>
 
 #include "../features/esp.h"
+#include "../sdk/mathx.h"
 #include "../imgui/imgui.h"
 
 namespace {
 
 constexpr ImU32 kFovColor = IM_COL32(255, 255, 255, 70);
 constexpr ImU32 kTargetColor = IM_COL32(255, 80, 80, 220);
-
-constexpr float kPi = 3.14159265358979f;
 
 bool ForegroundIsPid(DWORD pid) {
     const HWND foreground = GetForegroundWindow();
@@ -49,26 +48,6 @@ int Jitter(float amount) {
 
     const float unit = static_cast<float>(seed & 0xFFFF) / 65535.f;
     return static_cast<int>((unit * 2.f - 1.f) * amount);
-}
-
-// yaw/pitch da camera a partir da matriz de rotacao (row-major, colunas = eixos)
-bool CameraAngles(const float r[9], float& yaw, float& pitch) {
-    // LookVector = -coluna 3; coluna 3 comeca em r[2]
-    const float lx = -r[2], ly = -r[5], lz = -r[8];
-
-    const float len = std::sqrt(lx * lx + ly * ly + lz * lz);
-    if (!(len > 0.5f) || !std::isfinite(len))
-        return false;
-
-    yaw = std::atan2(-lx, -lz);
-    pitch = std::asin(std::clamp(ly / len, -1.f, 1.f));
-    return std::isfinite(yaw) && std::isfinite(pitch);
-}
-
-float WrapPi(float a) {
-    while (a > kPi) a -= 2.f * kPi;
-    while (a < -kPi) a += 2.f * kPi;
-    return a;
 }
 
 Vector3 BonePoint(const Target& target, int bone) {
@@ -126,11 +105,11 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
 
     // ---- calibracao: giro da camera medido desde o ultimo SendInput ----
     float yawNow = 0.f, pitchNow = 0.f;
-    const bool haveAngles = CameraAngles(scene.local.cameraRotation, yawNow, pitchNow);
+    const bool haveAngles = mathx::CameraAngles(scene.local.cameraRotation, yawNow, pitchNow);
 
     if (m_probeLeft > 0 && haveAngles && scene.frame != m_probeFrame) {
         // o snapshot avancou: o giro lido ja inclui os deltas que enviamos
-        const float dyaw = WrapPi(yawNow - m_probeYaw);
+        const float dyaw = mathx::WrapPi(yawNow - m_probeYaw);
         const float dpitch = pitchNow - m_probePitch;
 
         const int ax = m_probeAccumX < 0 ? -m_probeAccumX : m_probeAccumX;
@@ -153,16 +132,24 @@ void AimAssist::Tick(const cfg::Settings& settings, const SceneSnapshot& scene, 
         }
 
         m_probeLeft = 0;
-
-        // radianos por pixel: FOV vertical / altura da tela
-        if (m_radPerCountYaw > 0.f && scene.local.fov > 1.f && height > 0.f) {
-            const float radPerPx = (scene.local.fov * kPi / 180.f) / height;
-            m_countsPerPx = radPerPx / m_radPerCountYaw;
-            m_countsPerPx = std::clamp(m_countsPerPx, 0.05f, 20.f);
-            m_calibrated = m_samples >= 2;
-        }
     } else if (m_probeLeft > 0) {
         --m_probeLeft;   // snapshot ainda nao virou: espera mais um tick
+    }
+
+    // ---- px -> counts com o FOV DE AGORA ----
+    // a calibracao mede rad/count (propriedade do jogo, nao do zoom). O que muda
+    // com o zoom e quantos radianos existem por pixel de tela, entao essa conta
+    // tem que ser refeita a cada tick — senao entrar em mira ADS desalinha tudo.
+    if (m_samples >= 2 && m_radPerCountYaw > 0.f) {
+        const float counts = mathx::CountsPerPixel(scene.local.fov, height, m_radPerCountYaw);
+        if (counts > 0.f) {
+            m_countsPerPx = counts;
+            m_calibrated = true;
+        } else {
+            m_calibrated = false;
+        }
+    } else {
+        m_calibrated = false;
     }
 
     // ---- tecla: segurar ou toggle ----

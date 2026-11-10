@@ -74,11 +74,20 @@ struct Target {
     bool        boneValid[kBoneCount]{};
 };
 
+// objeto solto no mapa que bate com o filtro de nomes (loot, caixa, moeda...)
+struct PartMark {
+    Vector3     position{};
+    std::string name;
+    float       distance = 0.f;
+};
+
 // quadro imutavel publicado pelo leitor: render e aim so leem isto,
 // nunca tocam em ReadProcessMemory
 struct SceneSnapshot {
     Matrix4x4 view{};
     std::vector<Target> targets;
+    std::vector<PartMark> parts;     // filtro por nome (opt-in)
+    int        partsScanned = 0;     // instancias olhadas na ultima varredura
     LocalState local{};
     uintptr_t  dataModel = 0;
     std::string status = "iniciando";
@@ -105,7 +114,9 @@ public:
 
     std::shared_ptr<const SceneSnapshot> Snapshot() const;
 
-    void Draw(ImDrawList* list, const cfg::Settings& settings, float width, float height) const;
+    // highlightPlayer = player travado pelo aim (desenha a caixa destacada)
+    void Draw(ImDrawList* list, const cfg::Settings& settings, float width, float height,
+              uintptr_t highlightPlayer = 0) const;
 
     Memory& Mem() { return m_memory; }
     const Memory& Mem() const { return m_memory; }
@@ -122,6 +133,8 @@ private:
         bool  stealthOpen = true;
         bool  wantWrite = false;
         int   tickMs = 4;
+        bool  parts = false;
+        std::vector<std::string> partFilters;
     };
 
     struct CacheEntry {
@@ -145,6 +158,7 @@ private:
     void Loop();
     bool Attach(const ReaderSettings& reader);
     void ReadScene(SceneSnapshot& scene, const ReaderSettings& reader);
+    void ReadParts(SceneSnapshot& scene, const ReaderSettings& reader, uint64_t now);
     void ResetCaches();
 
     const std::vector<uintptr_t>& Children(uintptr_t instance, uint64_t now);
@@ -166,6 +180,8 @@ private:
 
     // --- estado do worker (so a thread de leitura toca) ---
     uintptr_t m_dataModel = 0;
+    uint64_t  m_partsAt = 0;
+    std::vector<PartMark> m_lastParts;
     uint64_t  m_lastAttachAttempt = 0;
     uint64_t  m_tick = 4;
     uint64_t  m_lastScene = 0;

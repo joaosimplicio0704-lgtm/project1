@@ -6,6 +6,7 @@
 #include <string>
 
 #include "../imgui/imgui.h"
+#include "../applog.h"
 #include "../offsets.h"
 
 namespace {
@@ -57,6 +58,14 @@ constexpr BoneLink kBoneLinks[] = {
 constexpr uint64_t kChildrenTtl = 500;
 constexpr uint64_t kTextTtl     = 3000;
 constexpr uint64_t kPartsTtl    = 2000;
+
+// varredura de objetos por nome: cara (percorre o Workspace), entao roda
+// no maximo 4x por segundo e reusa o ultimo resultado nos ticks do meio
+constexpr uint64_t kPartsScanMs = 250;
+constexpr int      kPartScanCap = 1500;   // instancias olhadas por varredura
+constexpr int      kPartMax     = 48;     // marcadores publicados
+constexpr ImU32    kPartColor   = IM_COL32(255, 205, 60, 235);
+constexpr ImU32    kHighlightColor = IM_COL32(255, 90, 60, 255);
 
 bool Printable(const std::string& text) {
     if (text.empty() || text.size() > 64)
@@ -182,6 +191,33 @@ void Esp::UpdateSettings(const cfg::Settings& settings) {
     m_reader.stealthOpen = settings.stealthOpen;
     m_reader.wantWrite = settings.fly.enabled;
     m_reader.tickMs = settings.tickMs;
+    m_reader.parts = settings.espParts;
+
+    if (m_reader.parts) {
+        // "coin, cash ,crate" -> {"coin","cash","crate"}
+        std::vector<std::string> parsed;
+        std::string current;
+        for (char c : settings.partsFilter) {
+            if (c == ',' || c == ';') {
+                while (!current.empty() && current.back() == ' ')
+                    current.pop_back();
+                if (!current.empty())
+                    parsed.push_back(current);
+                current.clear();
+            } else if (c != ' ' || !current.empty()) {
+                current.push_back(c);
+            }
+        }
+        while (!current.empty() && current.back() == ' ')
+            current.pop_back();
+        if (!current.empty())
+            parsed.push_back(current);
+
+        if (parsed != m_reader.partFilters)
+            m_reader.partFilters = std::move(parsed);
+    } else if (!m_reader.partFilters.empty()) {
+        m_reader.partFilters.clear();
+    }
 }
 
 std::shared_ptr<const SceneSnapshot> Esp::Snapshot() const {
@@ -192,7 +228,62 @@ std::shared_ptr<const SceneSnapshot> Esp::Snapshot() const {
 bool Esp::Attach(const ReaderSettings& reader) {
     ResetCaches();
     m_dataModel = 0;
-    return m_memory.Attach(cfg::kProcessName, reader.stealthOpen, reader.wantWrite);
+
+    const bool ok = m_memory.Attach(cfg::kProcessName, reader.stealthOpen, reader.wantWrite);
+    if (!ok) {
+        applog::Line("[mem] attach falhou (processo ausente ou handle negado)");
+        return false;
+    }
+
+    applog::Line("[mem] attach ok: pid %lu, base 0x%llX, %llu KB, %s",
+              static_cast<unsigned long>(m_memory.Pid()),
+              static_cast<unsigned long long>(m_memory.Base()),
+              static_cast<unsigned long long>(m_memory.BaseSize() / 1024),
+              m_memory.CanWrite() ? "VM_WRITE" : "read-only");
+    return true;
+}
+
+// classes que carregam Primitive (BasePart). Model/Folder nao tem posicao direta.
+bool IsPartClass(const std::string& cls) {
+    static const char* kClasses[] = {
+        "Part", "MeshPart", "UnionOperation", "NegateOperation", "WedgePart",
+        "CornerWedgePart", "TrussPart", "Seat", "SpawnLocation", "VehicleSeat",
+        "SkateboardPlatform", "FlagStand", "Platform"
+    };
+
+    for (const char* candidate : kClasses) {
+        if (cls == candidate)
+            return true;
+    }
+    return false;
+}
+
+bool NameMatches(const std::string& name, const std::vector<std::string>& filters) {
+    if (name.empty() || name == "?")
+        return false;
+
+    for (const std::string& filter : filters) {
+        if (filter.empty())
+            continue;
+        if (name.size() < filter.size())
+            continue;
+
+        // comparacao case-insensitive por substring
+        for (size_t i = 0; i + filter.size() <= name.size(); ++i) {
+            bool hit = true;
+            for (size_t k = 0; k < filter.size(); ++k) {
+                const char a = static_cast<char>(std::tolower(static_cast<unsigned char>(name[i + k])));
+                const char b = static_cast<char>(std::tolower(static_cast<unsigned char>(filter[k])));
+                if (a != b) {
+                    hit = false;
+                    break;
+                }
+            }
+            if (hit)
+                return true;
+        }
+    }
+    return false;
 }
 
 void Esp::ResetCaches() {
@@ -217,8 +308,13 @@ void Esp::Loop() {
 
         const bool wantReattach = m_reattach.exchange(false, std::memory_order_relaxed);
         const bool writeChanged = m_memory.Ready() && reader.wantWrite && !m_memory.CanWrite();
+        // voo desligado: devolve o handle com VM_WRITE e volta pro read-only
+        const bool writeDropped = m_memory.Ready() && !reader.wantWrite && m_memory.CanWrite();
 
-        if (wantReattach || writeChanged || !m_memory.Alive()) {
+        if (writeDropped)
+            applog::Line("[mem] voo desligado: fechando handle de escrita (read-only)");
+
+        if (wantReattach || writeChanged || writeDropped || !m_memory.Alive()) {
             if (!m_lastAttachAttempt || now - m_lastAttachAttempt > 1000 || wantReattach) {
                 m_lastAttachAttempt = now;
                 Attach(reader);
@@ -537,6 +633,9 @@ void Esp::ReadScene(SceneSnapshot& scene, const ReaderSettings& reader) {
 
     scene.targets = std::move(found);
     scene.playerCount = playerCount;
+
+    ReadParts(scene, reader, now);
+
     scene.status = "ok";
     ++scene.frame;
 
@@ -549,17 +648,99 @@ void Esp::ReadScene(SceneSnapshot& scene, const ReaderSettings& reader) {
 }
 
 // ------------------------------------------------------------
+// objetos soltos no mapa (loot, caixas, moedas): filtro por nome, sem
+// offset de jogo — funciona em qualquer place que use Part com nome.
+// ------------------------------------------------------------
+void Esp::ReadParts(SceneSnapshot& scene, const ReaderSettings& reader, uint64_t now) {
+    if (!reader.parts || reader.partFilters.empty() || !scene.local.workspace) {
+        m_lastParts.clear();
+        m_partsAt = 0;
+        return;
+    }
+
+    // reusa a varredura anterior nos ticks do meio (250 ms de intervalo)
+    if (m_partsAt && now - m_partsAt < kPartsScanMs) {
+        scene.parts = m_lastParts;
+        scene.partsScanned = static_cast<int>(m_lastParts.size());
+        return;
+    }
+    m_partsAt = now;
+
+    std::vector<PartMark> found;
+    const std::vector<uintptr_t>& kids = Children(scene.local.workspace, now);
+
+    const int limit = static_cast<int>(kids.size()) > kPartScanCap ? kPartScanCap
+                                                                  : static_cast<int>(kids.size());
+    int scanned = 0;
+
+    for (int i = 0; i < limit && static_cast<int>(found.size()) < kPartMax; ++i) {
+        const uintptr_t child = kids[static_cast<size_t>(i)];
+        if (!child)
+            continue;
+        if (!IsPartClass(ClassOf(child, now)))
+            continue;
+
+        ++scanned;
+
+        const std::string& name = NameOf(child, now);
+        if (!NameMatches(name, reader.partFilters))
+            continue;
+
+        Vector3 position{};
+        if (!ReadPartPosition(m_memory, child, position) || !position.Finite())
+            continue;
+
+        float distance = 0.f;
+        if (scene.local.position.NonZero())
+            distance = (position - scene.local.position).Length();
+        if (distance > reader.maxDistance)
+            continue;
+
+        PartMark mark{};
+        mark.position = position;
+        mark.name = name;
+        mark.distance = distance;
+        found.push_back(std::move(mark));
+    }
+
+    scene.partsScanned = scanned;
+    scene.parts = found;
+    m_lastParts = std::move(found);
+}
+
+// ------------------------------------------------------------
 // render: so consome o snapshot
 // ------------------------------------------------------------
-void Esp::Draw(ImDrawList* list, const cfg::Settings& settings, float width, float height) const {
-    if (!list || !settings.espEnabled || width <= 0.f || height <= 0.f)
+void Esp::Draw(ImDrawList* list, const cfg::Settings& settings, float width, float height,
+               uintptr_t highlightPlayer) const {
+    if (!list || width <= 0.f || height <= 0.f)
         return;
 
     const auto scene = Snapshot();
-    if (!scene || scene->targets.empty())
+    if (!scene)
         return;
 
     const Matrix4x4& view = scene->view;
+
+    // loot primeiro: fica por baixo dos jogadores
+    if (settings.espParts) {
+        for (const PartMark& part : scene->parts) {
+            Vector2 point{};
+            if (!WorldToScreen(part.position, point, view, width, height))
+                continue;
+
+            char label[96]{};
+            std::snprintf(label, sizeof(label), "%s  %dm", part.name.c_str(),
+                          static_cast<int>(part.distance));
+            const ImVec2 size = ImGui::CalcTextSize(label);
+
+            list->AddCircleFilled(ImVec2(point.x, point.y), 3.f, kPartColor, 8);
+            list->AddText(ImVec2(point.x - size.x * 0.5f, point.y + 4.f), kPartColor, label);
+        }
+    }
+
+    if (!settings.espEnabled)
+        return;
 
     for (const Target& target : scene->targets) {
         Vector2 head{}, root{};
@@ -583,8 +764,26 @@ void Esp::Draw(ImDrawList* list, const cfg::Settings& settings, float width, flo
         const float left = centerX - boxWidth * 0.5f;
         const float right = centerX + boxWidth * 0.5f;
 
+        const bool highlighted = highlightPlayer && target.player == highlightPlayer;
+
         if (settings.boxes) {
-            list->AddRect(ImVec2(left, top), ImVec2(right, bottom), kBoxColor, 0.f, 0, 1.4f);
+            list->AddRect(ImVec2(left, top), ImVec2(right, bottom),
+                          highlighted ? kHighlightColor : kBoxColor, 0.f, 0,
+                          highlighted ? 2.2f : 1.4f);
+
+            if (highlighted) {
+                // cantos: deixa obvio qual e o alvo que a mira esta puxando
+                const float tick = boxWidth * 0.28f;
+                const ImU32 color = kHighlightColor;
+                list->AddLine(ImVec2(left, top), ImVec2(left + tick, top), color, 2.2f);
+                list->AddLine(ImVec2(left, top), ImVec2(left, top + tick), color, 2.2f);
+                list->AddLine(ImVec2(right, top), ImVec2(right - tick, top), color, 2.2f);
+                list->AddLine(ImVec2(right, top), ImVec2(right, top + tick), color, 2.2f);
+                list->AddLine(ImVec2(left, bottom), ImVec2(left + tick, bottom), color, 2.2f);
+                list->AddLine(ImVec2(left, bottom), ImVec2(left, bottom - tick), color, 2.2f);
+                list->AddLine(ImVec2(right, bottom), ImVec2(right - tick, bottom), color, 2.2f);
+                list->AddLine(ImVec2(right, bottom), ImVec2(right, bottom - tick), color, 2.2f);
+            }
 
             if (settings.healthBar && target.maxHealth > 0.f) {
                 const float ratio = std::clamp(target.health / target.maxHealth, 0.f, 1.f);

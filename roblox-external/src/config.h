@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace cfg {
@@ -15,6 +16,7 @@ inline constexpr int kMenuKey = 0x2D;  // INSERT  — abre/fecha menu e libera o
 inline constexpr int kEspKey  = 0x70;  // F1      — liga/desliga ESP
 inline constexpr int kBoxKey  = 0x71;  // F2      — liga/desliga caixa
 inline constexpr int kExitKey = 0x23;  // END     — fecha
+inline constexpr int kPanicKey = 0x79; // F10     — desliga aim/tiro/voo e solta o mouse
 
 inline constexpr int   kTickMs       = 4;      // poll de memoria
 inline constexpr float kMaxDistance  = 2000.f; // studs
@@ -37,13 +39,13 @@ struct AimSettings {
     int   bone = kHead;
 
     float fovPx = 160.f;               // raio do FOV em pixels
-    float smoothing = 6.f;             // divisor: maior = mais lento
+    float smoothing = 4.f;             // divisor: maior = mais lento
     float strength = 0.55f;            // 0..1 — fracao do erro aplicada por tick
     float maxStepPx = 45.f;            // limite de movimento por tick
     float deadzonePx = 2.f;            // nao mexe abaixo disso
     float jitterPx = 0.f;              // ruido no delta (humano)
     float leadMs = 0.f;                // antecipa alvo em movimento (0..200)
-    float snapPx = 12.f;               // abaixo disso a correcao e exata (0 = desliga)
+    float snapPx = 18.f;               // abaixo disso a correcao e exata (0 = desliga)
 
     bool  drawFov = true;
     bool  requireForeground = true;    // so age com a janela do jogo na frente
@@ -97,6 +99,14 @@ struct Settings {
     bool  espSkeleton = false;   // custa 15 leituras por alvo
     bool  espTracer   = false;
     bool  espHeadDot  = false;
+
+    // objetos por nome (loot/caixa/moeda): sem offset de jogo, filtra o Workspace
+    bool        espParts    = false;
+    std::string partsFilter = "coin,cash,crate,ammo,key,loot,drop,gem,ore,chest,box";
+
+    // mira desenhada no centro (o cursor do sistema fica escondido no jogo)
+    bool  crosshair = false;
+    float crosshairSize = 9.f;
     bool  teamCheck   = true;
     bool  stealthOpen = true;
     bool  handleWatch = true;
@@ -111,6 +121,9 @@ struct Settings {
 };
 
 bool Save(const Settings& settings);  // config.json + profiles.json
+
+// comparacao campo a campo: o main usa isso pra auto-salvar quando algo muda
+bool Same(const Settings& a, const Settings& b);
 bool Load(Settings& settings);
 
 const Profile* FindProfile(const Settings& settings, uint64_t placeId);

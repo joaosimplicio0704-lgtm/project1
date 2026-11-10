@@ -40,6 +40,7 @@ public:
     float TargetError() const { return m_targetError; }   // px ate o centro
     float TargetX() const { return m_targetX; }
     float TargetY() const { return m_targetY; }
+    uintptr_t TargetPlayer() const { return m_lockedPlayer; }   // 0 = nenhum
 
     // calibracao de sensibilidade (px de tela -> counts de mouse)
     bool  Calibrated() const { return m_calibrated; }

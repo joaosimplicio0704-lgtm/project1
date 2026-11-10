@@ -5,7 +5,9 @@
 #include <cmath>
 
 #include "../features/esp.h"
+#include "../applog.h"
 #include "../offsets.h"
+#include "../sdk/mathx.h"
 
 namespace {
 
@@ -49,6 +51,7 @@ void Fly::Stop(Memory& memory) {
     m_active = false;
     m_hovering = false;
     m_havePos = false;
+    m_writeOk = false;
 }
 
 void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& local, bool blocked) {
@@ -57,12 +60,9 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
     // dt sempre medido, inclusive quando desligado (evita passo gigante
     // no primeiro tick depois de religar)
     const uint64_t now = GetTickCount64();
-    float dt = m_lastTick ? static_cast<float>(now - m_lastTick) / 1000.f : 0.004f;
+    const float rawDt = m_lastTick ? static_cast<float>(now - m_lastTick) / 1000.f : 0.004f;
     m_lastTick = now;
-    if (!(dt > 0.f))
-        dt = 0.004f;
-    if (dt > kMaxStepDt)
-        dt = kMaxStepDt;
+    const float dt = mathx::ClampDt(rawDt, kMaxStepDt);
 
     const bool down = Down(fly.key);
     if (fly.toggleMode && down && !m_prevDown)
@@ -137,7 +137,7 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
         // pra gravidade nao acumular; a posicao real vira a referencia
         if (fly.zeroVelocity) {
             const Vector3 zero{};
-            memory.Write(local.primitive + rbx::Primitive::AssemblyLinearVelocity, zero);
+            m_writeOk = memory.Write(local.primitive + rbx::Primitive::AssemblyLinearVelocity, zero);
             memory.Write(local.primitive + rbx::Primitive::AssemblyAngularVelocity, zero);
         }
 
@@ -152,17 +152,21 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
     dir.y /= len;
     dir.z /= len;
 
-    const float step = fly.speed * dt;
-
-    Vector3 next = m_pos;
-    next.x += dir.x * step;
-    next.y += dir.y * step;
-    next.z += dir.z * step;
+    const Vector3 next = mathx::FlyStep(m_pos, dir, fly.speed, dt);
 
     if (!next.Finite())
         return;
 
-    memory.Write(local.primitive + rbx::Primitive::Position, next);
+    const bool wrote = memory.Write(local.primitive + rbx::Primitive::Position, next);
+    m_writeOk = wrote;
+    if (!wrote) {
+        ++m_writeFails;
+        if (m_writeFails == 1)
+            applog::Line("[voo] write recusado em 0x%llX (handle sem VM_WRITE? Hyperion reabriu read-only)",
+                      static_cast<unsigned long long>(local.primitive));
+    } else {
+        m_writeFails = 0;
+    }
 
     if (fly.zeroVelocity) {
         const Vector3 zero{};

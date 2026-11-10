@@ -40,6 +40,9 @@ public:
     bool    Hovering() const { return m_active && m_hovering; }
     bool    HasPosition() const { return m_havePos; }
     Vector3 Position() const { return m_pos; }
+    // o jogo aceitou o ultimo write? (false = handle sem VM_WRITE / posicao recusada)
+    bool    WriteOk() const { return m_writeOk; }
+    int     WriteFails() const { return m_writeFails; }
 
 private:
     void Stop(Memory& memory);
@@ -53,4 +56,6 @@ private:
     Vector3   m_pos{};
     uintptr_t m_primitive = 0;
     uint64_t  m_lastTick = 0;
+    bool      m_writeOk = false;
+    int       m_writeFails = 0;
 };
