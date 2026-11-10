@@ -1,9 +1,15 @@
 #pragma once
 #include <Windows.h>
 
-// StealthyOpenProcess v5 (adaptado sem dependencia externa de XorStr)
-// Abre handle de processo com callstack dentro do kernel32 via HWBP+VEH,
-// tornando a chamada mais opaca a scanners que monitoram OpenProcess direto.
+// ============================================================
+// StealthyOpenProcess v5
+//   - Zero CRT
+//   - Thread-safe (CRITICAL_SECTION)
+//   - HWBP (DR0) per-thread — sem race condition com threads alheias
+//   - VEH SINGLE_STEP TID-gated — nao interfere com VehCpuHook
+//   - Callstack limpa dentro de kernel32
+// ============================================================
+
 namespace StealthyOpenProcess {
 
     bool   Initialize();

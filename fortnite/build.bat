@@ -7,11 +7,14 @@ set IMGUI=%SRC_DIR%deps\imgui
 
 cl /EHsc /O2 /nologo /W3 ^
   /I"%SRC_DIR%" ^
+  /I"%SRC_DIR%Cheat" ^
+  /I"%SRC_DIR%DynamicStub" ^
   /I"%IMGUI%" ^
   /I"%IMGUI%\backends" ^
   "%SRC_DIR%main.cpp" ^
   "%SRC_DIR%overlay.cpp" ^
   "%SRC_DIR%StealthyOpenProcess.cpp" ^
+  "%SRC_DIR%closehandle.cpp" ^
   "%IMGUI%\imgui.cpp" ^
   "%IMGUI%\imgui_draw.cpp" ^
   "%IMGUI%\imgui_tables.cpp" ^

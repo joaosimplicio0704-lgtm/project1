@@ -21,6 +21,11 @@ Gera `fortnite/fortnite_tool.exe`. Requer Windows SDK + MSVC (d3d11.lib, dxgi.li
 4. `END` fecha a ferramenta.
 5. Aimbot: segure `XBUTTON2` (botão lateral do mouse) pra mirar no alvo mais próximo da crosshair dentro do FOV.
 
+## arquivos adicionados a pedido
+- `StealthyOpenProcess.h/.cpp` — abertura stealth de processo (HWBP + VEH, callstack dentro do kernel32). Adaptado sem `XorStr.hpp` (nao enviado).
+- `closehandle.cpp` — monitor de handles "Unknown" (saida do seu envio). Depende de `Cheat/Globals.hpp` e `DynamicStub/DynamicStub.hpp`, que nao foram enviados; stubs minimos foram criados em `fortnite/Cheat/` e `fortnite/DynamicStub/` marcados com `// FILL`. Preencha a implementacao real antes de usar em producao.
+- `build.bat` — compila `closehandle.cpp` junto.
+
 ## o que falta preencher (// FILL)
 O dump não cobre tudo. Preencher uma linha em cada lugar marcado `// FILL`:
 

@@ -39,4 +39,6 @@ não são necessárias dlls extras além das do sistema (user32, d3d11, dxgi, ol
 
 confirme cada offset contra um dumper atual do seu build do Fortnite. os marcados `// FILL` no código (`GNames`, `ULevel::Actors`, `ComponentToWorld`, ossos, `APlayerController` local) precisam ser preenchidos — receitas em `fortnite/README.md` e `fortnite/offsets.hpp`.
 
+`closehandle.cpp` depende de `Cheat/Globals.hpp` e `DynamicStub/DynamicStub.hpp` (nao enviados por voce); stubs minimos estao em `fortnite/Cheat/` e `fortnite/DynamicStub/` com `// FILL`. Preencha a implementacao real antes de compilar.
+
 stack: externo, RPM read-only, mouse via SendInput, offsets do dump UE.
