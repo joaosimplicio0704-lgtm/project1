@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -418,6 +419,37 @@ static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) 
                        "unico modulo que ESCREVE em memoria (VM_WRITE)");
     ImGui::TextDisabled("WASD no plano da camera, Space/Ctrl sobem/descem");
 
+    ImGui::SeparatorText("Modo de movimento");
+    int flyMode = v.mode;
+    ImGui::RadioButton("Fisica (seguro)", &flyMode, cfg::kFlyVelocity);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("escreve AssemblyLinearVelocity: o servidor ve fisica do personagem,\n"
+                          "nao um salto de posicao. e o modo que NAO toma Disconnect (277)");
+    ImGui::SameLine();
+    ImGui::RadioButton("Posicao (teleporte)", &flyMode, cfg::kFlyPosition);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("escreve Primitive::Position direto. anda mais e atravessa parede,\n"
+                          "mas e o que a validacao de movimento derruba");
+    v.mode = flyMode;
+
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderInt("Writes/s", &v.writeHz, 20, 250);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("quantas vezes por segundo o voo escreve. 60 = um por frame do jogo");
+
+    ImGui::SetNextItemWidth(180.f);
+    ImGui::SliderFloat("Passo max (studs)", &v.maxStepStuds, 0.2f, 5.f, "%.1f");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("modo posicao: teto de deslocamento por write.\n"
+                          "cada write acima disso vira teleporte pro servidor");
+
+    if (v.mode == cfg::kFlyPosition) {
+        const float effective = std::min(v.speed, v.maxStepStuds * static_cast<float>(v.writeHz));
+        ImGui::TextColored(ImVec4(1.f, 0.6f, 0.2f, 1.f),
+                           "modo posicao: velocidade efetiva ~%.0f studs/s", effective);
+        ImGui::TextDisabled("acima de ~40 studs/s a maioria dos jogos derruba a conexao (277)");
+    }
+
     ImGui::SeparatorText("Ajuste");
     ImGui::SetNextItemWidth(180.f);
     ImGui::SliderFloat("Velocidade", &v.speed, 5.f, 300.f, "%.0f studs/s");
@@ -451,6 +483,9 @@ static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) 
     const Vector3 shown = fly.Active() && fly.HasPosition() ? fly.Position() : local.position;
     ImGui::Text("posicao    %.1f, %.1f, %.1f", shown.x, shown.y, shown.z);
     ImGui::Text("passo      %.1f studs/s (dt limitado a 50 ms)", v.speed);
+    ImGui::Text("modo       %s%s", fly.Mode() == cfg::kFlyVelocity ? "fisica (velocidade)"
+                                                                  : "posicao (teleporte)",
+                fly.AutoSwitched() ? "  [caiu pra posicao: jogo ignora velocidade]" : "");
     if (fly.Reverting() && !v.anchor)
         ImGui::TextColored(ImVec4(1.f, 0.6f, 0.2f, 1.f),
                            "este jogo esta revertendo o write: ligue Ancorar");

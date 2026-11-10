@@ -148,6 +148,9 @@ static bool SaveConfig(const Settings& s) {
     out << "  \"flyKey\": "            << v.key << ",\n";
     out << "  \"flyToggle\": "         << Bool(v.toggleMode) << ",\n";
     out << "  \"flySpeed\": "          << v.speed << ",\n";
+    out << "  \"flyMode\": "           << v.mode << ",\n";
+    out << "  \"flyWriteHz\": "        << v.writeHz << ",\n";
+    out << "  \"flyMaxStep\": "        << v.maxStepStuds << ",\n";
     out << "  \"flyZeroVelocity\": "   << Bool(v.zeroVelocity) << ",\n";
     out << "  \"flyHoverOnIdle\": "    << Bool(v.hoverOnIdle) << ",\n";
     out << "  \"flyRequireForeground\": " << Bool(v.requireForeground) << ",\n";
@@ -233,6 +236,9 @@ static bool LoadConfig(Settings& s) {
     v.key         = AsInt(ValueOf(text, "flyKey"), v.key);
     v.toggleMode  = AsBool(ValueOf(text, "flyToggle"), v.toggleMode);
     v.speed       = AsFloat(ValueOf(text, "flySpeed"), v.speed);
+    v.mode        = AsInt(ValueOf(text, "flyMode"), v.mode);
+    v.writeHz     = AsInt(ValueOf(text, "flyWriteHz"), v.writeHz);
+    v.maxStepStuds = AsFloat(ValueOf(text, "flyMaxStep"), v.maxStepStuds);
     v.zeroVelocity = AsBool(ValueOf(text, "flyZeroVelocity"), v.zeroVelocity);
     v.hoverOnIdle = AsBool(ValueOf(text, "flyHoverOnIdle"), v.hoverOnIdle);
     v.requireForeground = AsBool(ValueOf(text, "flyRequireForeground"), v.requireForeground);
@@ -373,6 +379,7 @@ bool Same(const Settings& a, const Settings& b) {
     const FlySettings& w = b.fly;
     if (v.enabled != w.enabled || v.toggleMode != w.toggleMode || v.key != w.key ||
         v.speed != w.speed || v.zeroVelocity != w.zeroVelocity ||
+        v.mode != w.mode || v.writeHz != w.writeHz || v.maxStepStuds != w.maxStepStuds ||
         v.hoverOnIdle != w.hoverOnIdle || v.requireForeground != w.requireForeground ||
         v.anchor != w.anchor)
         return false;

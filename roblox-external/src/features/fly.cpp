@@ -2,18 +2,21 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cmath>
 
-#include "../features/esp.h"
+#include "esp.h"
 #include "../applog.h"
 #include "../offsets.h"
 #include "../sdk/mathx.h"
 
 namespace {
 
-// acima disso o passo viraria teleporte (frame travado, menu arrastando)
+// dt de um frame travado nao pode virar teleporte
 constexpr float kMaxStepDt = 0.05f;    // 50 ms
 constexpr float kResyncStuds = 40.f;   // divergencia = "o jogo me moveu"
+constexpr uint64_t kResyncPause = 300; // ms sem escrever depois de um resync
+constexpr uint64_t kStillMs = 700;     // pediu pra andar e nao saiu do lugar
 
 bool Down(int vk) {
     return vk > 0 && (GetAsyncKeyState(vk) & 0x8000) != 0;
@@ -61,12 +64,18 @@ void Fly::Reset() {
     m_pos = Vector3{};
     m_primitive = 0;
     m_lastTick = 0;
+    m_lastWrite = 0;
+    m_pauseUntil = 0;
     m_writeOk = false;
     m_writeFails = 0;
     m_anchored = false;
     m_anchorPrimitive = 0;
     m_reverting = false;
     m_revertSince = 0;
+    m_effectiveMode = cfg::kFlyVelocity;
+    m_autoSwitched = false;
+    m_probePos = Vector3{};
+    m_stillSince = 0;
 }
 
 void Fly::Stop(Memory& memory) {
@@ -85,6 +94,7 @@ void Fly::Stop(Memory& memory) {
     m_hovering = false;
     m_havePos = false;
     m_writeOk = false;
+    m_lastWrite = 0;
 }
 
 void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& local, bool blocked) {
@@ -125,6 +135,11 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
         m_pos = local.position;
         m_primitive = local.primitive;
         m_havePos = true;
+
+        // brigar com o servidor (escreve, ve reverter, escreve de novo) e o que
+        // ele le como teleporte: depois de um resync, fica quieto um pouco
+        if (divergent)
+            m_pauseUntil = now + kResyncPause;
     }
 
     if (!m_pos.Finite()) {
@@ -132,26 +147,9 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
         return;
     }
 
-    // modo Ancorar: alguns jogos/personagens revertem a posicao no mesmo tick.
-    // Com o bit Anchored ligado o motor para de brigar e o write fica.
-    if (fly.anchor && !m_anchored)
-        SetAnchored(memory, local.primitive, true);
-    else if (!fly.anchor && m_anchored)
-        SetAnchored(memory, m_anchorPrimitive, false);
-
-    // o jogo esta revertendo? (drift grande e persistente enquanto devia andar)
-    const float drift = Dist(m_pos, local.position);
-    if (drift > 25.f) {
-        if (!m_revertSince)
-            m_revertSince = now;
-        else if (now - m_revertSince > 700 && !m_reverting) {
-            m_reverting = true;
-            applog::Line("[voo] o jogo esta revertendo a posicao (drift %.0f studs) — use Ancorar", drift);
-        }
-    } else {
-        m_revertSince = 0;
-        m_reverting = false;
-    }
+    // modo efetivo: o pedido, ou posicao se o jogo ignorou a velocidade
+    m_effectiveMode = (fly.mode == cfg::kFlyVelocity && !m_autoSwitched) ? cfg::kFlyVelocity
+                                                                        : cfg::kFlyPosition;
 
     const float* r = local.cameraRotation;   // 3x3 row-major da CFrame da camera
 
@@ -174,12 +172,83 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
     };
     dir.y += moveUp;   // sobe/desce no eixo do mundo
 
-    const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+    const float len = dir.Length();
     const bool moving = len > 0.001f && std::isfinite(len);
 
+    if (moving) {
+        dir.x /= len;
+        dir.y /= len;
+        dir.z /= len;
+    }
+
+    // Ancorar so faz sentido no modo posicao. Em modo velocidade ancorar e
+    // contraditorio (e o Anchored replicado com o cliente mandando fisica e
+    // uma das formas de tomar disconnect).
+    const bool wantAnchor = fly.anchor && m_effectiveMode == cfg::kFlyPosition && moving;
+    if (wantAnchor && !m_anchored)
+        SetAnchored(memory, local.primitive, true);
+    else if (!wantAnchor && m_anchored)
+        SetAnchored(memory, m_anchorPrimitive, false);
+
+    // throttle: escreve no maximo writeHz por segundo, nao a 250
+    const int hz = std::clamp(fly.writeHz, 20, 250);
+    const uint64_t interval = 1000ULL / static_cast<uint64_t>(hz);
+    if (m_lastWrite && now - m_lastWrite < interval)
+        return;
+    if (m_pauseUntil && now < m_pauseUntil)
+        return;
+
+    const float writeDt = m_lastWrite ? static_cast<float>(now - m_lastWrite) / 1000.f : dt;
+    m_lastWrite = now;
+
+    // ---------------- modo velocidade (padrao) ----------------
+    if (m_effectiveMode == cfg::kFlyVelocity) {
+        Vector3 velocity{};
+        if (moving) {
+            velocity.x = dir.x * fly.speed;
+            velocity.y = dir.y * fly.speed;
+            velocity.z = dir.z * fly.speed;
+        }
+
+        m_writeOk = memory.Write(local.primitive + rbx::Primitive::AssemblyLinearVelocity, velocity);
+        if (fly.zeroVelocity) {
+            const Vector3 zero{};
+            memory.Write(local.primitive + rbx::Primitive::AssemblyAngularVelocity, zero);
+        }
+
+        if (!m_writeOk) {
+            ++m_writeFails;
+            if (m_writeFails == 1)
+                applog::Line("[voo] write de velocidade recusado (handle sem VM_WRITE?)");
+        } else {
+            m_writeFails = 0;
+        }
+
+        m_pos = local.position;
+        m_active = true;
+        m_hovering = !moving;
+        m_wasActive = true;
+
+        // o jogo esta ignorando? (pediu pra andar e a posicao nao mudou)
+        if (moving) {
+            if (Dist(local.position, m_probePos) > 1.f) {
+                m_probePos = local.position;
+                m_stillSince = now;
+            } else if (!m_stillSince) {
+                m_stillSince = now;
+            } else if (now - m_stillSince > kStillMs && !m_autoSwitched) {
+                m_autoSwitched = true;
+                applog::Line("[voo] o jogo ignora AssemblyLinearVelocity — caindo pra modo posicao");
+            }
+        } else {
+            m_stillSince = 0;
+        }
+        return;
+    }
+
+    // ---------------- modo posicao (teleporte limitado) ----------------
     if (!moving) {
         if (!fly.hoverOnIdle) {
-            // deixa cair de proposito: nao escreve nada e devolve a gravidade
             m_active = true;
             m_hovering = false;
             m_wasActive = false;
@@ -187,8 +256,6 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
             return;
         }
 
-        // pairado: nao escreve posicao (nada a mover), so mata a velocidade
-        // pra gravidade nao acumular; a posicao real vira a referencia
         if (fly.zeroVelocity) {
             const Vector3 zero{};
             m_writeOk = memory.Write(local.primitive + rbx::Primitive::AssemblyLinearVelocity, zero);
@@ -202,12 +269,12 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
         return;
     }
 
-    dir.x /= len;
-    dir.y /= len;
-    dir.z /= len;
+    // aqui esta o que evita o erro 277: um write NUNCA anda mais que
+    // maxStepStuds. velocidade em studs/s vira passo limitado por write.
+    const float wantedStep = fly.speed * mathx::ClampDt(writeDt, kMaxStepDt);
+    const float step = std::min(wantedStep, std::max(0.2f, fly.maxStepStuds));
 
-    const Vector3 next = mathx::FlyStep(m_pos, dir, fly.speed, dt);
-
+    const Vector3 next = mathx::StepAlong(m_pos, dir, step);
     if (!next.Finite())
         return;
 
@@ -216,8 +283,7 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
     if (!wrote) {
         ++m_writeFails;
         if (m_writeFails == 1)
-            applog::Line("[voo] write recusado em 0x%llX (handle sem VM_WRITE? Hyperion reabriu read-only)",
-                      static_cast<unsigned long long>(local.primitive));
+            applog::Line("[voo] write de posicao recusado (handle sem VM_WRITE?)");
     } else {
         m_writeFails = 0;
     }
@@ -232,4 +298,18 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
     m_active = true;
     m_hovering = false;
     m_wasActive = true;
+
+    // o jogo esta revertendo? (drift grande e persistente enquanto devia andar)
+    const float drift = Dist(m_pos, local.position);
+    if (drift > 25.f) {
+        if (!m_revertSince)
+            m_revertSince = now;
+        else if (now - m_revertSince > 700 && !m_reverting) {
+            m_reverting = true;
+            applog::Line("[voo] o jogo esta revertendo a posicao (drift %.0f studs)", drift);
+        }
+    } else {
+        m_revertSince = 0;
+        m_reverting = false;
+    }
 }

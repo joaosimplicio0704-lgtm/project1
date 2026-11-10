@@ -142,6 +142,11 @@ inline Vector3 FlyStep(const Vector3& from, const Vector3& dir, float speed, flo
     };
 }
 
+// anda `distance` studs na direcao (normalizada) — o chamador decide o teto
+inline Vector3 StepAlong(const Vector3& from, const Vector3& dir, float distance) {
+    return FlyStep(from, dir, distance, 1.f);
+}
+
 // dt de um frame travado nao pode virar teleporte
 inline float ClampDt(float dt, float maxDt) {
     if (!(dt > 0.f))

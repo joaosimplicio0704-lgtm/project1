@@ -324,6 +324,36 @@ posição escrita é aceita na maioria dos jogos — o servidor reconcilia e ger
 - ligar o voo reabre o handle com `VM_WRITE | VM_OPERATION`; sem isso o handle é
   estritamente read-only e a aba mostra `read-only (reatacha ao ligar)`
 
+### Erro 277 (Disconnect) ao ligar o voo
+
+Não é o voo "falhar" — é o **servidor derrubando o cliente**. A validação de movimento lê
+`Primitive::Position` como teleporte: o cliente com network ownership manda um delta de
+posição grande demais e o servidor corta a conexão. O que existia antes piorava isso:
+250 writes por segundo, cada um podendo andar `velocidade * dt`, sem teto.
+
+A correção foi separar **dois modos** e mudar o padrão:
+
+| modo | o que escreve | kick |
+|---|---|---|
+| **Física (padrão)** | `AssemblyLinearVelocity` | o servidor vê física normal de um personagem que ele já deixa o cliente simular — não há delta de posição para validar |
+| **Posição** | `Primitive::Position` | cada write é um teleporte; agora limitado por `Passo max (studs)` e por `Writes/s` (60) |
+
+No modo posição o passo por write é `min(velocidade/writes, passo máx)`: com 300 studs/s de
+slider e passo 1.2 @ 60 Hz, o cliente anda **1.2 studs por frame** (72 studs/s efetivos) em
+vez de 5 — é literalmente a diferença entre voar e cair. A aba mostra a velocidade efetiva
+e avisa acima de ~40 studs/s.
+
+Outras duas coisas que alimentavam o 277:
+
+- **resync com pausa**: quando o jogo revertia a posição, o código anterior escrevia de
+  novo no tick seguinte; escrever/ver reverter 250x por segundo é o padrão que o servidor
+  lê como teleporte. Agora, dps de um resync, os writes param 300 ms.
+- **Ancorar só no modo posição**: `Anchored` replicado com o cliente mandando física é
+  outra forma de tomar disconnect. No modo velocidade o botão fica inerte.
+
+Se mesmo no modo física o jogo reclamar, o caminho é **baixar a velocidade** (45 no padrão,
+~2x `WalkSpeed`) antes de qualquer outra coisa.
+
 ### O que fazia o voo ficar "bugado"
 
 | sintoma | causa na versão anterior | correção |

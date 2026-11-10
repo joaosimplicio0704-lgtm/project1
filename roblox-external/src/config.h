@@ -72,11 +72,20 @@ struct TriggerSettings {
 // ============================================================
 // VOO — escreve em memoria (unico modulo que faz isso)
 // ============================================================
+// como o voo move o personagem
+enum FlyMode : int {
+    kFlyVelocity = 0,   // escreve AssemblyLinearVelocity (fisica) — padrao, NAO toma kick
+    kFlyPosition = 1    // escreve Primitive::Position (teleporte) — rapido e arriscado
+};
+
 struct FlySettings {
     bool  enabled = false;
     bool  toggleMode = false;
     int   key = 0x46;              // VK_F
-    float speed = 60.f;            // studs por segundo
+    float speed = 45.f;            // studs por segundo (45 ~ 2x walkspeed)
+    int   mode = kFlyVelocity;     // ver FlyMode
+    int   writeHz = 60;            // writes por segundo (60 = um por frame do jogo)
+    float maxStepStuds = 1.2f;     // teto de deslocamento por write no modo posicao
     bool  zeroVelocity = true;     // zera AssemblyLinearVelocity pra gravidade nao brigar
     bool  hoverOnIdle = true;      // sem WASD: segura a altura em vez de cair
     bool  requireForeground = true;

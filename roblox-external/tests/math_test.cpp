@@ -11,6 +11,7 @@
 //   5. config.json: round-trip e parser de string com virgula
 // ============================================================
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -230,6 +231,37 @@ void TestAimLoop() {
     }
 }
 
+// o write de posicao do voo nunca pode andar mais que maxStepStuds: e o que
+// separa "voar" de "tomar Disconnect 277" no modo posicao
+void TestFlyWriteCap() {
+    std::printf("[7] voo: teto por write (disconnect 277)\n");
+
+    const float maxStep = 1.2f;
+    const float hz = 60.f;
+    const float speed = 300.f;   // usuario colocou 300 no slider
+    const Vector3 dir{ 1.f, 0.f, 0.f };
+
+    Vector3 pos{};
+    float worst = 0.f;
+
+    for (int i = 0; i < 600; ++i) {   // 10 s
+        const float dt = 1.f / hz;
+        const float step = std::min(speed * dt, maxStep);
+        const Vector3 next = mathx::StepAlong(pos, dir, step);
+        worst = std::fmax(worst, (next - pos).Length());
+        pos = next;
+    }
+
+    Check(worst <= maxStep + 1e-4f, "nenhum write anda mais que maxStepStuds");
+    CheckNear(pos.x, maxStep * hz * 10.f, 2.f, "velocidade efetiva = passo * writes/s (72 studs/s)");
+    std::printf("      pior passo %.2f studs, velocidade efetiva %.0f studs/s\n", worst,
+                pos.x / 10.f);
+
+    // sem o teto, o mesmo slider de 300 studs/s andaria 5 studs por write
+    const float unclamped = speed / hz;
+    Check(unclamped > maxStep, "sem teto o write seria um teleporte de 5 studs por frame");
+}
+
 void TestLookRotation() {
     std::printf("[6] LookRotation (mira por camera)\n");
 
@@ -374,6 +406,7 @@ int main() {
     TestRadiansPerPixel();
     TestAimLoop();
     TestFly();
+    TestFlyWriteCap();
     TestLookRotation();
     TestConfig();
 
