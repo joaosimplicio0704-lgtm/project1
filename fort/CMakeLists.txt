@@ -38,6 +38,8 @@ add_executable(FortniteExternal WIN32
     src/Input.cpp
     src/Overlay.cpp
     src/ProcessHandle.cpp
+    src/StealthyOpenProcess.cpp
+    src/closehandle.cpp
 )
 target_compile_features(FortniteExternal PRIVATE cxx_std_17)
 target_link_libraries(FortniteExternal PRIVATE imgui d3d11 ${FORTNITE_D3DCOMPILER_LIBRARY} dxgi dwmapi user32 gdi32)

@@ -11,7 +11,7 @@ Os binários já incluídos estão juntos em `build/`:
 
 Deixe os dois juntos dentro de `build/`, abra o jogo e execute `build\FortLoader.exe`. Se o jogo estiver elevado, execute o loader como administrador. Não é necessário instalar ImGui nem compilar para usar os binários.
 
-O loader procura `build/fortnite-config.json`, ao lado dos executáveis. Quando o arquivo existe, inicia o programa com `--load-config`; quando não existe, usa os padrões. O carregamento restaura os valores do JSON, mas **aim e ESP sempre permanecem desligados no lançamento**.
+O loader procura `build/fortnite-config.json`, ao lado dos executáveis, e sempre inicia o programa com `--load-config`. Quando o arquivo não existe, o external cria um JSON com os valores padrão; a mensagem do console não indica erro. O carregamento restaura os valores do JSON, mas **aim e ESP sempre permanecem desligados no lançamento**.
 
 O loader usa somente `CreateProcess`: não baixa arquivos, não injeta código, não altera permissões e não cria processo oculto. Para fechar o programa principal, pressione `END`.
 
@@ -68,8 +68,9 @@ Sem essa conferência, câmera, ossos ou atributos podem falhar de forma segura,
 - O alvo é o osso projetado mais próximo do crosshair dentro do FOV configurado.
 - O delta angular vira `MOUSEEVENTF_MOVE`, dividido por smoothing; não há escrita de view angles.
 - `visibleOnly` usa `bRecentlyRendered`; isso **não** é um trace de oclusão nem prova de linha de visão.
-- `ProcessHandle` é o wrapper RAII read-only fornecido, sem VEH/HWBP, threads auxiliares ou monitor global de handles.
+- `ProcessHandle` tenta o `StealthyOpenProcess` enviado (VEH/HWBP em thread efêmera local) e usa `OpenProcess` read-only como fallback. O acesso continua limitado a `PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ`.
+- `closehandle.cpp` foi adaptado para finalizar somente a thread efêmera pertencente ao módulo. A varredura global por heurística e as dependências ausentes `Cheat/Globals.hpp`, `DynamicStub` e `XorStr` não são usadas.
 
 Os binários foram compilados por toolchain cruzada para Windows x64 e os testes matemáticos de câmera/matriz passaram. Eles **não foram executados em Windows nem testados contra o jogo** neste ambiente Linux.
 
-Contas podem ser punidas pelo anti-cheat e pela política do jogo. Use apenas onde você tem autorização; este projeto não inclui bypass nem promessa de não detecção.
+Contas podem ser punidas pelo anti-cheat e pela política do jogo. Use apenas onde você tem autorização; não há promessa de compatibilidade ou não detecção.

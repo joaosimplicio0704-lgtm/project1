@@ -42,8 +42,7 @@ int main() {
 
     const std::wstring config = directory + L"\\fortnite-config.json";
     const bool loadConfig = FileExists(config);
-    std::wstring commandLine = Quote(executable);
-    if (loadConfig) commandLine += L" --load-config";
+    std::wstring commandLine = Quote(executable) + L" --load-config";
 
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
@@ -70,6 +69,6 @@ int main() {
     ::CloseHandle(process.hProcess);
     std::cout << "FortniteExternal iniciado (PID " << process.dwProcessId << ").\n";
     std::cout << (loadConfig ? "Configuracao JSON carregada; aim e ESP continuam desligados.\n"
-                             : "Nenhum JSON encontrado; usando configuracao padrao.\n");
+                             : "JSON ausente: o external criara fortnite-config.json com os padroes.\n");
     return 0;
 }

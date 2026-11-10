@@ -424,7 +424,12 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int) {
         if (LoadConfig(config, loadMessage)) {
             message = loadMessage + "; aim and ESP remain disabled at launch";
         } else {
-            message = loadMessage + "; using defaults";
+            std::string saveMessage;
+            if (SaveConfig(config, saveMessage)) {
+                message = "created default fortnite-config.json; aim and ESP remain disabled";
+            } else {
+                message = loadMessage + "; " + saveMessage + "; using defaults";
+            }
         }
     }
     config.aimEnabled = false;

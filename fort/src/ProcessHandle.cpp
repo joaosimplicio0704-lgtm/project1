@@ -1,9 +1,16 @@
 #include "ProcessHandle.h"
 
+#include "StealthyOpenProcess.h"
+
 namespace ss {
     ProcessHandle::ProcessHandle(DWORD pid, DWORD desiredAccess, DWORD* outError) noexcept
         : pid_(pid) {
-        handle_ = ::OpenProcess(desiredAccess, FALSE, pid);
+        handle_ = StealthyOpenProcess::Execute(pid, desiredAccess);
+        if (!handle_) {
+            // Some systems/security products do not allow HWBP/VEH. Keep a
+            // conventional read-only fallback instead of failing attachment.
+            handle_ = ::OpenProcess(desiredAccess, FALSE, pid);
+        }
         if (!handle_) lastError_ = ::GetLastError();
         if (outError) *outError = lastError_;
     }
