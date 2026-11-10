@@ -29,7 +29,7 @@ O loader usa somente `CreateProcess`: não baixa arquivos, não injeta código, 
 
 Para preparar o carregamento pelo loader, abra o programa, ajuste o menu e pressione `F5` enquanto o diretório de trabalho for a pasta dos executáveis. O arquivo será encontrado na próxima abertura pelo `FortLoader.exe`.
 
-O menu permite ajustar FOV, smoothing, pixels por grau, distância, time, bots, osso da cabeça e elementos visuais. O overlay fica click-through com o menu fechado e acompanha a área cliente do jogo.
+O menu permite ajustar FOV, smoothing, pixels por grau, distância, time, bots, osso da cabeça e elementos visuais. Ele abre em modo interativo, com foco e cliques habilitados; somente com o menu fechado o overlay fica click-through. A aba `Settings` mostra o estado da reconexão e dos snapshots automáticos de RPM a cada 4 ms, incluindo PID, jogadores e câmera. Não há monitoramento de arquivos.
 
 ## Compilar novamente
 

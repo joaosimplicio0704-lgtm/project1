@@ -105,6 +105,12 @@ namespace {
     }
 
     LRESULT WINAPI WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+        const LONG_PTR style = ::GetWindowLongPtrW(window, GWL_EXSTYLE);
+        if (message == WM_NCHITTEST && (style & WS_EX_TRANSPARENT)) return HTTRANSPARENT;
+        if (message == WM_LBUTTONDOWN && !(style & WS_EX_TRANSPARENT)) {
+            if (::GetForegroundWindow() != window) ::SetForegroundWindow(window);
+            ::SetFocus(window);
+        }
         if (ImGui_ImplWin32_WndProcHandler(window, message, wParam, lParam)) return 1;
 
         switch (message) {
@@ -318,7 +324,8 @@ namespace {
         SendMouseDelta(mouseX, mouseY);
     }
 
-    void DrawMenu(Config& config, Game& game, bool& menuOpen, std::string& message) {
+    void DrawMenu(Config& config, Game& game, const WorldSnapshot& snapshot,
+                  bool& menuOpen, std::string& message) {
         if (!menuOpen) return;
         ImGui::SetNextWindowSize(ImVec2(440.0f, 390.0f), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(60.0f, 60.0f), ImGuiCond_FirstUseEver);
@@ -362,6 +369,15 @@ namespace {
                 ImGui::Separator();
                 ImGui::TextWrapped("%s", game.Status().c_str());
                 ImGui::Text("PID: %lu", game.Pid());
+                ImGui::Text("Auto read: %s", game.Ready() ? "ON (4 ms)" : "RECONNECTING");
+                ImGui::Text("Snapshot: %s", snapshot.Valid ? "valid" : "waiting");
+                if (snapshot.Valid) {
+                    ImGui::Text("Players read: %zu", snapshot.Players.size());
+                    ImGui::Text("Local pawn: 0x%llX", static_cast<unsigned long long>(snapshot.LocalPawn));
+                    ImGui::Text("Camera: %.1f / %.1f / %.1f", snapshot.CameraLocation.X,
+                        snapshot.CameraLocation.Y, snapshot.CameraLocation.Z);
+                }
+                ImGui::TextDisabled("Automatic attach, reconnect and RPM snapshots; no file monitoring.");
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
@@ -435,6 +451,13 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int) {
     config.aimEnabled = false;
     config.espEnabled = false;
 
+    // The menu starts open, so the overlay must not retain the initial
+    // click-through/no-activate styles for even its first interactive frame.
+    SetClickThrough(overlay, false);
+    clickThroughLastFrame = false;
+    ::SetForegroundWindow(overlay);
+    ::SetFocus(overlay);
+
     while (running) {
         MSG messageRecord;
         while (::PeekMessageW(&messageRecord, nullptr, 0, 0, PM_REMOVE)) {
@@ -446,7 +469,13 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int) {
 
         if (Pressed(kMenuKey)) {
             menuOpen = !menuOpen;
-            if (menuOpen) ::SetForegroundWindow(overlay);
+            SetClickThrough(overlay, !menuOpen);
+            clickThroughLastFrame = !menuOpen;
+            if (menuOpen) {
+                ::ShowWindow(overlay, SW_SHOWNA);
+                ::SetForegroundWindow(overlay);
+                ::SetFocus(overlay);
+            }
         }
         if (Pressed(kAimToggleKey)) config.aimEnabled = !config.aimEnabled;
         if (Pressed(kEspToggleKey)) config.espEnabled = !config.espEnabled;
@@ -511,7 +540,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int) {
                 config.aimEnabled ? "ON" : "OFF", config.espEnabled ? "ON" : "OFF");
             ImGui::End();
         }
-        DrawMenu(config, game, menuOpen, message);
+        DrawMenu(config, game, snapshot, menuOpen, message);
 
         ImGui::Render();
         constexpr float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
