@@ -324,6 +324,17 @@ posição escrita é aceita na maioria dos jogos — o servidor reconcilia e ger
 - ligar o voo reabre o handle com `VM_WRITE | VM_OPERATION`; sem isso o handle é
   estritamente read-only e a aba mostra `read-only (reatacha ao ligar)`
 
+### Correr mais rápido e teleporte (aba Ações)
+
+| feature | como | nota |
+|---|---|---|
+| **Velocidade de corrida** | escreve `Humanoid::Walkspeed` (normal 16), re-aplica a cada 250 ms porque muitos jogos reseta no script | guarda o valor original e devolve ao desligar / F10. O personagem tem network ownership, então o movimento replica certo |
+| **Pulo mais alto** | `Humanoid::JumpPower` (normal 50), mesmo esquema | opcional, desliga sozinho |
+| **Teleporte até jogador** | lista os jogadores detectados; **instantâneo** (1 write) ou **suave** (writes de `Passo` studs a `Writes/s`, com velocidade coerente) | guarda de onde saiu: **Voltar pra onde eu tava**. O modo suave é o que a validação de movimento tolera |
+
+O teleporte instantâneo é o mesmo write que causa o erro 277 — por isso o botão
+avisa no tooltip e o padrão da aba é deixar você escolher.
+
 ### Erro 277 (Disconnect) ao ligar o voo
 
 Não é o voo "falhar" — é o **servidor derrubando o cliente**. A validação de movimento lê
@@ -335,7 +346,8 @@ A correção foi separar **dois modos** e mudar o padrão:
 
 | modo | o que escreve | kick |
 |---|---|---|
-| **Física (padrão)** | `AssemblyLinearVelocity` | o servidor vê física normal de um personagem que ele já deixa o cliente simular — não há delta de posição para validar |
+| **Auto (padrão)** | começa em física; se o jogo ignorar a velocidade por 400 ms, cai sozinho pra posição limitada | resolve o "voo não anda" (humanoid reescreve a velocidade) sem o risco do modo posição |
+| **Física** | `AssemblyLinearVelocity` | o servidor vê física normal de um personagem que ele já deixa o cliente simular — não há delta de posição para validar. Em muitos jogos o humanoid reescreve a velocidade e o voo não anda — nesse caso Auto |
 | **Posição** | `Primitive::Position` | cada write é um teleporte; agora limitado por `Passo max (studs)` e por `Writes/s` (60) |
 
 No modo posição o passo por write é `min(velocidade/writes, passo máx)`: com 300 studs/s de

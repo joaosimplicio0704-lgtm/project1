@@ -170,7 +170,19 @@ static bool SaveConfig(const Settings& s) {
     out << "  \"magEnabled\": "      << Bool(mag.enabled) << ",\n";
     out << "  \"magRange\": "        << mag.range << ",\n";
     out << "  \"magPull\": "         << mag.pullDistance << ",\n";
-    out << "  \"magPerSecond\": "    << mag.perSecond << "\n";
+    out << "  \"magPerSecond\": "    << mag.perSecond << ",\n";
+
+    const SpeedSettings& sp = s.speed;
+    out << "  \"spdEnabled\": "      << Bool(sp.enabled) << ",\n";
+    out << "  \"spdWalk\": "         << sp.walkSpeed << ",\n";
+    out << "  \"spdJump\": "         << Bool(sp.jumpBoost) << ",\n";
+    out << "  \"spdJumpPower\": "    << sp.jumpPower << ",\n";
+
+    const TeleportSettings& tp = s.teleport;
+    out << "  \"tpSmooth\": "        << Bool(tp.smooth) << ",\n";
+    out << "  \"tpStep\": "          << tp.stepStuds << ",\n";
+    out << "  \"tpHz\": "            << tp.writeHz << ",\n";
+    out << "  \"tpOffset\": "        << tp.offsetStuds << "\n";
     out << "}\n";
 
     return out.good();
@@ -259,6 +271,18 @@ static bool LoadConfig(Settings& s) {
     mag.range       = AsFloat(ValueOf(text, "magRange"), mag.range);
     mag.pullDistance = AsFloat(ValueOf(text, "magPull"), mag.pullDistance);
     mag.perSecond   = AsInt(ValueOf(text, "magPerSecond"), mag.perSecond);
+
+    SpeedSettings& spd = s.speed;
+    spd.enabled   = AsBool(ValueOf(text, "spdEnabled"), spd.enabled);
+    spd.walkSpeed = AsFloat(ValueOf(text, "spdWalk"), spd.walkSpeed);
+    spd.jumpBoost = AsBool(ValueOf(text, "spdJump"), spd.jumpBoost);
+    spd.jumpPower = AsFloat(ValueOf(text, "spdJumpPower"), spd.jumpPower);
+
+    TeleportSettings& tp = s.teleport;
+    tp.smooth      = AsBool(ValueOf(text, "tpSmooth"), tp.smooth);
+    tp.stepStuds   = AsFloat(ValueOf(text, "tpStep"), tp.stepStuds);
+    tp.writeHz     = AsInt(ValueOf(text, "tpHz"), tp.writeHz);
+    tp.offsetStuds = AsFloat(ValueOf(text, "tpOffset"), tp.offsetStuds);
 
     if (v.speed < 5.f)   v.speed = 5.f;
     if (v.speed > 500.f) v.speed = 500.f;
@@ -388,6 +412,15 @@ bool Same(const Settings& a, const Settings& b) {
     const CameraSettings& d = b.camera;
     if (c.freecam != d.freecam || c.freecamKey != d.freecamKey || c.freecamSpeed != d.freecamSpeed ||
         c.fovHack != d.fovHack || c.fov != d.fov || c.unlockFps != d.unlockFps || c.maxFps != d.maxFps)
+        return false;
+
+    if (a.speed.enabled != b.speed.enabled || a.speed.walkSpeed != b.speed.walkSpeed ||
+        a.speed.jumpBoost != b.speed.jumpBoost || a.speed.jumpPower != b.speed.jumpPower)
+        return false;
+
+    if (a.teleport.smooth != b.teleport.smooth || a.teleport.stepStuds != b.teleport.stepStuds ||
+        a.teleport.writeHz != b.teleport.writeHz ||
+        a.teleport.offsetStuds != b.teleport.offsetStuds)
         return false;
 
     const MagnetSettings& mg = a.magnet;

@@ -74,8 +74,9 @@ struct TriggerSettings {
 // ============================================================
 // como o voo move o personagem
 enum FlyMode : int {
-    kFlyVelocity = 0,   // escreve AssemblyLinearVelocity (fisica) — padrao, NAO toma kick
-    kFlyPosition = 1    // escreve Primitive::Position (teleporte) — rapido e arriscado
+    kFlyAuto = 0,       // testa fisica e cai pra posicao sozinho (padrao)
+    kFlyVelocity = 1,   // so AssemblyLinearVelocity (fisica)
+    kFlyPosition = 2    // so Primitive::Position (teleporte limitado)
 };
 
 struct FlySettings {
@@ -83,7 +84,7 @@ struct FlySettings {
     bool  toggleMode = false;
     int   key = 0x46;              // VK_F
     float speed = 45.f;            // studs por segundo (45 ~ 2x walkspeed)
-    int   mode = kFlyVelocity;     // ver FlyMode
+    int   mode = kFlyAuto;         // ver FlyMode
     int   writeHz = 60;            // writes por segundo (60 = um por frame do jogo)
     float maxStepStuds = 1.2f;     // teto de deslocamento por write no modo posicao
     bool  zeroVelocity = true;     // zera AssemblyLinearVelocity pra gravidade nao brigar
@@ -104,6 +105,26 @@ struct CameraSettings {
     float fov = 110.f;            // graus (jogo normal: 70)
     bool  unlockFps = false;
     int   maxFps = 240;
+};
+
+// ============================================================
+// CORRIDA — WalkSpeed / JumpPower
+// ============================================================
+struct SpeedSettings {
+    bool  enabled = false;
+    float walkSpeed = 60.f;    // humano normal: 16
+    bool  jumpBoost = false;
+    float jumpPower = 90.f;    // normal: 50
+};
+
+// ============================================================
+// TELEPORTE — ir ate um jogador selecionado
+// ============================================================
+struct TeleportSettings {
+    bool  smooth = false;      // false = instantaneo; true = anda rapido (menos teleporte)
+    float stepStuds = 3.f;     // modo suave: studs por write
+    int   writeHz = 60;
+    float offsetStuds = 3.f;   // distancia final do alvo
 };
 
 // ============================================================
@@ -157,6 +178,8 @@ struct Settings {
     FlySettings fly;
     CameraSettings camera;
     MagnetSettings magnet;
+    SpeedSettings speed;
+    TeleportSettings teleport;
     std::vector<Profile> profiles;
 };
 

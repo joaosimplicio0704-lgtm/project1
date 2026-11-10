@@ -147,6 +147,28 @@ inline Vector3 StepAlong(const Vector3& from, const Vector3& dir, float distance
     return FlyStep(from, dir, distance, 1.f);
 }
 
+// anda no maximo `maxStep` studs em direcao a `target` (teleporte suave).
+// devolve true quando chegou.
+inline bool Approach(Vector3& from, const Vector3& target, float maxStep, float arrive = 1.f) {
+    Vector3 delta{ target.x - from.x, target.y - from.y, target.z - from.z };
+    const float dist = delta.Length();
+
+    if (!std::isfinite(dist))
+        return false;
+    if (dist <= arrive) {
+        from = target;
+        return true;
+    }
+    if (!(maxStep > 0.f))
+        return false;
+
+    const float step = dist < maxStep ? dist : maxStep;
+    from.x += delta.x / dist * step;
+    from.y += delta.y / dist * step;
+    from.z += delta.z / dist * step;
+    return false;
+}
+
 // dt de um frame travado nao pode virar teleporte
 inline float ClampDt(float dt, float maxDt) {
     if (!(dt > 0.f))

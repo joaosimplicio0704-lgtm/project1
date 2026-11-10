@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <string>
 
 #include "../features/aim.h"
 #include "../features/detector.h"
@@ -14,6 +15,8 @@
 #include "../features/fly.h"
 #include "../features/camerahack.h"
 #include "../features/magnet.h"
+#include "../features/speed.h"
+#include "../features/teleport.h"
 #include "../imgui/imgui.h"
 #include "../offsets.h"
 #include "../overlay/overlay.h"
@@ -421,15 +424,20 @@ static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) 
 
     ImGui::SeparatorText("Modo de movimento");
     int flyMode = v.mode;
-    ImGui::RadioButton("Fisica (seguro)", &flyMode, cfg::kFlyVelocity);
+    ImGui::RadioButton("Auto (recomendado)", &flyMode, cfg::kFlyAuto);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("escreve AssemblyLinearVelocity: o servidor ve fisica do personagem,\n"
-                          "nao um salto de posicao. e o modo que NAO toma Disconnect (277)");
+        ImGui::SetTooltip("comeca em Fisica (seguro). se o jogo ignorar a velocidade por 400 ms,\n"
+                          "cai sozinho pro modo Posicao limitado — funciona nos dois casos");
     ImGui::SameLine();
-    ImGui::RadioButton("Posicao (teleporte)", &flyMode, cfg::kFlyPosition);
+    ImGui::RadioButton("Fisica", &flyMode, cfg::kFlyVelocity);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("escreve Primitive::Position direto. anda mais e atravessa parede,\n"
-                          "mas e o que a validacao de movimento derruba");
+        ImGui::SetTooltip("escreve AssemblyLinearVelocity. em MUITOS jogos o humanoid reescreve a\n"
+                          "velocidade e o voo nao anda — nesse caso use Auto");
+    ImGui::SameLine();
+    ImGui::RadioButton("Posicao", &flyMode, cfg::kFlyPosition);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("escreve Primitive::Position limitado (passo max * writes/s).\n"
+                          "andou = funciona; acima de ~40 studs/s pode tomar Disconnect (277)");
     v.mode = flyMode;
 
     ImGui::SetNextItemWidth(180.f);
@@ -443,11 +451,13 @@ static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) 
         ImGui::SetTooltip("modo posicao: teto de deslocamento por write.\n"
                           "cada write acima disso vira teleporte pro servidor");
 
-    if (v.mode == cfg::kFlyPosition) {
+    if (fly.Mode() == cfg::kFlyPosition) {
         const float effective = std::min(v.speed, v.maxStepStuds * static_cast<float>(v.writeHz));
         ImGui::TextColored(ImVec4(1.f, 0.6f, 0.2f, 1.f),
                            "modo posicao: velocidade efetiva ~%.0f studs/s", effective);
-        ImGui::TextDisabled("acima de ~40 studs/s a maioria dos jogos derruba a conexao (277)");
+        if (effective > 40.f)
+            ImGui::TextColored(ImVec4(1.f, 0.4f, 0.3f, 1.f),
+                               "acima de ~40 studs/s a maioria dos jogos derruba a conexao (277)");
     }
 
     ImGui::SeparatorText("Ajuste");
@@ -488,9 +498,108 @@ static void DrawFlyTab(cfg::Settings& settings, const Fly& fly, const Esp& esp) 
                 fly.AutoSwitched() ? "  [caiu pra posicao: jogo ignora velocidade]" : "");
     if (fly.Reverting() && !v.anchor)
         ImGui::TextColored(ImVec4(1.f, 0.6f, 0.2f, 1.f),
-                           "este jogo esta revertendo o write: ligue Ancorar");
+                           "este jogo esta revertendo a posicao: ligue Ancorar");
     else if (fly.Anchored())
         ImGui::TextDisabled("ancorado (o motor nao briga)");
+
+    if (fly.Active() && fly.Ignoring())
+        ImGui::TextColored(ImVec4(1.f, 0.6f, 0.2f, 1.f),
+                           "jogo ignora a velocidade — troque para Auto ou Posicao");
+}
+
+// ------------------------------------------------------------
+static void DrawActionsTab(cfg::Settings& settings, Speed& speed, Teleport& teleport,
+                           Esp& esp) {
+    cfg::SpeedSettings& sp = settings.speed;
+    cfg::TeleportSettings& tp = settings.teleport;
+    const auto scene = esp.Snapshot();
+    const LocalState local = scene ? scene->local : LocalState{};
+    const bool canWrite = esp.Mem().CanWrite() && local.Valid() && local.primitive != 0;
+
+    // ---------------- correr mais rapido ----------------
+    ImGui::SeparatorText("Correr mais rapido");
+    ImGui::Checkbox("Velocidade de corrida", &sp.enabled);
+    ImGui::SetNextItemWidth(200.f);
+    ImGui::SliderFloat("WalkSpeed", &sp.walkSpeed, 16.f, 200.f, "%.0f");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("normal: 16. o humanoid reescreve? o modulo re-aplica a cada 250 ms");
+    ImGui::SameLine();
+    ImGui::TextDisabled("normal = 16");
+
+    ImGui::Checkbox("Pulo mais alto", &sp.jumpBoost);
+    ImGui::SameLine(120.f);
+    ImGui::SetNextItemWidth(120.f);
+    ImGui::SliderFloat("JumpPower", &sp.jumpPower, 50.f, 200.f, "%.0f");
+
+    if (speed.Active())
+        ImGui::TextColored(ImVec4(0.55f, 0.9f, 0.55f, 1.f),
+                           "ativo: %.0f (original %.0f)%s",
+                           sp.walkSpeed, speed.Original(),
+                           sp.jumpBoost ? " + pulo" : "");
+    else
+        ImGui::TextDisabled("desligado (o valor original volta ao desligar)");
+
+    // ---------------- teleporte ----------------
+    ImGui::SeparatorText("Teleporte");
+    ImGui::Text("Alvo (jogador na lista):");
+    const auto snapshot = esp.Snapshot();
+
+    if (snapshot && !snapshot->targets.empty()) {
+        ImGui::BeginCombo("##tpPlayer", "");
+        bool haveSelected = false;
+        for (const Target& t : snapshot->targets) {
+            const bool isMe = t.player == local.localPlayer;
+            std::string label = t.name;
+            if (isMe)
+                label += "  (voce)";
+            if (ImGui::Selectable(label.c_str(), teleport.Selected() == t.player && !isMe))
+                teleport.Select(t.player);
+            if (!isMe)
+                haveSelected = true;
+        }
+        ImGui::EndCombo();
+        if (!haveSelected)
+            ImGui::TextDisabled("so voce na cena — sem outro jogador pra ir");
+    } else {
+        ImGui::TextDisabled("nenhum jogador detectado na cena");
+    }
+
+    const bool hasTarget = teleport.Selected() != 0 && snapshot &&
+                           std::any_of(snapshot->targets.begin(), snapshot->targets.end(),
+                                       [target = teleport.Selected()](const Target& t) {
+                                           return t.player == target && t.root.NonZero();
+                                       });
+    if (hasTarget) {
+        if (ImGui::Button("Ir ate o jogador", ImVec2(180, 0)))
+            teleport.GoToPlayer(settings, esp.Mem(), local, *snapshot);
+    } else {
+        ImGui::BeginDisabled();
+        ImGui::Button("Ir ate o jogador", ImVec2(180, 0));
+        ImGui::EndDisabled();
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("instantaneo = 1 write (pode tomar Disconnect 277);\n"
+                          "suave = ando rapido ate la, um write de poucos studs por vez");
+
+    if (teleport.HasReturn()) {
+        if (ImGui::Button("Voltar pra onde eu tava", ImVec2(180, 0)))
+            teleport.Return(settings, esp.Mem(), local);
+    }
+
+    ImGui::Checkbox("Suave (andar rapido, nao salto)", &tp.smooth);
+    ImGui::SetNextItemWidth(140.f);
+    ImGui::SliderFloat("Passo (studs)", &tp.stepStuds, 1.f, 10.f, "%.1f");
+    ImGui::SetNextItemWidth(140.f);
+    ImGui::SliderInt("Writes/s", &tp.writeHz, 20, 250);
+    ImGui::SetNextItemWidth(140.f);
+    ImGui::SliderFloat("Distancia final", &tp.offsetStuds, 1.f, 10.f, "%.1f");
+
+    if (teleport.Stepping())
+        ImGui::TextColored(ImVec4(0.55f, 0.9f, 0.55f, 1.f), "indo... (%d writes)", teleport.Writes());
+    else
+        ImGui::TextDisabled("parado");
+    if (!canWrite)
+        ImGui::TextColored(ImVec4(1.f, 0.6f, 0.2f, 1.f), "sem write: reateche o processo");
 }
 
 // ------------------------------------------------------------
@@ -660,7 +769,8 @@ static void DrawConfigTab(cfg::Settings& settings, Esp& esp, Overlay& overlay) {
 // ------------------------------------------------------------
 void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detector,
           MemView& memView, AimAssist& aim, const Trigger& trigger, const Fly& fly,
-          CameraHack& cameraHack, Magnet& magnet, bool* open) {
+          CameraHack& cameraHack, Magnet& magnet, Speed& speed, Teleport& teleport,
+          bool* open) {
     if (!open || !*open) {
         g_binding = 0;   // fecha o menu no meio do bind: nao pode ficar armado
         return;
@@ -701,6 +811,10 @@ void Draw(cfg::Settings& settings, Esp& esp, Overlay& overlay, Detector& detecto
         }
         if (ImGui::BeginTabItem("Camera")) {
             DrawCameraTab(settings, cameraHack, esp, aim);
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Acoes")) {
+            DrawActionsTab(settings, speed, teleport, esp);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Memoria")) {

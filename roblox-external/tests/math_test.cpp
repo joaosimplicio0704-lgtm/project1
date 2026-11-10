@@ -372,6 +372,11 @@ void TestConfig() {
     a.fire.burst = 4;
     a.fly.hoverOnIdle = false;
     a.fly.speed = 120.f;
+    a.fly.mode = cfg::kFlyPosition;
+    a.speed.enabled = true;
+    a.speed.walkSpeed = 88.f;
+    a.teleport.smooth = true;
+    a.teleport.stepStuds = 2.5f;
 
     Check(cfg::Save(a), "save escreveu o arquivo");
 
@@ -388,6 +393,9 @@ void TestConfig() {
     Check(b.fire.burst == 4, "fireBurst voltou");
     Check(!b.fly.hoverOnIdle, "flyHoverOnIdle voltou");
     CheckNear(b.fly.speed, 120.f, 1e-4f, "flySpeed voltou");
+    Check(b.fly.mode == cfg::kFlyPosition, "flyMode voltou");
+    Check(b.speed.enabled && std::fabs(b.speed.walkSpeed - 88.f) < 1e-4f, "speed voltou");
+    Check(b.teleport.smooth && std::fabs(b.teleport.stepStuds - 2.5f) < 1e-4f, "teleport voltou");
     Check(cfg::Same(a, b), "Same() diz que o round-trip e identico");
 
     // mudanca detectada (base do auto-save)

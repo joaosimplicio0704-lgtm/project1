@@ -54,6 +54,8 @@ public:
     // modo em uso neste instante (pode ter caido pra posicao sozinho)
     int     Mode() const { return m_effectiveMode; }
     bool    AutoSwitched() const { return m_autoSwitched; }
+    // diagnostico: em modo fisica, o jogo esta ignorando a velocidade escrita
+    bool    Ignoring() const { return m_autoSwitched && m_effectiveMode == cfg::kFlyVelocity; }
 
 private:
     void Stop(Memory& memory);

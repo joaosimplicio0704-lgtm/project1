@@ -11,6 +11,8 @@
 #include "features/fly.h"
 #include "features/magnet.h"
 #include "features/memview.h"
+#include "features/speed.h"
+#include "features/teleport.h"
 #include "features/trigger.h"
 #include "imgui/imgui.h"
 #include "applog.h"
@@ -113,6 +115,8 @@ int main() {
     Fly        fly;
     CameraHack cameraHack;
     Magnet     magnet;
+    Speed      speed;
+    Teleport   teleport;
 
     bool     menuOpen = false;
     bool     running = true;
@@ -156,11 +160,13 @@ int main() {
             fly.Reset();
             cameraHack.Release(esp.Mem());   // CameraType/FOV/MaxFPS de volta
             magnet.Reset();
+            speed.Restore(esp.Mem());      // WalkSpeed/JumpPower de volta
+            teleport.Cancel();             // para o passo de teleporte
             aim.Reset();
             overlay.SetInteractive(false);
             menuOpen = false;
-            std::printf("[panic] aim/tiro/voo desligados, mouse liberado\n");
-            applog::Line("[panic] aim/tiro/voo desligados, mouse liberado");
+            std::printf("[panic] aim/tiro/voo/correr desligados, mouse liberado\n");
+            applog::Line("[panic] aim/tiro/voo/correr desligados, mouse liberado");
         }
 
         // auto-save com debounce
@@ -239,10 +245,14 @@ int main() {
         // magnet puxa item filtrado pra perto (precisa do handle de escrita)
         magnet.Tick(settings, esp.Mem(), view.local, view, overlay.IsInteractive());
 
+        // correr mais rapido (WalkSpeed/JumpPower) e teleporte (anda ate o alvo)
+        speed.Tick(settings, esp.Mem(), view.local, overlay.IsInteractive());
+        teleport.Tick(settings, esp.Mem(), view.local, overlay.IsInteractive());
+
         memView.Tick(esp.Mem());
 
-        menu::Draw(settings, esp, overlay, detector, memView, aim, trigger, fly, cameraHack, magnet,
-                   &menuOpen);
+        menu::Draw(settings, esp, overlay, detector, memView, aim, trigger, fly, cameraHack,
+                   magnet, speed, teleport, &menuOpen);
 
         // menu fechado pelo X da janela tambem devolve o mouse pro jogo
         if (!menuOpen && overlay.IsInteractive())
@@ -259,6 +269,8 @@ int main() {
     fly.Reset();
     cameraHack.Release(esp.Mem());
     magnet.Reset();
+    speed.Restore(esp.Mem());
+    teleport.Cancel();
     aim.Reset();
     HandleCleanup::Stop();
     esp.Shutdown();

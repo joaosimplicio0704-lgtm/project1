@@ -16,7 +16,7 @@ namespace {
 constexpr float kMaxStepDt = 0.05f;    // 50 ms
 constexpr float kResyncStuds = 40.f;   // divergencia = "o jogo me moveu"
 constexpr uint64_t kResyncPause = 300; // ms sem escrever depois de um resync
-constexpr uint64_t kStillMs = 700;     // pediu pra andar e nao saiu do lugar
+constexpr uint64_t kStillMs = 400;     // pediu pra andar e nao saiu do lugar
 
 bool Down(int vk) {
     return vk > 0 && (GetAsyncKeyState(vk) & 0x8000) != 0;
@@ -147,9 +147,22 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
         return;
     }
 
-    // modo efetivo: o pedido, ou posicao se o jogo ignorou a velocidade
-    m_effectiveMode = (fly.mode == cfg::kFlyVelocity && !m_autoSwitched) ? cfg::kFlyVelocity
-                                                                        : cfg::kFlyPosition;
+    // modo efetivo: o pedido; em AUTO comeca em fisica (seguro) e cai pra posicao
+    // assim que o jogo mostra que ignora AssemblyLinearVelocity
+    if (fly.mode == cfg::kFlyPosition)
+        m_effectiveMode = cfg::kFlyPosition;
+    else if (fly.mode == cfg::kFlyVelocity)
+        m_effectiveMode = cfg::kFlyVelocity;
+    else
+        m_effectiveMode = m_autoSwitched ? cfg::kFlyPosition : cfg::kFlyVelocity;
+
+    if (!m_wasActive) {
+        applog::Line("[voo] start: modo %s, %.0f studs/s, %d writes/s, primitive 0x%llX",
+                     fly.mode == cfg::kFlyAuto ? "auto" : (fly.mode == cfg::kFlyVelocity ? "fisica"
+                                                                                        : "posicao"),
+                     static_cast<double>(fly.speed), fly.writeHz,
+                     static_cast<unsigned long long>(local.primitive));
+    }
 
     const float* r = local.cameraRotation;   // 3x3 row-major da CFrame da camera
 
@@ -238,7 +251,10 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
                 m_stillSince = now;
             } else if (now - m_stillSince > kStillMs && !m_autoSwitched) {
                 m_autoSwitched = true;
-                applog::Line("[voo] o jogo ignora AssemblyLinearVelocity — caindo pra modo posicao");
+                if (fly.mode == cfg::kFlyAuto)
+                    applog::Line("[voo] o jogo ignora AssemblyLinearVelocity — caindo pra modo posicao");
+                else
+                    applog::Line("[voo] o jogo ignora AssemblyLinearVelocity — use Auto ou Posicao");
             }
         } else {
             m_stillSince = 0;
@@ -288,11 +304,13 @@ void Fly::Tick(const cfg::Settings& settings, Memory& memory, const LocalState& 
         m_writeFails = 0;
     }
 
-    if (fly.zeroVelocity) {
-        const Vector3 zero{};
-        memory.Write(local.primitive + rbx::Primitive::AssemblyLinearVelocity, zero);
-        memory.Write(local.primitive + rbx::Primitive::AssemblyAngularVelocity, zero);
-    }
+    // Velocidade coerente com o deslocamento: escrever posicao e deixar a
+    // velocidade em zero e uma contradicao que a validacao de movimento pode
+    // marcar. Aqui o servidor ve "andando rapido", nao "teletransportando".
+    const float effectiveSpeed = std::min(step * static_cast<float>(hz), 600.f);
+    Vector3 velocity{ dir.x * effectiveSpeed, dir.y * effectiveSpeed, dir.z * effectiveSpeed };
+    memory.Write(local.primitive + rbx::Primitive::AssemblyLinearVelocity, velocity);
+    memory.Write(local.primitive + rbx::Primitive::AssemblyAngularVelocity, Vector3{});
 
     m_pos = next;
     m_active = true;

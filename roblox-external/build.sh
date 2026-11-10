@@ -28,6 +28,8 @@ $ZIG c++ \
     src/features/fly.cpp \
     src/features/camerahack.cpp \
     src/features/magnet.cpp \
+    src/features/speed.cpp \
+    src/features/teleport.cpp \
     src/overlay/overlay.cpp \
     src/menu/menu.cpp \
     src/imgui/imgui.cpp \
